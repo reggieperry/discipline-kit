@@ -143,17 +143,29 @@ def hook_hashes() -> set[str]:
 
 def pending_runnable() -> list[dict]:
     out = []
-    if LEDGER.exists():
-        for l in LEDGER.read_text().splitlines():
-            if not l.strip():
-                continue
-            try:
-                e = json.loads(l)
-            except Exception:
-                continue
-            if (e.get("kind") == "assertion" and e.get("status") == "unverified"
-                    and e.get("check") in RUNNABLE):
-                out.append(e)
+    if not LEDGER.exists():
+        return out
+    entries = []
+    superseded = set()
+    for l in LEDGER.read_text().splitlines():
+        if not l.strip():
+            continue
+        try:
+            e = json.loads(l)
+        except Exception:
+            continue
+        entries.append(e)
+        s = e.get("supersedes")
+        if s:
+            superseded.add(s)
+    for e in entries:
+        # A claim that is already SUPERSEDED (already signed) must not re-trigger the check on
+        # every future commit, nor be re-signed — its `unverified` original line stays on the
+        # ledger by the immutability discipline, so exclude it by id. Only a live, still-unverified
+        # runnable assertion is pending.
+        if (e.get("kind") == "assertion" and e.get("status") == "unverified"
+                and e.get("check") in RUNNABLE and e.get("id") not in superseded):
+            out.append(e)
     return out
 
 
