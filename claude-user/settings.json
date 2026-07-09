@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git status*)",
+      "Bash(git show*)",
+      "Bash(git rev-parse*)",
+      "Bash(git stash*)",
+      "Bash(git fetch:*)",
+      "Bash(gh issue*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr diff*)",
+      "Bash(gh pr list*)",
+      "Bash(gh api:*)",
+      "Bash(gh run:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(diff:*)",
+      "Bash(pdftotext *)",
+      "Bash(npx --yes markdownlint*)"
+    ],
+    "deny": [
+      "Bash(git push --force origin*)",
+      "Bash(git push --force HEAD*)",
+      "Bash(git push --force *main*)",
+      "Bash(git push --force *master*)",
+      "Bash(git push -f*)",
+      "Bash(rm -rf*)"
+    ]
+  },
+  "skipDangerousModePermissionPrompt": false,
+  "theme": "dark"
+}

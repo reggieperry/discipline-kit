@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""ledger/retire <id> <reason> <refuting-id> — move a defeated or superseded claim
+off the live board to `ledger/trace/`, the ONE sanctioned removal from claims.jsonl.
+
+The entry is taken out of `ledger/claims.jsonl` and written to
+`ledger/trace/<id>.jsonl` with `status: "retired"`, `trace_reason: <reason>`, and
+`retired_by: <refuting-id>` (the pointer the audit's trace check requires). The
+pointer must resolve to an existing entry.
+
+IMMUTABILITY NOTE. The audit holds every line ever COMMITTED to claims.jsonl to be
+byte-identical now in live or trace. Because retirement rewrites the moved entry
+(adds the reason and pointer), a claim whose live form was already committed cannot
+also appear byte-identical in trace — so retire in the SAME commit that supersedes
+or refutes it (the librarian sweep and the acceptance test both do this), never as a
+later edit to a long-committed line. The audit's `immutable` check is the backstop.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LEDGER = ROOT / "ledger" / "claims.jsonl"
+TRACE = ROOT / "ledger" / "trace"
+
+
+def all_ids() -> set[str]:
+    ids: set[str] = set()
+    for f in [LEDGER] + (list(TRACE.glob("*.jsonl")) if TRACE.exists() else []):
+        if not f.exists():
+            continue
+        for line in f.read_text().splitlines():
+            if line.strip():
+                try:
+                    ids.add(json.loads(line).get("id"))
+                except Exception:
+                    pass
+    return ids
+
+
+def main() -> int:
+    if len(sys.argv) != 4:
+        print("usage: ledger/retire <id> <reason> <refuting-id>", file=sys.stderr)
+        return 2
+    eid, reason, ptr = sys.argv[1], sys.argv[2].strip(), sys.argv[3]
+    if not reason:
+        print("retire REJECTED: empty reason (trace_reason is required)", file=sys.stderr)
+        return 1
+    if ptr not in all_ids():
+        print(f"retire REJECTED: pointer {ptr!r} does not resolve to any entry", file=sys.stderr)
+        return 1
+
+    lines = LEDGER.read_text().splitlines() if LEDGER.exists() else []
+    kept, found = [], None
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            kept.append(line)
+            continue
+        if obj.get("id") == eid and found is None:
+            found = obj
+        else:
+            kept.append(line)
+
+    if found is None:
+        print(f"retire REJECTED: {eid!r} not found live in claims.jsonl", file=sys.stderr)
+        return 1
+
+    found["status"] = "retired"
+    found["trace_reason"] = reason
+    found["retired_by"] = ptr
+
+    TRACE.mkdir(parents=True, exist_ok=True)
+    LEDGER.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+    with (TRACE / f"{eid}.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(found, separators=(",", ":"), ensure_ascii=False) + "\n")
+    print(f"retired {eid} -> ledger/trace/{eid}.jsonl (reason: {reason}; pointer: {ptr})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

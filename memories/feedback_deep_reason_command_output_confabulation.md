@@ -1,0 +1,13 @@
+---
+name: feedback_deep_reason_command_output_confabulation
+description: "Deep-reason agents confabulate command-output findings — quote raw lines, scope to changed files, control against main"
+metadata:
+  node_type: memory
+  type: feedback
+---
+
+A deep-reason (fresh-context Opus) PR pass can produce a confident, identifier-citing, internally-coherent finding that is entirely wrong when it rests on misread command output. In one case a deep-reason validation of a PR reported "exactly 3 `ruff I001` import-ordering errors in the 3 changed files; the branch moved `from pydantic import` after the first-party block; confirmed under both ruff versions; main is clean on these files." Every specific was false: the 3 changed files lint clean, pydantic was correctly ordered before first-party (identical to a precedent in another module the agent itself cited as correct — a self-refuting citation it didn't notice), and the real ~24 errors were in unchanged files. The errors were an isort first-party-detection artifact of running `ruff check .` in a fresh worktree where the project isn't installed the way the working venv has it — a fresh `main` worktree showed 26 of the same errors; the configured checkout shows 0.
+
+**Why:** The failure was not hallucination from nothing — it was confabulation scaffolded on a real-but-misinterpreted observation, which is more insidious. A fresh-context agent has no environmental baseline, so it can't know "24 ruff errors" is abnormal for this setup; it trusts the count, forms the most plausible hypothesis ("a PR that adds imports has mis-ordered imports"), and back-fills verifiable-sounding specifics (wrong files, invented line numbers, a fabricated mechanism, false reassurances) it never checked against the raw output. This is exactly the hazard the verification discipline names — plausible identifiers substituted for the verification step. It nearly passed because it read like careful work.
+
+**How to apply:** Two cheap checks falsify it: (1) run the gate scoped to just the changed files (`ruff check <files>`) — if they're clean, the "branch introduces errors" hypothesis is dead; (2) run the identical command on the base (main) in the same environment as a control before calling any delta a regression. When a deep-reason verdict rests on a tool's output, demand the raw cited lines, not a count summarized into a narrative — and verify its central finding yourself before acting on it. A review panel plus an independent gate run caught this; the deep reasoner alone would have forced a needless fix or hold. See [[feedback_deep_reasoning_agent]] and [[feedback_analysis_discipline]].

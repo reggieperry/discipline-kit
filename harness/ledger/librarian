@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""ledger/librarian — keep the live board free of defeated claims (brief §5).
+
+Reports (default) and, with --sweep, RETIRES:
+  - SUPERSEDED claims: a live claim X with a live successor Y (Y.supersedes == X)
+    still on the live board → retire X, pointer Y (the batched, mechanical case).
+  - CONTESTED claims (report only): a live assertion with a standing refutation and
+    no successor — the glut signal. Which side wins is a human call (the channel test
+    cannot decide it), recorded in trace_reason when retired by hand.
+
+Retire in the SAME commit as the supersession (immutability discipline — see the
+ledger README); --sweep is meant to run in the working tree before that commit.
+The memory half of the rule (contradicted `memories/` files move to `memories/trace/`)
+has no target in this repo and is left to wherever the memories live.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LEDGER = ROOT / "ledger" / "claims.jsonl"
+RETIRE = ROOT / "ledger" / "retire"
+
+
+def live_entries() -> list[dict]:
+    out = []
+    if LEDGER.exists():
+        for line in LEDGER.read_text().splitlines():
+            if line.strip():
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    pass
+    return out
+
+
+def main() -> int:
+    sweep = "--sweep" in sys.argv
+    entries = live_entries()
+    live_ids = {e.get("id") for e in entries}
+
+    superseded: dict[str, str] = {}
+    refuted_about: dict[str, list[str]] = {}
+    for e in entries:
+        if e.get("supersedes"):
+            superseded[e["supersedes"]] = e.get("id")
+        if e.get("kind") == "refutation" and e.get("about"):
+            refuted_about.setdefault(e["about"], []).append(e.get("id"))
+
+    to_retire = [(x, y) for x, y in superseded.items() if x in live_ids]
+    contested = [
+        (e["id"], refuted_about[e["id"]])
+        for e in entries
+        if e.get("kind") == "assertion" and e.get("status") in ("unverified", "signed")
+        and e.get("id") in refuted_about and e.get("id") not in superseded
+    ]
+
+    print(f"librarian: superseded-but-live {len(to_retire)}; contested (glut signal) {len(contested)}")
+    for x, y in to_retire:
+        print(f"  superseded {x} by {y}" + ("  → retiring" if sweep else ""))
+    for x, rs in contested:
+        print(f"  contested {x} by {rs} — human call; retire with a reason if defeated")
+
+    if sweep:
+        for x, y in to_retire:
+            r = subprocess.run([sys.executable, str(RETIRE), x, f"superseded by {y}", y])
+            if r.returncode != 0:
+                return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

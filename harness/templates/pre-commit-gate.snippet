@@ -1,0 +1,10 @@
+
+# --- dev-ledger gate (kit harness) ---
+# Forgery guard + mechanical check-discharge + ledger audit, in the commit path. A "done" report is
+# only ever an unverified assertion; nothing acquires a signature except through a check run HERE.
+# If any automation commits via a route that bypasses this hook, close that route.
+if [ -f ledger/gate.py ]; then
+  if ! python3 ledger/gate.py --pre-commit; then
+    exit 1
+  fi
+fi
