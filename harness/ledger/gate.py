@@ -5,8 +5,9 @@
     1. FORGERY GUARD: any `signed` line newly staged into ledger/claims.jsonl that
        the gate did not itself write (its line-hash not in ledger/.hook-signed)
        blocks the commit. The gate is the sole writer of signatures.
-    2. CHECK-DISCHARGE: if a .scala/.sbt file is staged (or a pending unverified
-       claim names a runnable check), run the mechanical check. On FAILURE, append a
+    2. CHECK-DISCHARGE: if a staged file is in one of the repo's build languages (see
+       `code_exts`) or a pending unverified claim names a runnable check, run the
+       mechanical check — which must cover every one of those languages. On FAILURE, append a
        `refuted` entry (parent sha + patch-id, since pre-commit has no commit sha)
        and BLOCK — approving review testimony never signs. On PASS, queue the claims
        for the post-commit signer.
@@ -60,6 +61,42 @@ def check_command() -> list[str] | None:
     return None
 
 
+def code_exts() -> tuple[str, ...]:
+    """Extensions whose staged change should fire the check — every language that builds
+    the SYSTEM in this repo. A repo may build from several (the lab is Scala + a
+    TypeScript frontend); the gate must fire for all of them, and `ledger/check.sh` must
+    in turn check all of them — else a change in an unchecked language slips through
+    green (a fail-open). Vendored or tooling sources in a language the system is not
+    built in (a Go reference copy, the ledger's own Python) are deliberately excluded.
+
+    Resolution: `LEDGER_CODE_EXTS` override (test knob) → a per-repo `ledger/languages`
+    declaration (authoritative: one extension per line, `#` comments; the robust choice
+    when build markers are nested or vendored) → a union auto-detected from the build
+    markers at the repo root → a broad fallback (any source — fail-closed)."""
+    def norm(toks) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(t if t.startswith(".") else "." + t for t in toks))
+    env = os.environ.get("LEDGER_CODE_EXTS")
+    if env:
+        return norm(env.replace(",", " ").split())
+    decl = ROOT / "ledger" / "languages"
+    if decl.exists():
+        toks = [t for line in decl.read_text().splitlines() for t in line.split("#", 1)[0].split()]
+        if toks:
+            return norm(toks)
+    detected: list[str] = []
+    if (ROOT / "build.sbt").exists():
+        detected += [".scala", ".sc", ".sbt"]
+    if (ROOT / "tsconfig.json").exists() or (ROOT / "package.json").exists():
+        detected += [".ts", ".tsx"]
+    if (ROOT / "go.mod").exists():
+        detected += [".go"]
+    if (ROOT / "pyproject.toml").exists() or (ROOT / "setup.py").exists():
+        detected += [".py"]
+    if (ROOT / "Cargo.toml").exists():
+        detected += [".rs"]
+    return norm(detected) if detected else CODE_EXTS
+
+
 def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, **kw)
 
@@ -97,7 +134,7 @@ def staged_added_ledger_lines() -> list[str]:
 
 def staged_code() -> list[str]:
     r = sh(["git", "diff", "--cached", "--name-only"])
-    return [f for f in r.stdout.split() if f.endswith(CODE_EXTS)]
+    return [f for f in r.stdout.split() if f.endswith(code_exts())]
 
 
 def hook_hashes() -> set[str]:

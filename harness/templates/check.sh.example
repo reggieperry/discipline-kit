@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ledger/check.sh — the repo's mechanical check, run by the commit-path gate.
+# It must check EVERY language declared in ledger/languages; a non-zero exit blocks the
+# commit and records a refuted entry. Keep it HERMETIC (no network, no live services) —
+# it runs inside the pre-commit hook. Fail fast; `set -e` stops at the first failure.
+#
+# Single-language repos usually need no check.sh at all (the gate auto-detects the
+# toolchain). Write one when the repo builds from several languages, or to pin the exact
+# command. Example — a Scala backend and a TypeScript frontend:
+set -euo pipefail
+cd "$(dirname "$0")/.."
+sbt -batch -Dsbt.color=false check
+( cd path/to/frontend && npm run check )   # e.g. prettier --check && eslint && tsc --noEmit && vitest run

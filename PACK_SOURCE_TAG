@@ -1,3 +1,4 @@
 pack: v2.43.0          (guides, sdlc-gate.py, decoupling/writing-style rules, voicing doc)
 harness-source: 2026-06-17 snapshot   (craft-*/go-*/python-* rules, scrubbed)
 dev-ledger-harness: 2026-07-09   (harness/, install-harness.sh, harness-verify.sh; scala-* rules; sdlc-gate.py Scala scanner-plugin port)
+dev-ledger-multilang: 2026-07-08 (gate.py code_exts fires for every build language via ledger/languages; check.sh must cover all; GIT_* clean_env; templates languages.example/check.sh.example)

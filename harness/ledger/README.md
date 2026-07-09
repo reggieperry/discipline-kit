@@ -12,8 +12,18 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 - `ledger/append` — the ONE schema-validating writer. Assigns id + timestamp. `echo '{...}' | ledger/append`.
 - `ledger/retire <id> <reason> <refuting-id>` — the ONE sanctioned removal: move a claim to `trace/`.
 - `ledger/librarian` — reports contested claims and retires superseded ones.
-- `ledger/gate.py` — the commit-path gate (forgery guard, check-discharge, audit), called by the git hooks.
-- `ledger/check.sh` (optional) — the repo's mechanical check. If absent, the gate auto-detects (`sbt check` / `uv run pytest`); if neither, it runs the forgery guard + audit only.
+- `ledger/gate.py` — the commit-path gate (forgery guard, check-discharge, audit), called by the git hooks. Byte-identical across repos; per-repo behavior comes from `ledger/languages` + `ledger/check.sh`, never from editing the gate.
+- `ledger/check.sh` (optional) — the repo's mechanical check. If absent, the gate auto-detects a single toolchain (`sbt check` / `uv run pytest`); if neither, it runs the forgery guard + audit only.
+- `ledger/languages` (optional) — the extensions of the languages that build the system, one per line (`#` comments). A staged file in one of them fires the check. If absent, the gate unions the toolchains it auto-detects from the build markers at the repo root.
+
+## Which languages fire the check
+
+The gate must fire for **every language that builds the system**, and `ledger/check.sh` must in turn check **every** one of them — firing for a language you don't check lets that language weaken unseen (a fail-open). A repo built from one language needs neither file: the gate auto-detects the toolchain and its extensions. A repo built from several — or whose build markers are nested or sit beside vendored code in another language — declares them explicitly:
+
+- `ledger/languages` lists the extensions that fire the check (e.g. `.scala .sc .sbt` + `.ts .tsx`).
+- `ledger/check.sh` runs the check for all of them (e.g. `sbt check` **and** the frontend's `npm run check`).
+
+Worked example (the claim-algebra-lab): a Scala backend (`build.sbt` at root) plus a TypeScript frontend (`reasoning-society/frontend`, markers nested). Auto-detection would find only Scala and let TS changes through green; `ledger/languages` + a two-part `ledger/check.sh` close that. `LEDGER_CODE_EXTS` overrides the set for tests only.
 
 ## Schema and status semantics
 
