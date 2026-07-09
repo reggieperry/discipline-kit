@@ -30,8 +30,11 @@ tier2='\belder\b|EL-[0-9]|ADR-[0-9]{3}|ssh t7920|\bsling\b|reconciler|kickoff|\b
 
 # The gate and the refresh script must name the forbidden tokens to detect and
 # scrub them — they are tooling, not content, so they are excluded from the scan.
+# `.git/` is VCS metadata (committer identity, object logs) — never shipped in a
+# tarball and not kit content, so it is excluded from the scan.
 echo "== TIER-1 (forbidden anywhere) =="
-if grep -rniE "$tier1" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" ; then
+if grep -rniE "$tier1" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" \
+    --exclude-dir=.git --exclude-dir=__pycache__ ; then
   echo "  ^^ TIER-1 violations" ; fail=1
 else
   echo "  clean"

@@ -1,2 +1,3 @@
 pack: v2.43.0          (guides, sdlc-gate.py, decoupling/writing-style rules, voicing doc)
 harness-source: 2026-06-17 snapshot   (craft-*/go-*/python-* rules, scrubbed)
+dev-ledger-harness: 2026-07-09   (harness/, install-harness.sh, harness-verify.sh; scala-* rules; sdlc-gate.py Scala scanner-plugin port)
