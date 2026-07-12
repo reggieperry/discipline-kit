@@ -51,4 +51,5 @@ Record an out-of-band authorization with principal, channel, and date: `"operato
 ## Guardrails
 
 - Append-only. Never edit an existing line; a change is a new entry that supersedes the old one (`ledger-retire`). The audit holds every committed line byte-identical.
+- A successor carries **both pointers**: `about` (the predecessor it concerns) and `supersedes` (the predecessor it replaces). A successor is at once a claim *about* its predecessor and its *replacement*, so both edges are explicit and tooling can walk either relation. The founding project discovered this shape under an append-rejection constraint — a testimony needs an `about` target — and it is the right one; adopt it as doctrine.
 - Never hand-write `status: signed`. Signatures come from the gate or they are forgeries, and the pre-commit forgery guard blocks any signed line it did not itself write. Signing is the `ledger-discharge` skill.

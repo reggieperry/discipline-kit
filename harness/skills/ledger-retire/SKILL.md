@@ -12,6 +12,8 @@ The record is append-only. You do not fix a claim; you supersede it, and the old
 
 A changed belief is a new entry whose `supersedes` names the old one, not an edit to the old one. This holds for our own findings too. On the founding project, when the M3 press observation evolved it was not rewritten; it was left standing with its discharger named forward into the next cell (clm-0122). Editing a line to match new understanding erases the fact that the understanding changed.
 
+When the successor is also *about* the predecessor — a testimony refining it, a refutation defeating it — it carries **both** pointers: `supersedes` (the replacement edge) and `about` (the concerns edge), so tooling can walk either relation. (The write-side statement is in `ledger-write`.)
+
 ## Signed is terminal
 
 The audit's legal-transition table admits no exit from `signed`: `LEGAL_NEXT` maps a signed claim to the empty set, so a signed claim is never superseded in place. If a signed result later proves premature but not wrong, you neither rewrite it nor supersede it: a fuller restatement is a new, independent claim, and the original signed line stays on the board. A signed claim is defeated only by a `refutation` about it and then retired, never edited.
