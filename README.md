@@ -2,7 +2,7 @@
 
 Portable engineering discipline for Claude Code — the auto-loading rules, principal-engineer guides, review skills, methodology memories, and the differential gate, packaged to drop into a fresh Claude Code install on another machine.
 
-It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories — with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
+It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
 
 ## What's in here
 
@@ -13,13 +13,15 @@ claude-user/            → installs into ~/.claude
   skills/deep-reason/     fresh-context Opus second-opinion subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
 claude-project/         → copies into each repo's .claude/
-  rules/                  34 auto-loading rules in three layers:
+  rules/                  42 auto-loading rules in three layers:
                           craft-* (language-neutral: abstraction, complexity,
                             documentation, domain-modeling, refactoring, tdd, xunit)
                             + decoupling + writing-style
                           go-*     (8: style, errors, types, concurrency, modules,
                             testing, security, llm)
                           python-* (8: style, errors, types, concurrency, modules,
+                            testing, security, llm)
+                          scala-*  (8: style, errors, types, concurrency, modules,
                             testing, security, llm)
                           ts-*     (9: style, errors, types, concurrency, modules,
                             testing, security, llm, react — TypeScript/React+Vite)
@@ -63,7 +65,7 @@ cp /path/to/discipline-kit/claude-project/rules/*.md                  .claude/ru
 cp /path/to/discipline-kit/claude-project/sdlc-discipline/guides/*.md .claude/sdlc-discipline/guides/
 ```
 
-Rules auto-load by path glob (`**/*.go`, `**/*.py`, `tests/**`, `docs/**`, …) when you edit a matching file — the `go-*` rules fire on Go files, `python-*` on Python, `craft-*` on both — no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
+Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `tests/**`, `docs/**`, …) when you edit a matching file: the `go-*` rules fire on Go files, `python-*` on Python, `scala-*` on Scala, `craft-*` on all of them, no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
 
 ## Using it
 
@@ -81,7 +83,7 @@ Rules auto-load by path glob (`**/*.go`, `**/*.py`, `tests/**`, `docs/**`, …) 
 
 ## Refreshing and provenance
 
-The rule layer has two upstreams: the SDLC pack (the guides, the gate, `decoupling`/`writing-style`) and a Go-harness repo (the `craft-*`/`go-*`/`python-*` rules). All of it is scrubbed of machine, project, and personal identifiers; `./scrub-gate.sh` enforces that across four checks — infra/PII anywhere, chain vocab and harness vocab in the scrubbed surfaces, and a dangling-cross-ref check — and is the last step before packaging.
+The rule layer has three upstreams: the SDLC pack (the guides, the gate, `decoupling`/`writing-style`), a Go-harness repo (the `craft-*`/`go-*`/`python-*` rules), and a Scala dev-ledger harness repo (the `scala-*` rules, authored there against the Scala canon rather than ported from the Go-harness). All of it is scrubbed of machine, project, and personal identifiers; `./scrub-gate.sh` enforces that across four checks (infra/PII anywhere, chain vocab and harness vocab in the scrubbed surfaces, and a dangling-cross-ref check) and is the last step before packaging.
 
 Two house conventions are resolved in-kit where the sources disagreed: docstrings are **prose-only** (the source's Google-style `Args:/Returns:/Raises:` mandate was stripped from `python-style`), and **Pydantic is scoped to the validated LLM/external boundary** (no blanket ban). The long-form **guides have been fully neutralized**: all project-specific references have been rewritten to a generic order/account/pipeline domain, so the DDD/GOOS/Fowler/Liskov teaching stands on its own without assuming any particular system. A running example (an account evaluating proposed transactions against limits, approving or rejecting them, recording outcomes) carries the concrete illustrations where the patterns need one.
 

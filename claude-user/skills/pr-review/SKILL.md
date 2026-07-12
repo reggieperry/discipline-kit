@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: "Collaborative PR / branch / diff review. Use whenever the operator asks to review a pull request, a branch, or a diff (\"review this PR\", \"/pr-review\", \"look over this branch\"). Language-aware: detects the target language from the repo, runs the gate first, LOADS THE REVIEWED REPO'S OWN .claude/rules (go-*.md / python-*.md / craft / rig rules) for the language and project specifics, then applies the embedded language-neutral review core. Works in any repo — Go, Python, or other."
+description: "Collaborative PR / branch / diff review. Use whenever the operator asks to review a pull request, a branch, or a diff (\"review this PR\", \"/pr-review\", \"look over this branch\"). Language-aware: detects the target language from the repo, runs the gate first, LOADS THE REVIEWED REPO'S OWN .claude/rules (go-*.md / python-*.md / scala-*.md / ts-*.md / craft / rig rules) for the language and project specifics, then applies the embedded language-neutral review core. Works in any repo: Go, Python, Scala, TypeScript, or other."
 auto_invoke: false
 ---
 
@@ -50,7 +50,7 @@ ls "$ROOT/.claude/rules/" "$ROOT/.claude/rules/project/" 2>/dev/null
 
 Load, in priority order, whatever exists:
 
-1. **Per-language rules matching each changed file's language** — `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md` (same shape). These carry the authoritative language idioms and the language-specific anti-weakening list — use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
+1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, and `ts-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` carries `scala-concurrency` for its cats-effect boundary). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
 2. **Craft-core rules** — `craft-*.md` (complexity / abstraction / tdd / refactoring / domain-modeling). These are language-neutral and glob across `**/*.go`, `**/*.sh`, and `**/*.py`, so they apply to every changed file regardless of language. If the repo ships none, the embedded craft lens below covers it.
 3. **Rig-specific rules** — the *reviewed project's own* domain, architecture, security, and review rules (`*-<project>.md`, `architecture.toml`, `review-*.md`, `security-*.md`, a slop rubric). When reviewing a cloned target repo, this layer is the **target's** rules, not the reviewer's; the reviewing repo may ship none. These bind hardest: a repo may *specialize* the general discipline but never *weaken* it.
 

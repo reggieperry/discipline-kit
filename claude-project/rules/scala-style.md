@@ -13,6 +13,8 @@ The base layer of Scala 3 discipline: naming, control flow, the braces-versus-in
 ## Formatting
 
 - **Run `scalafmt` (`sbt scalafmtAll`) on every file; never hand-align.** The machine owns indentation, wrapping, and alignment, so the formatting debate does not exist. The repo config pins `maxColumn = 100`, `align.preset = none`, and the `RedundantBraces`/`RedundantParens`/`SortModifiers` rewrites — do not fight a rewrite by re-adding what it strips.
+- **Formatting is a build gate, not a cleanup step: `sbt check` verifies it and fails on unformatted code.** The composed `check` alias runs scalafmt in check mode across both the sources and the sbt build files (`scalafmtCheckAll` + `scalafmtSbtCheck`), so an unformatted source or `*.sbt` file fails CI rather than being silently reformatted later. `sbt scalafmtAll` is the local fix you run before committing; the check-mode forms are what the gate enforces.
+- **scalafix also owns import layout and redundant syntax, and `sbt check` verifies both.** `OrganizeImports` (Scala 3 dialect, `groupedImports = Merge`) merges and orders imports, and `RedundantSyntax` strips redundant modifiers, `: Unit` ascriptions, and brace-adjacent syntax. Both run under `scalafixAll --check` and fail on drift, so let scalafix organize imports; do not hand-order them or re-add what `RedundantSyntax` removes.
 - **Let `scalafmt` settle the braces-versus-indentation question for a given construct; do not mix the two styles within one construct.** The Scala 3 reference is explicit that a well-indented program means the same with or without the optional braces — so the choice is a readability call, not a semantic one, and consistency is the whole value.
 
 ## Braces versus significant indentation
@@ -45,8 +47,10 @@ val scored = orders.map: order =>
 
 ## Control flow
 
-- **Prefer expressions to statements; let the last expression be the value.** `if`/`match` are expressions — assign their result, do not mutate a `var` across branches. Reserve `var` for a genuinely local, single-method accumulator and prefer a fold even there.
-- **Handle the failure or empty case first and keep the success path at the left margin.** The line-of-sight discipline applies unchanged: a guard that returns or short-circuits early beats nesting the happy path inside `else`.
+- **Prefer expressions to statements; let the last expression be the value.** `if`/`match` are expressions, so assign their result rather than mutating across branches.
+- **Never introduce a `var`.** The safe subset is scalafix-enforced: `DisableSyntax.noVars` makes any `var`, including a local single-method fold accumulator, a build-failing finding under `sbt check`. Produce the value with an expression (`if`/`match` yields its value), a `foldLeft`, or `reduceOption`; for genuinely shared mutable state in effectful code use a `cats.effect.Ref` (`scala-concurrency.md`), never a bare `var`.
+- **Handle the failure or empty case first and keep the success path at the left margin.** The line-of-sight discipline applies unchanged: a guard that short-circuits early beats nesting the happy path inside `else`.
+- **`return` and `while`/`do-while` are banned, not merely discouraged.** `DisableSyntax.noReturns` and `DisableSyntax.noWhileLoops` fail `sbt check` too. Put the guard's value in *expression* position (`if !valid then errValue else …`), never a `return` statement, and express iteration with a combinator (`map`/`collect`/`foldLeft`), an `Iterator`, or a tail-recursive helper, never a `while`/`do-while` loop.
 - **Use `match` for closed alternatives and make the compiler check exhaustiveness.** Match on an `enum`/sealed ADT (an order status, a parse result, a state) and let a missing case be a warning the build escalates — do not add a catch-all `case _` that silences it. (`scala-types.md`.)
 - **Do not shadow an outer name in an inner block.** A rebind that reuses a name silently operates on the wrong value; pick a distinct name.
 
