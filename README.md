@@ -30,6 +30,10 @@ reference/
   review-checklist.md     the gate as a manual checklist (uv-absent fallback)
   deep-reasoning-agent.md the 6-section prompt template the deep-reason skill walks
   voicing-document.md     the human-prose writing register
+harness/                → the dev-ledger + commit-path gate (per-repo; install-harness.sh)
+  ledger/                 append / audit / gate / librarian / retire + board.sh (read-only board views)
+  skills/                 six ledger-* skills: read before writing, claim before building, cite before re-checking
+  templates/              check.sh / languages / hook snippets
 memories/               → optional, per-project memory dir
   58 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)

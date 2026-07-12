@@ -12,9 +12,14 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 - `ledger/append` — the ONE schema-validating writer. Assigns id + timestamp. `echo '{...}' | ledger/append`.
 - `ledger/retire <id> <reason> <refuting-id>` — the ONE sanctioned removal: move a claim to `trace/`.
 - `ledger/librarian` — reports contested claims and retires superseded ones.
+- `ledger/board.sh` — read-only views over the board: `open` (unverified claims), `graveyard` (refuted/contested, with pointers), `checks` (verifier histogram), `stale [days]`, `find <keyword>` (any status, live + trace), `next-id`, plus `--selftest` against `ledger/fixtures/board-fixture.jsonl`. The board reads; humans and the gate write, so it has no write subcommands.
 - `ledger/gate.py` — the commit-path gate (forgery guard, check-discharge, audit), called by the git hooks. Byte-identical across repos; per-repo behavior comes from `ledger/languages` + `ledger/check.sh`, never from editing the gate.
 - `ledger/check.sh` (optional) — the repo's mechanical check. If absent, the gate auto-detects a single toolchain (`sbt check` / `uv run pytest`); if neither, it runs the forgery guard + audit only.
 - `ledger/languages` (optional) — the extensions of the languages that build the system, one per line (`#` comments). A staged file in one of them fires the check. If absent, the gate unions the toolchains it auto-detects from the build markers at the repo root.
+
+## The ledger-* skills
+
+`install-harness.sh` also drops six `ledger-*` skills into `.claude/skills/`, so the next Claude Code instance loads the right ledger procedure at the right moment: **ledger-board** (read before writing), **ledger-write** (the entry discipline), **ledger-preregister** (claim before building), **ledger-discharge** (cite before re-checking, and how signing works), **ledger-retire** (supersession and the librarian, safely), and **ledger-verify** (the auditor's stance). Each carries the exact commands, the guardrails, and the scar that taught the rule. Wiring `sh ledger/board.sh --selftest` into `ledger/check.sh` (see `harness/templates/check.sh.example`) makes the board views part of what `repo-check` proves.
 
 ## Which languages fire the check
 

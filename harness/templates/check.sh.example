@@ -9,5 +9,7 @@
 # command. Example — a Scala backend and a TypeScript frontend:
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Fast, deterministic: the ledger board views must match their committed fixture (fail first).
+sh ledger/board.sh --selftest
 sbt -batch -Dsbt.color=false check
 ( cd path/to/frontend && npm run check )   # e.g. prettier --check && eslint && tsc --noEmit && vitest run

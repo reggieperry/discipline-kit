@@ -30,13 +30,22 @@ echo "Installing dev-ledger harness into $TARGET"
 
 # 1. ledger helpers — copy only what is ABSENT, so a re-run (or a repo with a
 # customized gate) is a true no-op and nothing is clobbered.
-mkdir -p ledger/trace
-for f in audit.py append retire gate.py librarian README.md; do
+mkdir -p ledger/trace ledger/fixtures
+for f in audit.py append retire gate.py librarian board.sh README.md; do
   [ -f "ledger/$f" ] || cp "$H/ledger/$f" "ledger/$f"
 done
-chmod +x ledger/append ledger/retire ledger/gate.py ledger/librarian ledger/audit.py
+[ -f ledger/fixtures/board-fixture.jsonl ] || cp "$H/ledger/fixtures/board-fixture.jsonl" ledger/fixtures/
+chmod +x ledger/append ledger/retire ledger/gate.py ledger/librarian ledger/audit.py ledger/board.sh
 [ -f ledger/trace/.gitkeep ] || touch ledger/trace/.gitkeep
-echo "  ledger/ helpers + README in place"
+echo "  ledger/ helpers + board + README in place"
+
+# 1b. the ledger-discipline skills — teach the next instance to use the ledger correctly
+# (read before writing, cite before re-checking, claim before building). Additive; absent-only.
+mkdir -p .claude/skills
+for s in ledger-board ledger-write ledger-preregister ledger-discharge ledger-retire ledger-verify; do
+  [ -d ".claude/skills/$s" ] || cp -R "$H/skills/$s" ".claude/skills/$s"
+done
+echo "  ledger-* skills in .claude/skills/"
 
 # 2. bootstrap the ledger — only if absent (installer-as-first-customer)
 if [ ! -f ledger/claims.jsonl ]; then
