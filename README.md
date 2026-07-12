@@ -93,4 +93,4 @@ Two house conventions are resolved in-kit where the sources disagreed: docstring
 scripts/refresh-from-pack.sh <pack-checkout-dir> <tag>   # pack pieces; then: ./scrub-gate.sh
 ```
 
-Source versions are recorded in `PACK_SOURCE_TAG`.
+Per-release notes and upstream source provenance are in `CHANGELOG.md` (which superseded the former `PACK_SOURCE_TAG`).

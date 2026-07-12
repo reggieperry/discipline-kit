@@ -54,13 +54,16 @@ sed -i 's/deployable unit + T7920 setup/deployable unit + production-host setup/
   "$KIT"/claude-project/sdlc-discipline/guides/refactoring-guide.md
 
 echo "Refreshing gate"
+# WARNING: this overwrites reference/sdlc-gate.py from the pack. The kit's copy carries
+# kit-LOCAL work NOT in the pack — the Scala scanner-plugin port and the fail-closed compile
+# precondition + scoverage coverage-drop scan (shipped in v1.0.0). Copying the pack version
+# REVERTS them (and reference/test_sdlc_gate.py would then fail). Reconcile by hand until the
+# "which upstream is canonical on collision" decision lands (README, Refreshing and provenance).
 cp "$OVERLAY"/sdlc-discipline/sdlc-gate.py "$KIT"/reference/sdlc-gate.py
 # Scrub the one project-specific code-comment example.
 sed -i 's/Hit on Elder REFACTOR-001 tester/Observed in practice:/; s/# 2026-05-11: same line/# same line/' \
   "$KIT"/reference/sdlc-gate.py
 
-echo "Recording source tag"
-printf '%s\n' "$TAG" > "$KIT/PACK_SOURCE_TAG"
-
-echo "Done. Source tag: $TAG"
-echo "Next: ./scrub-gate.sh  &&  re-tar."
+echo "Done. Refreshed from pack tag: $TAG"
+echo "Next: reconcile reference/sdlc-gate.py (see the WARNING above), add a CHANGELOG.md entry"
+echo "      for the refreshed version, run ./scrub-gate.sh, then re-tag."
