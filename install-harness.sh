@@ -31,7 +31,7 @@ echo "Installing dev-ledger harness into $TARGET"
 # 1. ledger helpers — copy only what is ABSENT, so a re-run (or a repo with a
 # customized gate) is a true no-op and nothing is clobbered.
 mkdir -p ledger/trace ledger/fixtures
-for f in audit.py append retire gate.py librarian board.sh README.md; do
+for f in audit.py append retire gate.py librarian board.sh README.md operators-manual.md; do
   [ -f "ledger/$f" ] || cp "$H/ledger/$f" "ledger/$f"
 done
 [ -f ledger/fixtures/board-fixture.jsonl ] || cp "$H/ledger/fixtures/board-fixture.jsonl" ledger/fixtures/

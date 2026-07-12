@@ -21,6 +21,8 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 
 `install-harness.sh` also drops six `ledger-*` skills into `.claude/skills/`, so the next Claude Code instance loads the right ledger procedure at the right moment: **ledger-board** (read before writing), **ledger-write** (the entry discipline), **ledger-preregister** (claim before building), **ledger-discharge** (cite before re-checking, and how signing works), **ledger-retire** (supersession and the librarian, safely), and **ledger-verify** (the auditor's stance). Each carries the exact commands, the guardrails, and the scar that taught the rule. Wiring `sh ledger/board.sh --selftest` into `ledger/check.sh` (see `harness/templates/check.sh.example`) makes the board views part of what `repo-check` proves.
 
+The skills teach the instances; `ledger/operators-manual.md` (installed alongside) teaches the operator — the three board commands, the two trigger phrases, the three rituals, and the five operator-only verbs (authorize, place the bets, sign off, set the ceilings, release the gates).
+
 ## Which languages fire the check
 
 The gate must fire for **every language that builds the system**, and `ledger/check.sh` must in turn check **every** one of them — firing for a language you don't check lets that language weaken unseen (a fail-open). A repo built from one language needs neither file: the gate auto-detects the toolchain and its extensions. A repo built from several — or whose build markers are nested or sit beside vendored code in another language — declares them explicitly:
