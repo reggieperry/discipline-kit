@@ -17,7 +17,10 @@ python); `--toolchain` forces it.
           `@SuppressWarnings`/`// scalafix:off`; munit `.ignore`/`munitIgnore`/
           `assume(false)` + assertion-site counts (assertEquals/assert/intercept/`:|`)
           + ScalaCheck-parameter weakening (minSuccessfulTests fall, maxDiscardRatio
-          rise, forAllNoShrink). Spec: the kit's own scala-testing.md/scala-security.md.
+          rise, forAllNoShrink). Plus a fail-closed compile precondition (Check Build:
+          a non-compiling tree blocks rather than reading as clean, since a red build
+          silences the linters) and, opt-in via `--coverage`, a scoverage coverage-drop
+          scan (Check D). Spec: the kit's own scala-testing.md/scala-security.md.
 
 Subcommands
 -----------
@@ -30,7 +33,9 @@ baseline   Run the detected toolchain's scanners against the current working tre
 
 diff       Run the same scans on the current branch tip and compare against a
            previously captured baseline directory. Emits a JSON verdict:
-           pass, advisory, or fail. Exits 0 on pass/advisory, 1 on fail.
+           pass, advisory, or fail. Exits 0 on pass/advisory, 1 on fail, and 2 on an
+           operational failure (e.g. a --coverage scan that could not complete —
+           fail-closed, never read as "no coverage to check").
 
 Identity model
 --------------
@@ -76,6 +81,7 @@ import json
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
@@ -487,6 +493,152 @@ def run_wartremover(root: Path) -> Counter:
     return _sbt_json_or_empty(root, ["-Dgate.wartScan=true", "Test/compile"], _parse_wartremover)
 
 
+# --- The fail-closed compile precondition (Check Build) ------------------------
+# A red build silences the linters, so `_sbt_json_or_empty` parses an output that carries
+# no scalafix/wartremover findings and returns an empty Counter — which the diff reads as
+# "no new errors" and PASSES a tree that does not even compile (a fail-open). The precondition
+# closes it: compile both source sets first; if either the branch or the baseline does not
+# compile, block on Build/compile_error rather than trusting an empty scan.
+
+
+def _compile_precondition_blocks(branch_status: str, baseline_status: str) -> list[dict]:
+    """Fail-closed: if either tree does not compile, the linters could not have run, so
+    'no new findings' is meaningless — block. 'skip' (sbt not invokable / no toolchain wired)
+    is a no-op, matching the existing sbt-absent scanner behavior."""
+    failed = [w for w, s in (("branch", branch_status), ("baseline", baseline_status)) if s == "fail"]
+    if failed:
+        return [{
+            "check": "Build", "kind": "compile_error",
+            "items": [{"which": w, "detail": "the tree does not compile"} for w in failed],
+        }]
+    return []
+
+
+def sbt_compile_status(root: Path) -> str:
+    """Run `sbt Test/compile` (compiles BOTH the main and test source sets). Returns 'ok'
+    (compiles), 'fail' (does not compile), or 'skip' (sbt not invokable — a no-op, exactly
+    like the sbt-absent path of the static scanners)."""
+    try:
+        proc = subprocess.run(["sbt", "-batch", "-Dsbt.color=false", "Test/compile"],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: sbt Test/compile could not run; skipping the compile precondition\n")
+        return "skip"
+    return "ok" if proc.returncode == 0 else "fail"
+
+
+# --- scoverage coverage-drop scan (Check D coverage) --------------------------
+# scala-testing.md advertises "the differential gate scores coverage against the merge-base";
+# without a scanner that promise is fail-open (a coverage regression sails through). Ported
+# from the Scala gate's CoverageScan: parse scoverage.xml into a per-package-directory map,
+# diff against the baseline, block a drop beyond COVERAGE_EPSILON. Coverage is heavy (an
+# instrumented clean + full test run per tree), so it is opt-in behind --coverage.
+
+COVERAGE_EPSILON = 0.5  # percentage points; a per-directory drop beyond this is a hard block
+
+
+class CoverageOperationalError(RuntimeError):
+    """Coverage was requested but the instrumented run could not produce a report. Fail-closed
+    (exit 2): a failed scan must never be read as 'no coverage to check', which would silently
+    disable the coverage-drop block on that tree."""
+
+
+def _dir_of(p: str) -> str:
+    i = p.rfind("/")
+    return p[:i] if i >= 0 else "."
+
+
+def parse_scoverage(xml: str, source_root: str = "src/main/scala") -> dict[str, float]:
+    """Parse a scoverage.xml into {package-directory -> statement-coverage%}, keyed
+    REPO-RELATIVE (source_root prefixed) so it shares the diff's path-space. The percent is
+    recomputed from the integer counts (the rendered statement-rate is locale-sensitive); a
+    package with zero statements is dropped, never minted as 100%. A DOCTYPE is rejected (XXE /
+    entity-expansion closed) — a self-generated report never needs one."""
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ValueError("scoverage.xml carries a DOCTYPE; refusing to parse (XXE closed)")
+    root = ET.fromstring(xml)  # ElementTree does not resolve external entities
+    agg: dict[str, list[int]] = {}  # dir -> [statement-count, statements-invoked]
+    for cls in root.iter("class"):
+        filename = (cls.get("filename") or "").replace("\\", "/")
+        if not filename:
+            continue
+        try:
+            count = int(cls.get("statement-count", ""))
+            invoked = int(cls.get("statements-invoked", ""))
+        except (TypeError, ValueError):
+            continue
+        slot = agg.setdefault(f"{source_root}/{_dir_of(filename)}", [0, 0])
+        slot[0] += count
+        slot[1] += invoked
+    return {d: (inv / cnt * 100.0) for d, (cnt, inv) in agg.items() if cnt > 0}
+
+
+def _find_scoverage_xml(root: Path) -> Path | None:
+    """The root project's scoverage.xml under a target/**/scoverage-report/ directory, walked
+    (not hardcoded) so a Scala-version bump does not break it."""
+    target = root / "target"
+    if not target.is_dir():
+        return None
+    for p in target.rglob("scoverage.xml"):
+        if p.parent.name == "scoverage-report":
+            return p
+    return None
+
+
+def run_coverage(root: Path) -> dict[str, float]:
+    """Run scoverage over `root` and read its report into the per-directory coverage map.
+    FAIL-CLOSED: if the instrumented run cannot produce a report, raise
+    CoverageOperationalError rather than returning an empty map. A clean run with no report is
+    the only legitimate empty (nothing instrumented). `clean` is required — the coverage switch
+    changes scalacOptions, and a stale non-instrumented compile would report the wrong numbers."""
+    try:
+        proc = subprocess.run(
+            ["sbt", "-batch", "-Dsbt.color=false", "clean", "coverage", "test", "coverageReport"],
+            cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise CoverageOperationalError(f"coverage scan could not run: {e}") from e
+    report = _find_scoverage_xml(root)
+    if report is None:
+        if proc.returncode != 0:
+            raise CoverageOperationalError(
+                f"coverage scan did not complete (sbt exit {proc.returncode}) and produced no report "
+                "— refusing to read coverage as empty (fail-closed)")
+        return {}
+    try:
+        return parse_scoverage(report.read_text())
+    except OSError as e:
+        raise CoverageOperationalError(f"coverage report unreadable: {e}") from e
+
+
+def _translate_pkg(pkg: str, rename_map: dict[str, str]) -> str:
+    """Directory reconciliation for the coverage diff: if every renamed file under `pkg` moved
+    to one new directory, follow it (a rename `pkg/X.scala -> newdir/X.scala` implies
+    `pkg -> newdir`), so a whole-package move does not false-positive as a coverage drop.
+    Returns `pkg` unchanged when there is no single consistent target."""
+    targets = {_dir_of(new) for old, new in rename_map.items() if _dir_of(old) == pkg}
+    return next(iter(targets)) if len(targets) == 1 else pkg
+
+
+def _diff_coverage(branch_cov: dict[str, float], baseline_cov: dict[str, float],
+                   rename_map: dict[str, str], epsilon: float) -> list[dict]:
+    """Check D coverage-drop: for each baseline package-directory, its branch coverage
+    (reconciled through the file rename map) must not vanish and must not fall more than
+    epsilon. A new package is not a drop."""
+    items: list[dict] = []
+    for pkg in sorted(baseline_cov):
+        base_cov = baseline_cov[pkg]
+        bc = branch_cov.get(pkg)
+        if bc is None:
+            bc = branch_cov.get(_translate_pkg(pkg, rename_map))
+        if bc is None:
+            items.append({"package": pkg, "baseline": round(base_cov, 1), "branch": None})
+        elif bc < base_cov - epsilon:
+            items.append({"package": pkg, "baseline": round(base_cov, 1), "branch": round(bc, 1)})
+    if items:
+        return [{"check": "D.coverage", "kind": "coverage_drop", "items": items}]
+    return []
+
+
 # --- Toolchain plugins (one engine, per-toolchain scanners) --------------------
 
 
@@ -512,6 +664,14 @@ class Toolchain:
 
     def test_weakening(self, root: Path) -> dict:
         return {"skips": {}, "asserts": {}, "params": {}}
+
+    def compile_check(self, root: Path) -> str:
+        """'ok' | 'fail' | 'skip' — the fail-closed compile precondition. Base: no compile step."""
+        return "skip"
+
+    def coverage(self, root: Path) -> dict[str, float]:
+        """Per-package-directory statement coverage for the opt-in Check D coverage-drop. Base: none."""
+        return {}
 
     def is_test_file(self, rel: str) -> bool:
         return rel.startswith("tests/")
@@ -564,6 +724,12 @@ class ScalaToolchain(Toolchain):
 
     def test_weakening(self, root: Path) -> dict:
         return scan_scala_test_weakening(root)
+
+    def compile_check(self, root: Path) -> str:
+        return sbt_compile_status(root)
+
+    def coverage(self, root: Path) -> dict[str, float]:
+        return run_coverage(root)
 
     def is_test_file(self, rel: str) -> bool:
         return _scala_is_test_file(rel)
@@ -637,6 +803,16 @@ def cmd_baseline(args: argparse.Namespace) -> None:
     static = {} if getattr(args, "no_static", False) else tc.static_analysis(root)
     suppressions = tc.suppressions(root)
     test_w = tc.test_weakening(root)
+    # The compile precondition status travels with the baseline so diff can fail-closed on a
+    # baseline that did not compile (its empty static scan is not trustworthy).
+    build_status = "skip" if getattr(args, "no_static", False) else tc.compile_check(root)
+    coverage: dict[str, float] = {}
+    if getattr(args, "coverage", False):
+        try:
+            coverage = tc.coverage(root)
+        except CoverageOperationalError as e:
+            sys.stderr.write(f"sdlc-gate: {e}\n")
+            sys.exit(2)
 
     for label, counter in static.items():
         (out_dir / f"static-{label}.json").write_text(json.dumps(_serialize(counter), indent=2))
@@ -644,6 +820,9 @@ def cmd_baseline(args: argparse.Namespace) -> None:
     (out_dir / "test-weakening.json").write_text(json.dumps(test_w, indent=2))
     (out_dir / "sha.txt").write_text(args.sha + "\n")
     (out_dir / "toolchain.txt").write_text(tc.name + "\n")
+    (out_dir / "build.txt").write_text(build_status + "\n")
+    if getattr(args, "coverage", False):
+        (out_dir / "coverage.json").write_text(json.dumps(coverage, indent=2))
 
     sys.stdout.write(
         json.dumps(
@@ -979,6 +1158,22 @@ def cmd_diff(args: argparse.Namespace) -> None:
 
     root = Path().resolve()
     tc: Toolchain = baseline["tc"]
+
+    # Fail-closed compile precondition (Check Build): a tree that does not compile silences the
+    # linters, so an empty static scan must not read as "no new findings". If either the branch
+    # or the baseline fails to compile, block immediately — before running (and trusting) the
+    # scanners. 'skip' (sbt not wired) is a no-op; a pre-port baseline with no build.txt is 'skip'.
+    branch_build = "skip" if getattr(args, "no_static", False) else tc.compile_check(root)
+    baseline_build = (base_dir / "build.txt").read_text().strip() if (base_dir / "build.txt").exists() else "skip"
+    compile_blocks = _compile_precondition_blocks(branch_build, baseline_build)
+    if compile_blocks:
+        sys.stdout.write(json.dumps({
+            "verdict": "fail", "toolchain": tc.name, "baseline_sha": baseline["sha"],
+            "blocks": compile_blocks, "advisories": [],
+            "summary": {"compile": {"branch": branch_build, "baseline": baseline_build}},
+        }, indent=2) + "\n")
+        sys.exit(1)
+
     branch_static = {} if getattr(args, "no_static", False) else tc.static_analysis(root)
     branch_supp = tc.suppressions(root)
     branch_tw = tc.test_weakening(root)
@@ -1023,6 +1218,19 @@ def cmd_diff(args: argparse.Namespace) -> None:
     advisories.extend(d_advisories)
     blocks.extend(_check_scalacheck_params(
         branch_tw, baseline["tw"], tc.param_directions, rename_map, deleted))
+
+    # Check D coverage-drop (opt-in --coverage): a per-directory statement-coverage drop beyond
+    # COVERAGE_EPSILON versus the baseline is a hard block. A failed coverage scan is operational
+    # (exit 2, fail-closed) — never read as "no coverage to check".
+    if getattr(args, "coverage", False):
+        try:
+            branch_cov = tc.coverage(root)
+        except CoverageOperationalError as e:
+            sys.stderr.write(f"sdlc-gate: {e}\n")
+            sys.exit(2)
+        cov_path = base_dir / "coverage.json"
+        baseline_cov = json.loads(cov_path.read_text()) if cov_path.exists() else {}
+        blocks.extend(_diff_coverage(branch_cov, baseline_cov, rename_map, COVERAGE_EPSILON))
 
     if blocks:
         verdict = "fail"
@@ -1070,6 +1278,9 @@ def main() -> None:
                             help="Skip the static-analysis scanners (sbt/uv); run only the fast "
                                  "regex checks (suppressions + test-weakening). Use the SAME flag on "
                                  "baseline and diff.")
+    p_baseline.add_argument("--coverage", action="store_true",
+                            help="Also capture scoverage statement coverage (scala). Runs an "
+                                 "instrumented clean+test — heavy, opt-in. Use the SAME flag on diff.")
     p_baseline.set_defaults(func=cmd_baseline)
 
     p_diff = sub.add_parser(
@@ -1092,6 +1303,10 @@ def main() -> None:
     )
     p_diff.add_argument("--no-static", action="store_true",
                         help="Skip the static-analysis scanners; must match the baseline's capture.")
+    p_diff.add_argument("--coverage", action="store_true",
+                        help="Also diff scoverage coverage vs the baseline (scala); a per-directory "
+                             "statement-coverage drop beyond 0.5pp blocks. Must match the baseline's "
+                             "capture. A failed coverage scan exits 2 (operational, fail-closed).")
     p_diff.set_defaults(func=cmd_diff)
 
     args = parser.parse_args()
