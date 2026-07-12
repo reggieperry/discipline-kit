@@ -66,13 +66,15 @@ cmd_stale() {
 cmd_graveyard() {
   all_files | jq_over '
     (map(select(.supersedes) | .supersedes)) as $sup
+    | (map(select(.retire_of) | .retire_of)) as $retired
     | (map(select(.kind=="refutation" and .about))) as $refs
     | ($refs | map(.about)) as $refabout
     | sort_by(.id)[] | . as $e
     | if ($e.kind=="assertion" and $e.status=="refuted") then
         "\($e.id)  \($e.claim[0:80])  [refuted \($e.discharged_by.run // $e.check)]"
       elif ($e.kind=="assertion" and ($e.status=="unverified" or $e.status=="signed")
-            and ($refabout | index($e.id)) and (($sup | index($e.id)) | not)) then
+            and ($refabout | index($e.id)) and (($sup | index($e.id)) | not)
+            and (($retired | index($e.id)) | not)) then
         "\($e.id)  \($e.claim[0:80])  [contested by \($refs | map(select(.about==$e.id) | .id) | join(","))]"
       else empty end
   ' -s

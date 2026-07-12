@@ -7,11 +7,13 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 ## Layout
 
 - `ledger/claims.jsonl` — append-only, one JSON object per line. The live board.
-- `ledger/trace/` — retired entries (one `<id>.jsonl` per retirement). Off the live board, still on the record.
+- `ledger/trace/` — retired entries (one `<id>.jsonl` per retirement: the original claim line verbatim + a retirement-record sidecar). Off the live board, still on the record.
 - `ledger/audit.py` — the mechanical checks over the ledger (supplied verbatim; do not edit).
 - `ledger/append` — the ONE schema-validating writer. Assigns id + timestamp. `echo '{...}' | ledger/append`.
 - `ledger/retire <id> <reason> <refuting-id>` — the ONE sanctioned removal: move a claim to `trace/`.
 - `ledger/librarian` — reports contested claims and retires superseded ones.
+- `ledger/red-proof` — the mechanical court for the "observed red" disclosure: builds a hybrid tree (implementation at the merge-base, tests from HEAD) and asserts the new tests FAIL against the old implementation, killing tautologies and green-by-weakening. Opt-in per slice (`ledger/red-proof --test-cmd '<runs the new tests>' [--tests <path>...]`), a done-report line, not a hard gate at first. `ledger/fixtures/red_proof_test.py` proves it rejects a tautological test and passes a genuine one.
+- `ledger/trace/` retirement pairs and `ledger/red-proof` are exercised by `harness-verify.sh` (verify 3/3).
 - `ledger/board.sh` — read-only views over the board: `open` (unverified claims), `graveyard` (refuted/contested, with pointers), `checks` (verifier histogram), `stale [days]`, `find <keyword>` (any status, live + trace), `next-id`, plus `--selftest` against `ledger/fixtures/board-fixture.jsonl`. The board reads; humans and the gate write, so it has no write subcommands.
 - `ledger/gate.py` — the commit-path gate (forgery guard, check-discharge, audit), called by the git hooks. Byte-identical across repos; per-repo behavior comes from `ledger/languages` + `ledger/check.sh`, never from editing the gate.
 - `ledger/check.sh` (optional) — the repo's mechanical check. If absent, the gate auto-detects a single toolchain (`sbt check` / `uv run pytest`); if neither, it runs the forgery guard + audit only.
@@ -43,7 +45,7 @@ One object per line: `id, ts, sha, subject, claim, source, kind, about, check, s
 
 ## The immutability discipline for retirement
 
-The audit holds every line ever **committed** to `claims.jsonl` byte-identical now, in live or trace. Because retirement rewrites the moved entry (adds `trace_reason` + `retired_by`), **retire a claim in the same commit that supersedes or defeats it** — not as a later edit to a long-committed line.
+The audit holds every line ever **committed** to `claims.jsonl` byte-identical now, in live or trace. `ledger/retire` therefore does a **verbatim-move plus sidecar**: `ledger/trace/<id>.jsonl` receives the original claim line BYTE-IDENTICAL, plus a separate retirement record (`{"retire_of": <id>, "trace_reason": ..., "retired_by": ...}`) carrying the metadata. The committed line survives unchanged (immutability holds) while the record supplies the reason and pointer (the trace check reads the pair), so a claim may now be retired safely in ANY later commit — the old same-commit-only constraint, which rewrote the moved entry in place and forced boards to accrete superseded-in-place entries forever, is lifted. Legacy in-place retired entries stay valid; the audit reads either form. `ledger/fixtures/retire_immutable_test.py` pins the defect and the cure (retiring a previously-committed claim: red on the old rewrite, green on the verbatim-move).
 
 ## The demotion rule (generative review testifies, never signs)
 

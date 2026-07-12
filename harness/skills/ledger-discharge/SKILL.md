@@ -34,6 +34,10 @@ A claim parked under a non-runnable check (`ledger-preregister`) lands by supers
 
 The chain is parked, superseded to `repo-check`, then gate-signed (clm-0128 → clm-0133 → clm-0135).
 
+## The semantics line
+
+Every discharge states what its signature actually certifies. A mechanical check passing certifies *this receipt reproduces* or *these two legs agree* — not that the underlying work is correct; correctness beyond the check rests on whatever independent leg the claim names (a second-language recount, an adversarial review, a hand-verified oracle). The claim carries one clause saying so, and pointing at that leg. A signature read wider than the check earned is the forgery the whole discipline exists to prevent — committed politely, in prose, instead of in a `status` field. Where the discharge compares receipts across two implementations, the comparability policy belongs in that clause too: integer receipts byte-identical; float receipts under a pinned rounding mode or a stated tolerance.
+
 ## The pushed line
 
 A milestone that has not left the machine is drafted, not done. The done-report carries `pushed: <remote>@<sha>`, the remote and short sha you pushed to (`git remote -v`). Land, let the gate sign, push, and record the line.

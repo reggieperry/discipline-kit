@@ -126,18 +126,36 @@ def check_chains(live: list[dict], trace: list[dict]) -> list[V]:
     return viol
 
 
-def check_trace(trace: list[dict], live: list[dict]) -> list[V]:
+def check_trace(trace: list[dict], retire_records: list[dict], live: list[dict]) -> list[V]:
+    """Every retired claim carries a reason and a resolvable pointer — supplied EITHER by a legacy
+    in-place retired entry (status 'retired' + trace_reason on the claim) OR by a sidecar retirement
+    record (`retire_of` naming the claim; the verbatim-move form). `trace` is the claim entries;
+    `retire_records` the sidecars."""
     viol = []
     ids = {e["id"] for e in live + trace if "id" in e}
+    retired_ids: set[str] = set()
+    for r in retire_records:
+        tgt = r.get("retire_of")
+        retired_ids.add(tgt)
+        if not (r.get("trace_reason") or "").strip():
+            viol.append(V("trace", f"retirement record for {tgt}: no trace_reason"))
+        ptr = r.get("retired_by") or r.get("supersedes")
+        if not ptr:
+            viol.append(V("trace", f"retirement record for {tgt}: no pointer to what defeated/superseded it"))
+        elif ptr not in ids:
+            viol.append(V("trace", f"retirement record for {tgt}: pointer {ptr} does not resolve"))
+        if tgt not in ids:
+            viol.append(V("trace", f"retirement record retire_of {tgt} does not resolve to a claim"))
     for e in trace:
         eid = e.get("id")
-        if not (e.get("trace_reason") or "").strip():
-            viol.append(V("trace", f"{eid}: retired with no trace_reason"))
-        ptr = e.get("retired_by") or e.get("supersedes")
-        if not ptr:
-            viol.append(V("trace", f"{eid}: retired with no pointer to what defeated/superseded it"))
-        elif ptr not in ids:
-            viol.append(V("trace", f"{eid}: pointer {ptr} does not resolve"))
+        if e.get("status") == "retired" and (e.get("trace_reason") or "").strip():
+            ptr = e.get("retired_by") or e.get("supersedes")  # legacy in-place form
+            if not ptr:
+                viol.append(V("trace", f"{eid}: retired with no pointer to what defeated/superseded it"))
+            elif ptr not in ids:
+                viol.append(V("trace", f"{eid}: pointer {ptr} does not resolve"))
+        elif eid not in retired_ids:
+            viol.append(V("trace", f"{eid}: in trace/ with neither a legacy trace_reason nor a retirement record"))
     return viol
 
 
@@ -220,20 +238,24 @@ def main() -> int:
     ledger_rel = "ledger/claims.jsonl"
 
     live, viol = read_jsonl(root / ledger_rel)
-    trace: list[dict] = []
+    trace_all: list[dict] = []
     tdir = root / "ledger" / "trace"
     if tdir.exists():
         for tf in sorted(tdir.glob("*.jsonl")):
             t, v = read_jsonl(tf)
-            trace += t
+            trace_all += t
             viol += v
+    # A trace file holds claim entries (verbatim-moved or legacy in-place) AND sidecar retirement
+    # records (`retire_of`, no `id`). Only claim entries face the claim-shaped checks.
+    trace = [e for e in trace_all if "retire_of" not in e]
+    retire_records = [e for e in trace_all if "retire_of" in e]
 
     hard = viol
     hard += check_schema(live, "live") + check_schema(trace, "trace")
     hard += check_signed(live)
     hard += check_coherence(live + trace)
     hard += check_chains(live, trace)
-    hard += check_trace(trace, live)
+    hard += check_trace(trace, retire_records, live)
     hard += check_immutable(root, ledger_rel, live, trace)
 
     warn = warn_contested(live)

@@ -11,14 +11,14 @@ set -uo pipefail
 [ -f ledger/audit.py ] || { echo "✖ no ledger/ here — run from a repo with the harness installed" >&2; exit 2; }
 fail=0
 
-echo "verify 1/2: ledger/audit.py exits 0 on the live ledger"
+echo "verify 1/3: ledger/audit.py exits 0 on the live ledger"
 if python3 ledger/audit.py --root . >/dev/null; then
   echo "  PASS"
 else
   echo "  FAIL"; python3 ledger/audit.py --root . 2>&1 | tail -8; fail=1
 fi
 
-echo "verify 2/2: hook-is-a-hook — a forged signed commit is blocked"
+echo "verify 2/3: hook-is-a-hook — a forged signed commit is blocked"
 ORIG="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
 BR="harness-verify-$$"
 BAK="$(mktemp)"; cp ledger/claims.jsonl "$BAK"   # file-level restore (claims.jsonl may be uncommitted)
@@ -38,6 +38,19 @@ else
   echo "  SKIP — could not create a scratch branch"; fail=1
 fi
 cp "$BAK" ledger/claims.jsonl; rm -f "$BAK"   # restore the pre-probe ledger verbatim
+
+echo "verify 3/3: ledger tooling fixtures (retire immutability-safe; red-proof rejects tautologies)"
+for fx in retire_immutable_test red_proof_test; do
+  if [ -f "ledger/fixtures/$fx.py" ]; then
+    if python3 "ledger/fixtures/$fx.py" >/dev/null 2>&1; then
+      echo "  PASS  $fx"
+    else
+      echo "  FAIL  $fx"; python3 "ledger/fixtures/$fx.py" 2>&1 | tail -6; fail=1
+    fi
+  else
+    echo "  SKIP  $fx — not installed"
+  fi
+done
 
 if [ "$fail" != 0 ]; then echo "HARNESS VERIFICATION FAILED"; exit 1; fi
 
