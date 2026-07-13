@@ -16,9 +16,16 @@ Two yields in one release: a real ledger-integrity fix, and the portable lessons
 - **`reference/dual-leg-checklist.md`** — the fifteen-minute primitives-diff pass for any computation implemented in two languages.
 - **The four disclosure conventions** upstreamed: the semantics line (`ledger-discharge`), the authorship note (`ledger-write`), the reliability boundary (`ledger-verify`, already present), and the **process paragraph** (per-slice test-order / observed-red / green-by-weakening / refactor disclosure) — carried verbatim in the new `harness/templates/report-conventions.md` and summarized in the operators manual.
 
+### Release readiness (public-release gate)
+- **LICENSE** (Apache-2.0) and **SECURITY.md** — the trust model stated plainly: single-user mode trusts the local machine; a `signed` entry means only that a named check passed; team mode (server-side signing) is deferred and unshipped; what the kit does not defend against (a hostile repo admin, a compromised CI).
+- **The kit's own CI** (`.github/workflows/ci.yml`, read-only, no secrets): runs the acceptance suite — scrub-gate, board selftest, the retire + red-proof fixtures, and the 20 differential-gate unit tests — on every push and PR.
+- **README** gains the status/scope/license section: single-user shipped, multi-writer sharding + team mode deferred (not in this release).
+- **Deferred with the sharding:** the GitHub team-reconcile runbook and its workflow/CODEOWNERS templates — they presuppose the sharded/team-mode layout, which is not shipped. They ship when multi-writer mode does.
+
 ### Sources
 - `ledger-concurrency-reconciliation.md` (2026-07-12) — the retire/immutability fix (the salvage that applies to any layout); the sharded layout deferred.
 - `kit-improvements-d2-yield.md` (2026-07-12) — the three memories, the dual-leg checklist, the disclosure conventions, and `red-proof`.
+- `kit-public-release-gate.md` (2026-07-12) — the release gate (LICENSE, SECURITY, CI, scope); the team-mode GitHub runbook deferred with sharding.
 
 ## v1.0.0 — 2026-07-11
 

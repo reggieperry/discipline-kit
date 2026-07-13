@@ -1,0 +1,33 @@
+name: ci
+
+# A discipline kit whose own repo has no gate is an argument against itself. This runs the kit's
+# acceptance suite on every push and PR. Read-only permissions and no secrets, so fork PRs are safe
+# by default (the jobs never need any). No external toolchains — bash, python3, and git only.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: scrub-gate (no private identifiers anywhere)
+        run: bash scrub-gate.sh
+
+      - name: ledger board selftest (views match the committed fixture)
+        run: bash harness/ledger/board.sh --selftest
+
+      - name: retire immutability fixture (verbatim-move green, old rewrite red)
+        run: python3 harness/ledger/fixtures/retire_immutable_test.py
+
+      - name: red-proof fixture (genuine test passes, tautology rejected)
+        run: python3 harness/ledger/fixtures/red_proof_test.py
+
+      - name: differential gate unit tests (20 stdlib tests)
+        run: python3 reference/test_sdlc_gate.py

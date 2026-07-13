@@ -4,6 +4,12 @@ Portable engineering discipline for Claude Code — the auto-loading rules, prin
 
 It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
 
+## Status, scope, and license
+
+**v1.1.0.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire and red-proof fixtures, and the differential-gate unit tests — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+
+**Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The retire/immutability fix and `red-proof` are in this release; see `CHANGELOG.md`.
+
 ## What's in here
 
 ```
