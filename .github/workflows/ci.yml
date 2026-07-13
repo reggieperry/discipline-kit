@@ -33,10 +33,6 @@ jobs:
         run: python3 reference/test_sdlc_gate.py
 
       - name: algebra check (re-prove the ledger-dynamics laws + laundering exhibits)
-        # validate_note.py prints a summary but always exits 0, so gate on the summary line:
-        # a reintroduced laundering (⊗ₖ glut-identity or ∨ₜ dual) drops "0 fail" and fails CI.
-        run: |
-          out=$(python3 harness/algebra/validate_note.py)
-          echo "$out"
-          echo "$out" | grep -qE "checks, [0-9]+ pass, 0 fail$" \
-            || { echo "algebra check FAILED — a base law or laundering exhibit regressed"; exit 1; }
+        # validate_note.py fails closed (exits non-zero) if any base law or laundering
+        # exhibit regresses — a reintroduced ⊗ₖ glut-identity or ∨ₜ dual laundering fails CI by name.
+        run: python3 harness/algebra/validate_note.py

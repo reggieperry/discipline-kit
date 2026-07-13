@@ -197,3 +197,4 @@ print()
 fails=[n for n,c in checks if not c]
 print(f"TOTAL: {len(checks)} checks, {len(checks)-len(fails)} pass, {len(fails)} fail")
 if fails: print("FAILED:", fails)
+raise SystemExit(1 if fails else 0)  # fail closed: a regressed law/laundering exhibit exits non-zero
