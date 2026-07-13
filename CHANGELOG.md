@@ -2,6 +2,22 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.1.1 — 2026-07-13
+
+The ledger's conventions get their formal companion: a machine-checked note establishing which ledger moves are theorems of the claim algebra and which are new axioms, its validation script wired into CI, and the registration and render rules the note licenses.
+
+### Added
+- **`docs/ledger-dynamics-note.html`** — the formal note (22 machine-checked results). The dictionary: the two-entry refutation shape is the supersession pair (Def 2.14), retire is `strike` (Def 2.12), the contested board state is an unfolded glut. The new structure: the truth-join `∨ₜ` at testimony level with its dual-laundering hazard (Theorem L5) and the witness and totality rules that defeat it (Theorem L6); the interval-testimony sort the empirical courts use (Defs L8–L11); and the process axioms C1/D1/D2 and E3 with consistency, independence, and conservativity established.
+- **`harness/algebra/validate_note.py`** — stdlib-only, re-proves the base laws and carries the two laundering exhibits: `⊗ₖ`'s glut-identity divergence (the running-system check owed since the 2026-07-08 glut-laundering correction — now a green fixture) and `∨ₜ`'s dual laundering. Wired into CI as a required check via a summary-line guard (the script prints its total but exits 0), so a future edit reintroducing either laundering fails CI by name.
+- **Three registration conventions** (`ledger-write`, cross-referenced from `ledger-preregister`): name the composition connective (`∧ₜ` truth-meet / `∨ₜ` truth-join); existence claims register their habitats and inherit L6's witness and totality rules; interval claims register the L9 estimand-δ-exits template.
+- **The agreement discount** (`ledger-verify`, Axiom E3): grade corroboration-class support by distinct lineages, not raw confirmations — two reviews of the same configuration are one lineage.
+
+### Deferred (v1.2)
+- Two `board.sh` lints — `needs-docket` (Axiom D1: a live prediction whose scope elapsed with no named future court) and the `needs-successor` deadline (Axiom D2: contested-beyond-a-window escalates to FAIL) — and the `preregistration` audit check (Axiom C1: parameters commit before the archives their verdict reads), config-gated. Tracked as issues.
+
+### Sources
+- The note and its validator originate from the founding project's claim-algebra work; the correction-doc's owed divergence check is discharged here as a portable fixture.
+
 ## v1.1.0 — 2026-07-12
 
 Two yields in one release: a real ledger-integrity fix, and the portable lessons from a dual-leg cross-language discharge. The multi-writer **sharded ledger layout** (from the concurrency reconciliation) is intentionally **deferred** — it is inert for a single-writer repo (the legacy `claims.jsonl` is the one-shard degeneration, no migration), and ships when a real multi-writer deployment needs it.

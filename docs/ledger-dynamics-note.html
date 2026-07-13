@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger dynamics over the claim algebra — a formal note</title>
+<style>
+  :root { --ink:#2c2c2a; --muted:#5f5e5a; --paper:#fefdfb; --rule:#e4e1d8; --def:#f4f7fb; --defb:#3b6ea5; --thm:#f2f8f3; --thmb:#2a8c5a; --ax:#fdf6ec; --axb:#caa53a; }
+  html { background:var(--paper); }
+  body { margin:0 auto; max-width:50rem; padding:3rem 1.5rem 4rem; color:var(--ink); font:16.5px/1.62 Georgia,'Times New Roman',serif; }
+  h1 { font-size:1.6rem; font-weight:normal; margin:0 0 .3rem; }
+  h2 { font-size:1.12rem; font-weight:normal; margin:2.4rem 0 .7rem; border-bottom:1px solid var(--rule); padding-bottom:.3rem; }
+  .kicker { color:var(--muted); font-size:.92rem; margin-bottom:1.6rem; }
+  .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em; }
+  .box { border-left:3px solid; border-radius:4px; padding:.7rem .9rem; margin:1rem 0; }
+  .def { background:var(--def); border-color:var(--defb); }
+  .thm { background:var(--thm); border-color:var(--thmb); }
+  .ax  { background:var(--ax);  border-color:var(--axb); }
+  .lab { font-weight:bold; }
+  .proof { margin-top:.45rem; color:var(--muted); }
+  .pl { font-style:italic; }
+  .qed { float:right; }
+  .remark { color:var(--muted); margin:.8rem 0; }
+  .check { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; color:#2a8c5a; }
+  table { border-collapse:collapse; margin:.8rem 0; font-size:.9rem; }
+  td,th { border:1px solid var(--rule); padding:.3rem .55rem; text-align:left; }
+  pre { background:#f6f5f1; border:1px solid var(--rule); border-radius:4px; padding:.6rem .8rem; overflow-x:auto; font-size:.82rem; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--rule); color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+
+<h1>Ledger dynamics over the claim algebra</h1>
+<p class="kicker">A formal note registering the development ledger's conventions against the calculus: the dictionary, one new operation with its hazard, one new sort, and three process axioms. Every lemma, proposition, and theorem below is machine-checked (<span class="mono">validate_note.py</span>, 22 checks, all passing); each result cites its check. Definitions here are numbered L-series to avoid collision with the base documents. 2026-07-13.</p>
+
+<h2>0. Scope and method</h2>
+<p>This note extends <span class="mono">claim-calculus.html</span> and <span class="mono">claim-algebra.html</span>; it changes nothing in them. Part 1 is a dictionary: ledger conventions that turn out to be existing algebra, cited by definition number. Parts 2–4 are new structure: the truth-join at testimony level (with the laundering hazard it carries and the sound certification forms), the interval-testimony sort the empirical courts use, and the process axioms (commitment and the restless corners) with consistency, independence, and conservativity established. Everything provable was proved twice: once on paper below, once by machine against a faithful implementation of Definitions 2.4–2.16 and 6.5; the appendix lists the checks. One definition in this note was <em>refuted by its own validation</em> before reaching its final form, and the refutation is kept as a remark, per the house rule that corrections are content.</p>
+
+<h2>1. The dictionary — ledger law that was already algebra</h2>
+<table>
+<tr><th>ledger convention</th><th>the algebra object it is</th><th>cite</th></tr>
+<tr><td>two-entry refutation: refutation record + status-carrying successor, double pointers</td><td>the supersession pair <span class="mono">supersede(t,g) = (¬t, g)</span>: struck prior to the con-channel, operative installed; kept as a pair so the operative can sign</td><td>Def 2.14, Thm 6.3, Rmk 6.4</td></tr>
+<tr><td>the contested board state (refutations exist, no successor) and its audit flag</td><td>a glut <span class="mono">B</span> left unfolded at board grain; the flag is corner-B detection</td><td>Def 2.6</td></tr>
+<tr><td>retire as verbatim-move-plus-sidecar; never delete</td><td><span class="mono">strike</span>: clear pro, fold support to con, retain on record; idempotent</td><td>Def 2.12, Prop 2.13</td></tr>
+<tr><td>conjunction verdict grammar for program bets (all courts to support; any opposite refutes)</td><td>the truth-meet <span class="mono">∧ₜ</span>: pro by product, con reaching the root by sum — F-dominant, glut-blocking</td><td>algebra §4.3; check V3</td></tr>
+<tr><td>the semantics line ("state what each signature path actually guarantees")</td><td>the audit discipline named at the glut-laundering correction, applied per signature</td><td>correction doc, 2026-07-08</td></tr>
+<tr><td>compaction summaries as unverified testimony; session-manifest re-derivation</td><td>testimonies whose lineage tokens are artifact provenance; withdrawal of a discredited artifact is <span class="mono">t ∖ l</span></td><td>Defs 2.4, 2.16</td></tr>
+</table>
+<p class="remark">The dictionary's headline: the ledger's two most-used moves (the refutation shape and the retire path) are Definitions 2.14 and 2.12 verbatim. They were adopted for engineering reasons and turn out to have been theorems' shadows; Remark 6.4 is, in ledger terms, the reason the two-entry shape exists.</p>
+
+<h2>2. Existence composition — the truth-join, its hazard, and the sound forms</h2>
+
+<div class="box def"><span class="lab">Definition L1 (propositional slot).</span> A <em>propositional slot</em> is a slot whose candidate set is the singleton <span class="mono">{⊤}</span>; its testimonies are determined by the one graded pair <span class="mono">(pro, con)</span>. Claims of the form "an event of kind K occurred in habitat h" are carried on propositional slots, one per habitat.</div>
+
+<div class="box def"><span class="lab">Definition L2 (truth-join, <span class="mono">∨ₜ</span>, propositional).</span> For propositional testimonies <span class="mono">a, b</span>, the <em>truth-join</em> is channelwise: <span class="mono">(a ∨ₜ b)(⊤) = ( pro(a)+pro(b), con(a)·con(b) )</span>, normalized. Support pools by alternative; refutation must be <em>joint</em> — the disjunction is only told-against when every disjunct is.</div>
+
+<p class="remark"><span class="lab">Remark L3 (a definition refuted by its own check).</span> The first candidate definition, the De Morgan dual <span class="mono">¬∧ₜ(¬a,¬b)</span> over the calculus's candidate-pairing conjunctions, is <em>wrong</em>: the gap <span class="mono">ε</span> has no candidates to pair, so every pairing operation annihilates on it, and <span class="mono">T ∨ₜ N</span> computed to <span class="mono">N</span>. The machine caught it (four checks failed) before registration. Disjunction is a join, not a pairing; Definition L2 is channelwise for exactly this reason, and its scope is propositional slots; a general-candidate disjunction is left open. <span class="check">[V4, first-run failure preserved in the script's comment]</span></p>
+
+<div class="box thm"><span class="lab">Proposition L4 (corner table).</span> Under Definition L2 the sixteen corner compositions match the Belnap truth-join: <span class="mono">T</span> dominates; <span class="mono">F ∨ₜ F = F</span>; <span class="mono">N ∨ₜ F = N</span>; <span class="mono">B ∨ₜ F = B</span>; <span class="mono">N ∨ₜ B = T</span>.
+<div class="proof"><span class="pl">Proof.</span> Channel arithmetic per cell: root-pro is zero iff both pros are zero (sum in <span class="mono">ℕ[X]</span> is zero-sum-free, Def 2.2); root-con is zero iff either con is zero (a product with a zero factor is zero, and <span class="mono">ℕ[X]</span> has no zero divisors for the converse). The β map of Def 2.6 then gives each cell. Machine-checked over all sixteen. <span class="check">[V4: ∨ₜ 16-cell table]</span> <span class="qed">∎</span></div></div>
+
+<div class="box thm"><span class="lab">Theorem L5 (dual laundering).</span> <span class="mono">∨ₜ</span> launders refutation through unchecked habitats: if any leaf has an empty con-channel, the root's con is zero regardless of contests elsewhere. In particular <span class="mono">corner(N ∨ₜ B) = T</span>, and the gate of Def 2.15 <em>signs</em> a purely contested existence when one habitat is merely unchecked.
+<div class="proof"><span class="pl">Proof.</span> Root-con is the product of leaf cons (Def L2); one empty factor zeroes it. The <span class="mono">B</span> leaf contributes its pro to the root's sum, so root-pro is nonzero: corner <span class="mono">T</span> by Def 2.6, and with a singleton candidate, <span class="mono">card = 1</span>; the gate's remaining conjuncts are grade and verify, neither of which sees the vanished con. This is the third named strain of the laundering genus: <span class="mono">⊗ₖ</span> erases contests through its identity <span class="mono">B</span>; <span class="mono">verify = C ∨ O</span> signed through its weak branch; <span class="mono">∨ₜ</span> erases contests through any con-empty leaf. Same genus, new vector. <span class="check">[V4: dual laundering exhibit; naive root signs while no leaf signs]</span> <span class="qed">∎</span></div></div>
+
+<div class="box thm"><span class="lab">Theorem L6 (sound existence certification and refutation).</span> For an existence claim over registered habitats <span class="mono">h₁…hₙ</span> carried on propositional slots: <b>(confirm)</b> certify the existence iff <em>some leaf itself passes the gate</em> (the witness rule); never gate the <span class="mono">∨ₜ</span> root. <b>(refute)</b> the root reads <span class="mono">F</span> iff <em>every</em> leaf reads <span class="mono">F</span>; an <span class="mono">N</span> leaf blocks refutation and never enables confirmation.
+<div class="proof"><span class="pl">Proof.</span> Confirmation: a signing leaf has corner <span class="mono">T</span>, clean con, grade ≥ θ, verified (Def 2.15): a witnessed occurrence; the root then also reads <span class="mono">T</span> (Prop L4, T-dominance), but by Theorem L5 the converse fails, so the certification predicate must be the leaf's gate, not the root's. Refutation: root-con nonzero requires every factor nonzero, and root-pro zero requires every summand zero; jointly, every leaf is <span class="mono">(0, con≠0) = F</span>. An <span class="mono">N</span> leaf has empty con (blocking the product) and empty pro (contributing nothing), giving both blocking claims. This mirrors, on the join side, the correction doc's two constructions on the meet side: per-slot gating certifies; the bare composed corner does not. <span class="check">[V4: witness sound; totality; N blocks F]</span> <span class="qed">∎</span></div></div>
+
+<div class="box thm"><span class="lab">Corollary L7 (the P4 branch rules are L6).</span> With habitats {typed events, prose annotations, wire-dropped grammar}: Branch A (all habitats checked clean) is L6's refutation totality: refuted-by-exhaustion is the all-<span class="mono">F</span> root. Branches B and C (an attempt found in a habitat) present a candidate <em>witness leaf</em> for the operator's gate: the witness rule with the human verifier as <span class="mono">verify</span>. The pre-grep state (typed <span class="mono">F</span>, wire habitat <span class="mono">N</span>) could not refute, which is why the instructions demanded the grep before any verdict. <span class="qed">∎</span></div>
+
+<h2>3. Interval testimony — the empirical courts as a sort</h2>
+
+<div class="box def"><span class="lab">Definition L8 (interval testimony).</span> An <em>interval testimony</em> for an estimand with registered margin δ is <span class="mono">ι = (lo, hi, δ, ceiling?)</span> with <span class="mono">lo ≤ hi</span>: the decision interval a registered procedure computed, plus the pre-registered flag for a range-compressed reading.</div>
+
+<div class="box def"><span class="lab">Definition L9 (interval corner).</span> <span class="mono">corner_ι(ι)</span> is: <span class="mono">U_ceiling</span> if the ceiling flag is set; else <span class="mono">U_width</span> if <span class="mono">(hi−lo)/2 &gt; δ</span>; else <span class="mono">T_dir</span> if <span class="mono">lo &gt; δ</span>; else <span class="mono">F_dir</span> if <span class="mono">hi &lt; −δ</span>; else <span class="mono">Flat</span>.</div>
+
+<div class="box thm"><span class="lab">Lemma L10 (exit partition).</span> Exactly one exit fires for every interval.
+<div class="proof"><span class="pl">Proof.</span> The clauses are ordered and the last three are mutually exclusive under the width bound: half-width ≤ δ makes <span class="mono">lo &gt; δ</span> and <span class="mono">hi &lt; −δ</span> incompatible, and Flat is the stated remainder. Machine-checked over 900+ grid intervals. <span class="check">[V5: total &amp; deterministic]</span> <span class="qed">∎</span></div></div>
+
+<div class="box def"><span class="lab">Definition L11 (embedding into slots).</span> An interval testimony embeds as the pair of propositional slots <span class="mono">D</span> ("the effect exceeds δ in the registered direction") and <span class="mono">Z</span> ("the effect lies within ±δ"): <span class="mono">T_dir ↦ (T, F)</span>; <span class="mono">F_dir ↦ (F, F)</span>; <span class="mono">Flat ↦ (F, T)</span>; <span class="mono">U_width, U_ceiling ↦ (N, N)</span>.</div>
+
+<div class="box thm"><span class="lab">Lemma L12 (coherence) and Corollary L13 (the verdict grammars).</span> The embedding matches the exit table on canonical intervals, and the program-bet grammars are then ordinary algebra: a conjunction bet's <em>supported</em> is <span class="mono">∧ₜ</span> over the embedded <span class="mono">D</span> slots (F-dominant, so one opposite-direction court refutes); a width- or ceiling-censored court is an <span class="mono">N</span> leaf, and the conjunction blocks by exactly the mechanism of Theorem 6.7's gate behavior. <em>Flat is a definite verdict (an <span class="mono">F</span> on <span class="mono">D</span> and a <span class="mono">T</span> on <span class="mono">Z</span>), never a gap</em>, which is the "powered, not established" grammar note in algebraic form. <span class="check">[V5: embedding rows; P3 supported and partial rows]</span> <span class="qed">∎</span></div>
+
+<h2>4. Process axioms — commitment and the restless corners</h2>
+
+<div class="box ax"><span class="lab">Axiom C1 (commitment).</span> Every parameter a verdict evaluates (thresholds, floors, δ, exits, composition rule) has a commit index strictly earlier than the first observation index of the data the verdict reads. A pre-observation supersession of parameters (the registered-delta) preserves C1; a post-observation one violates it.</div>
+
+<div class="box ax"><span class="lab">Axioms D1, D2 (the restless corners).</span> D1: a slot at corner <span class="mono">N</span> whose scope is open incurs the obligation that a docket (a named future court) exist within <span class="mono">k</span> steps, or the scope close. D2: a slot at corner <span class="mono">B</span> incurs the obligation that a fold (a successor resolving the contest) occur within <span class="mono">k</span> steps. The two non-classical corners are thereby <em>obligated states</em>, not resting states — the ledger laws "live requires a docket" and "contested must resolve," stated on the algebra.</div>
+
+<div class="box thm"><span class="lab">Theorem L14 (consistency), Proposition L15 (independence), Proposition L16 (conservativity).</span> {C1, D1, D2} is consistent: a finite trace model satisfying all three exists (exhibited). The axioms are independent: for each, a trace violating it alone is constructible. And the axioms are <em>conservative over the equational theory</em>: they constrain event traces, not testimonies; no equation between testimonies is added or removed, so every model of Definitions 2.4–2.16 extends to a model of the axioms by choosing compliant traces.
+<div class="proof"><span class="pl">Proof.</span> Consistency and independence by the exhibited traces, machine-checked. Conservativity: the trace machine is parametric over the algebra: its states carry corners read <em>from</em> testimonies by Def 2.6 and never write back; the operations of §2 of the calculus are not mentioned by C1/D1/D2, whose vocabulary is commit indices, scopes, dockets, and folds. A derivation of a testimony equation from the axioms would have to use that vocabulary vacuously, hence already be derivable without them. <span class="check">[V6: consistency, independence; V7: C1 trace and violation detection]</span> <span class="qed">∎</span></div></div>
+
+<h2>5. Reflexive grading and the agreement discount</h2>
+<div class="box def"><span class="lab">Definition L17 (meta-testimony).</span> System artifacts (compaction summaries, goldens, memories) are testimonies on slots about the system itself, their lineage tokens the artifacts' provenance. A summary is thereby unverified testimony by construction; a golden's grade renders from its provenance token under ν̂ (hand-derived above computed-then-pinned above recorded); discrediting an artifact is token withdrawal <span class="mono">t ∖ l</span> (Def 2.16), which collapses joint derivations through it while independent support survives.</div>
+<div class="box ax"><span class="lab">Axiom E3 (agreement discount, at the render).</span> For corroboration-class slots (claims whose support is <em>agreement among sources</em>), the gate's grade is invariant under duplication of same-lineage support: the render deduplicates per lineage before ν̂. E3 cannot be a semiring homomorphism (deduplication breaks additivity), so it lives where Def 2.15 already places discretion (the choice of render), and <span class="mono">ℕ[X]</span> already carries the lineage structure it needs; the algebra's own comment ("NOT <span class="mono">Set[Lineage]</span>") cuts the other way here on purpose: multiplicity is kept in the carrier and <em>discounted at the gate</em>, so a non-idempotent trust model remains expressible elsewhere. Consistency is definitional. This is the fallible-oracle finding (correlated reviewers shared four of five errors) as an axiom.</div>
+
+<h2>6. Validation appendix and honest limits</h2>
+<pre>validate_note.py — 22 checks, 22 passing:
+V1 base laws re-checked: ⊕ monoid (2.10, 200 random); strike idempotent (2.13);
+   supersession pair signs while corroborated pair gluts (2.14, 6.3, Rmk 6.4)
+V2 ⊗ₖ: gap annihilates (6.7); glut is identity: laundering reproduced;
+   ∧ₜ and per-slot gating both block it (the correction doc's owed divergence, now a fixture)
+V3 ∧ₜ: full 16-cell corner table
+V4 ∨ₜ: 16-cell table; dual-laundering exhibit (N ∨ₜ B = T signs);
+   witness rule sound; naive-root hazard caught; refutation totality; N blocks F
+V5 interval sort: exit partition over grid; embedding rows; P3 grammar rows
+V6 deontic axioms: consistency trace; per-axiom independence
+V7 commitment axiom: compliant trace; violation detected</pre>
+<p><b>Limits, stated.</b> Definition L2 is propositional-slot scope; general-candidate disjunction is open. The Ev-level sketch's lattice <span class="mono">tjoin</span> and L2 agree at corners on propositional slots; no claim is made beyond corners. The calibration/Brier layer is measure-theoretic and outside this note. The deontic <span class="mono">k</span> is a policy constant, not derived. And the note's own first draft of L2 was machine-refuted before registration; kept in Remark L3 because a validation that has never rejected anything certifies nothing.</p>
+
+<footer>Ledger dynamics over the claim algebra · machine-checked companion to claim-calculus.html · 2026-07-13</footer>
+</body>
+</html>

@@ -38,6 +38,14 @@ Write so a stranger could act on the line alone.
 - Point at the artifact: the file, the receipt, the run, not "it works".
 - State the boundary: what the claim does not cover, so the signature cannot be read wider than it earned.
 
+## Registering a composed, existence, or interval claim
+
+Three registration conventions, from the formal note (`docs/ledger-dynamics-note.html`, machine-checked 22/22 by `harness/algebra/validate_note.py`).
+
+- **Name the connective.** A claim whose verdict composes over several courts states its composition rule by name — *truth-meet* (`∧ₜ`: every court must support; any opposite refutes; a width or ceiling exit blocks) or *truth-join* (`∨ₜ`: an existence claim). A composition clause that names neither is a defect in review. Template: `composition: truth-meet over {court-1, court-2}` or `composition: existence over habitats {h1, h2, h3}`.
+- **Existence claims register their habitats and inherit the branch semantics (Theorem L6).** List every habitat the claim's text ranges over — typed events, prose annotations, dropped-wire corpora, whatever it reaches. *Confirm* only by a witness leaf that itself passes the gate, never by the composed `∨ₜ` root: Theorem L5's dual laundering signs a contested existence through a single unchecked habitat. *Refute* only when every registered habitat is checked and reads F; an unchecked habitat blocks refutation and never enables confirmation. The founding project's P4 existence-claim disposition is the worked example.
+- **Interval claims use the sort's template.** A claim adjudicated by a confidence interval registers, at S0: the estimand, δ with its unit, the four exits verbatim (supported / opposite / practically-flat / indeterminate-by-width), the width guard, and the ceiling exit where a bounded instrument can compress range. This is Definition L9's exit function as a checklist; Lemma L10 guarantees the exits partition, so a registered interval claim can never land between verdicts.
+
 ## Which kind
 
 - **assertion** is a claim about the work, and the default.

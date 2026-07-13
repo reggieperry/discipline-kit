@@ -32,3 +32,7 @@ Append the parked claim:
 ## Predictions are separate entries
 
 A prediction rides its own line, not folded into the acceptance claim, because a bet that cannot independently die is not a bet. Fix the court rules before any evidence exists (what counts as pass, and the sparse-data contingency) so the result cannot renegotiate the standard it is judged against.
+
+## Composed, existence, and interval claims register their shape at S0
+
+A claim whose verdict composes over courts, ranges over habitats, or is read off a confidence interval carries extra registration obligations — name the composition connective, list the existence habitats and inherit the witness/totality rules, or state the interval sort's estimand-δ-exits template. These are the three registration conventions in `ledger-write` ("Registering a composed, existence, or interval claim"), grounded in `docs/ledger-dynamics-note.html`. Register the shape here, at S0, where the court rules are fixed.

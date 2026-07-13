@@ -28,6 +28,10 @@ A report that disagrees with the ledger is a defect in one of them, and the dive
 
 A `403` is a claim by some server about some condition, so read the body before deciding what it means. On the founding project, three confident-narrative errors shared one missing check: a proxy 403 read as GitHub being down, a rate-limit body read as absence, and a pronoun ("you") read as a person. Each would have dissolved under one question asked of the actual text. Before declaring an anomaly, in a log or an error or a report, read the referent and ask the one question that identifies it. The write-side fix, recording authorizations with principal, channel, and date, is the `ledger-write` skill.
 
+## Count distinct lineages, not confirmations (the agreement discount)
+
+When a verification or review summary grades corroboration-class support — several sources agreeing — count *distinct lineages*, not raw confirmations: two reviews by the same model configuration are one lineage, not two. The founding project's correlated-reviewers episode is the cited reason: four of five errors were shared across reviewers of the same configuration, so a headcount of agreements measured the shared blind spot, not independent support. Deduplicate per lineage before the grade is written, in prose and in verdict lines alike. This is a discipline on how grades are written, not code (Axiom E3 of `docs/ledger-dynamics-note.html`).
+
 ## Demand the reliability boundary on any self-report
 
 A retrospective process document — an authorship note, a post-hoc reconstruction of who did what when — must state the granularity at which it is evidence and the granularity at which it is memory: accurate at commit-and-ledger granularity, best-effort below, anchors cited where grounded, recollection labeled where not. A reconstruction that does not name where its evidence ends is a rumor forming; send it back for the boundary line.
