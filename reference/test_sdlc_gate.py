@@ -209,5 +209,187 @@ class CmdDiffCoverageTests(unittest.TestCase):
         self.assertEqual(code, 2)  # fail-closed, not read as "no coverage to check"
 
 
+# ---------------------------------------------------------------------------
+# Java toolchain (v1.3.0) — red-first fixtures. Every gate.* symbol referenced
+# below is ABSENT from the pre-JavaToolchain gate, so this whole section errors
+# red against the shipped gate; that is this wave's observed-red bar. Once the
+# JavaToolchain scanners land, it goes green.
+# ---------------------------------------------------------------------------
+
+
+def _write_java(root: Path, rel: str, text: str) -> None:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text)
+
+
+def _write_java_baseline(d: Path, *, build: str = "ok", tw: dict | None = None,
+                         checkstyle: list | None = None) -> None:
+    """A minimal java baseline dir that _load_baseline_snapshots can read."""
+    (d / "sha.txt").write_text("deadbeef\n")
+    (d / "toolchain.txt").write_text("java\n")
+    (d / "static-checkstyle.json").write_text(json.dumps(checkstyle if checkstyle is not None else []))
+    (d / "suppressions.json").write_text("[]")
+    (d / "test-weakening.json").write_text(
+        json.dumps(tw if tw is not None else {"skips": {}, "asserts": {}, "params": {}}))
+    (d / "build.txt").write_text(build + "\n")
+
+
+class JavaDetectTests(unittest.TestCase):
+    def test_pom_detects(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "pom.xml").write_text("<project/>")
+            self.assertTrue(gate.JavaToolchain().detect(Path(td)))
+
+    def test_gradle_groovy_and_kts_detect(self):
+        for marker in ("build.gradle", "build.gradle.kts"):
+            with tempfile.TemporaryDirectory() as td:
+                (Path(td) / marker).write_text("")
+                self.assertTrue(gate.JavaToolchain().detect(Path(td)))
+
+    def test_no_marker_no_detect(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(gate.JavaToolchain().detect(Path(td)))
+
+    def test_select_toolchain_override_and_auto(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "pom.xml").write_text("<project/>")
+            self.assertIsInstance(gate.select_toolchain(Path(td), "java"), gate.JavaToolchain)
+            self.assertIsInstance(gate.select_toolchain(Path(td), None), gate.JavaToolchain)
+
+
+class JavaSuppressionScanTests(unittest.TestCase):
+    def test_all_four_directive_families_caught(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/main/java/A.java",
+                        '@SuppressWarnings("unchecked")\n'
+                        'class A {\n'
+                        '  // CHECKSTYLE:OFF\n'
+                        '  int x; // NOPMD\n'
+                        '  @SuppressFBWarnings("NP_NULL_ON_SOME_PATH")\n'
+                        '  void m() {}\n'
+                        '}\n')
+            keys = {k for (_f, k) in gate.scan_java_suppressions(root)}
+            self.assertIn("SuppressWarnings[unchecked]", keys)
+            self.assertIn("CHECKSTYLE:OFF[BLANKET]", keys)
+            self.assertTrue(any(k.startswith("NOPMD") for k in keys), keys)
+            self.assertTrue(any(k.startswith("SuppressFBWarnings") for k in keys), keys)
+
+    def test_targeted_checkstyle_off_is_its_own_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/main/java/B.java", "// CHECKSTYLE:OFF: MagicNumber\nclass B {}\n")
+            keys = {k for (_f, k) in gate.scan_java_suppressions(root)}
+            self.assertIn("CHECKSTYLE:OFF[MagicNumber]", keys)
+
+
+class JavaTestWeakeningScanTests(unittest.TestCase):
+    def test_disabled_skip_asserts_and_jqwik_params(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/test/java/AT.java",
+                        'class AT {\n'
+                        '  @Disabled void a() {}\n'
+                        '  @Test void b() { assertEquals(1,1); assertThat(x).isTrue();\n'
+                        '    assertThrows(E.class, () -> {}); }\n'
+                        '  @Property(tries = 10) void p(@ForAll int n) {}\n'
+                        '  @Property(shrinking = ShrinkingMode.OFF) void q(@ForAll int n) {}\n'
+                        '}\n')
+            tw = gate.scan_java_test_weakening(root)
+            f = "src/test/java/AT.java"
+            self.assertEqual(tw["skips"][f], 1)                 # @Disabled
+            self.assertEqual(tw["asserts"][f], 3)               # assertEquals + assertThat + assertThrows
+            self.assertEqual(tw["params"][f]["tries"], 10)      # weakest tries in the file
+            self.assertEqual(tw["params"][f]["shrinkingOff"], 1)
+
+    def test_shrinkingOff_key_ALWAYS_emitted_even_when_absent(self):
+        # The fail-open the committee flagged: a key emitted only-when-present escapes a
+        # keys-in-both comparison, so a fresh ShrinkingMode.OFF sails through. Always-emit 0.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/test/java/CleanT.java",
+                        'class CleanT { @Property(tries = 1000) void p(@ForAll int n) {} }\n')
+            tw = gate.scan_java_test_weakening(root)
+            self.assertEqual(tw["params"]["src/test/java/CleanT.java"]["shrinkingOff"], 0)
+
+    def test_non_test_file_not_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/main/java/M.java", "@Disabled class M {}\n")
+            tw = gate.scan_java_test_weakening(root)
+            self.assertNotIn("src/main/java/M.java", tw["skips"])
+
+
+class JavaParamWeakeningTests(unittest.TestCase):
+    def _dirs(self):
+        return gate.JavaToolchain().param_directions
+
+    def test_tries_fall_blocks(self):
+        base = {"params": {"src/test/java/T.java": {"tries": 1000, "shrinkingOff": 0}}}
+        branch = {"params": {"src/test/java/T.java": {"tries": 10, "shrinkingOff": 0}}}
+        blocks = gate._check_scalacheck_params(branch, base, self._dirs(), {}, set())
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["items"][0]["param"], "tries")
+
+    def test_shrinkingOff_appearing_blocks(self):
+        # 0 -> 1 must be caught; this is the always-emit fix's payoff.
+        base = {"params": {"src/test/java/T.java": {"tries": 10, "shrinkingOff": 0}}}
+        branch = {"params": {"src/test/java/T.java": {"tries": 10, "shrinkingOff": 1}}}
+        blocks = gate._check_scalacheck_params(branch, base, self._dirs(), {}, set())
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["items"][0]["param"], "shrinkingOff")
+
+    def test_held_params_pass(self):
+        base = {"params": {"src/test/java/T.java": {"tries": 10, "shrinkingOff": 0}}}
+        self.assertEqual(gate._check_scalacheck_params(base, base, self._dirs(), {}, set()), [])
+
+
+class CmdDiffJavaCompileTests(unittest.TestCase):
+    def test_non_compiling_java_branch_blocks(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_java_baseline(base, build="ok")
+            with mock.patch.object(gate.JavaToolchain, "compile_check", return_value="fail"):
+                code, report = _run_cmd_diff(base)
+        self.assertEqual(code, 1)
+        self.assertEqual(report["blocks"][0]["kind"], "compile_error")
+        self.assertEqual(report["blocks"][0]["items"][0]["which"], "branch")
+
+    def test_java_suppression_introduced_blocks(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_java_baseline(base, build="skip")
+            # a branch tree with a new suppression, baseline had none
+            with mock.patch.object(gate.JavaToolchain, "compile_check", return_value="skip"), \
+                    mock.patch.object(gate.JavaToolchain, "static_analysis", return_value={}), \
+                    mock.patch.object(gate.JavaToolchain, "suppressions",
+                                      return_value=gate.Counter({("src/main/java/A.java",
+                                                                  "SuppressWarnings[unchecked]"): 1})), \
+                    mock.patch.object(gate.JavaToolchain, "test_weakening",
+                                      return_value={"skips": {}, "asserts": {}, "params": {}}):
+                code, report = _run_cmd_diff(base)
+        self.assertEqual(code, 1)
+        self.assertTrue(any(b["check"] == "B" for b in report["blocks"]))
+
+
+class JavaSpotBugsFailClosedTests(unittest.TestCase):
+    def test_spotbugs_no_bytecode_is_operational_not_empty(self):
+        # SpotBugs analyzes bytecode; a source-only tree with the tool present must FAIL
+        # CLOSED, never scan-empty-and-pass (the committee's catch).
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write_java(root, "src/main/java/A.java", "class A {}\n")
+            with mock.patch.object(gate, "_spotbugs_tool_present", return_value=True):
+                with self.assertRaises(gate.SpotBugsOperationalError):
+                    gate.run_spotbugs(root)
+
+    def test_spotbugs_tool_absent_is_a_clean_skip(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            with mock.patch.object(gate, "_spotbugs_tool_present", return_value=False):
+                self.assertEqual(gate.run_spotbugs(root), gate.Counter())
+
+
 if __name__ == "__main__":
     unittest.main()

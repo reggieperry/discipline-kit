@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""ledger/append — the one schema-validating writer of the dev-ledger.
+
+Reads ONE JSON object on stdin (a claim WITHOUT id/ts), validates it against the
+same rules `ledger/audit.py` enforces, assigns the next `clm-NNNN` id and a UTC
+timestamp, fills the optional schema fields, and appends exactly one line to
+`ledger/claims.jsonl`. Prints the assigned id on success; exits non-zero and writes
+nothing on a schema violation. Every writer — the hook, Claude Code, review skills,
+the human — goes through here, so a malformed or forged entry cannot reach the file.
+
+  echo '{"claim":"...","source":"claude-code","kind":"assertion","status":"unverified","check":"none"}' | ledger/append
+"""
+from __future__ import annotations
+
+import datetime
+import json
+import sys
+from pathlib import Path
+
+KINDS = {"assertion", "testimony", "refutation"}
+STATUSES = {"unverified", "signed", "refuted", "retired"}
+SOURCES = {"claude-code", "subagent", "human", "hook"}
+# a signed entry naming one of these is NOT a mechanical discharge (mirrors audit.py)
+GENERATIVE = {"none", "pr-review", "deep-reason", "testimony", "workflow-verify", "claude-code", "subagent"}
+
+ROOT = Path(__file__).resolve().parent.parent
+LEDGER = ROOT / "ledger" / "claims.jsonl"
+TRACE = ROOT / "ledger" / "trace"
+
+# optional schema fields and their defaults, in schema order
+OPTIONAL = (("sha", None), ("subject", None), ("about", None), ("check", "none"),
+            ("discharged_by", None), ("supersedes", None), ("trace_reason", None))
+
+
+def existing_ids() -> set[str]:
+    ids: set[str] = set()
+    for f in [LEDGER] + (list(TRACE.glob("*.jsonl")) if TRACE.exists() else []):
+        if not f.exists():
+            continue
+        for line in f.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                ids.add(json.loads(line).get("id", ""))
+            except Exception:
+                pass
+    return ids
+
+
+def next_id(ids: set[str]) -> str:
+    mx = 0
+    for i in ids:
+        if isinstance(i, str) and i.startswith("clm-"):
+            try:
+                mx = max(mx, int(i[4:]))
+            except ValueError:
+                pass
+    return f"clm-{mx + 1:04d}"
+
+
+def validate(e: dict) -> list[str]:
+    errs = []
+    if e.get("kind") not in KINDS:
+        errs.append(f"bad kind {e.get('kind')!r}")
+    if e.get("status") not in STATUSES:
+        errs.append(f"bad status {e.get('status')!r}")
+    if e.get("source") not in SOURCES:
+        errs.append(f"bad source {e.get('source')!r}")
+    if not (e.get("claim") or "").strip():
+        errs.append("missing 'claim'")
+    if e.get("kind") in ("testimony", "refutation"):
+        if e.get("status") == "signed":
+            errs.append("a testimony/refutation entry can never be signed")
+        if not (e.get("about") or "").strip():
+            errs.append("a testimony/refutation entry needs an 'about' target")
+    if e.get("status") == "signed":
+        d = e.get("discharged_by") or {}
+        chk = (d.get("check") or "").strip().lower()
+        if not chk or chk in GENERATIVE:
+            errs.append(f"a signed entry needs a mechanical check in discharged_by (got {chk!r})")
+        if not (d.get("run") or "").strip():
+            errs.append("a signed entry needs a run reference in discharged_by")
+    return errs
+
+
+def main() -> int:
+    try:
+        e = json.load(sys.stdin)
+    except json.JSONDecodeError as exc:
+        print(f"append REJECTED: stdin is not one JSON object: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(e, dict):
+        print("append REJECTED: stdin must be a single JSON object", file=sys.stderr)
+        return 2
+
+    errs = validate(e)
+    if errs:
+        print("append REJECTED (nothing written): " + "; ".join(errs), file=sys.stderr)
+        return 1
+
+    e["id"] = next_id(existing_ids())
+    e.setdefault("ts", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    for field, default in OPTIONAL:
+        e.setdefault(field, default)
+
+    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    with LEDGER.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(e, separators=(",", ":"), ensure_ascii=False) + "\n")
+    print(e["id"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

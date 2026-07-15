@@ -13,6 +13,10 @@ cd "$(dirname "$0")/.."
 sh ledger/board.sh --selftest
 sbt -batch -Dsbt.color=false check
 ( cd path/to/frontend && npm run check )   # e.g. prettier --check && eslint && tsc --noEmit && vitest run
+# Java (Maven) — the gate's auto-detected default is `mvn -B -q verify`, but `verify` runs
+# integration tests; inside a pre-commit hook pin a SCOPED, hermetic command instead:
+#   mvn -B -q -DskipITs test          # unit tests only; no ITs, no daemon, no network
+# Gradle: use the wrapper, never a daemon — `./gradlew --no-daemon --console=plain check`.
 
 # ── Graduation path (commented; uncomment for detector-class paths once the registered bet resolves) ──
 # red-proof is advisory by its own docstring's law: "a norm earns blocking power only after a season

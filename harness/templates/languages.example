@@ -13,3 +13,5 @@
 .sbt
 .ts
 .tsx
+# A Maven or Gradle module adds .java — auto-detected from pom.xml / build.gradle(.kts), so
+# you only list it here when the marker is nested or a .java sits vendored under another stack.
