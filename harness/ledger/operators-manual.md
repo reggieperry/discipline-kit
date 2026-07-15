@@ -47,7 +47,7 @@ The instances write, discharge, and verify; five acts route through you and only
 
 1. **Authorize, loggably.** Out-of-band authorizations enter the record with principal, channel, and date, so give them in a form that can be logged verbatim: *"Authorized: the release cut. Alex, direct, 2026-07-11."* One sentence; a pronoun misread once cost the founding project a false accusation and a retraction, and this format is the cure.
 2. **Place the bets.** Predictions are the campaign's honesty about itself, and they're yours to make or bless. A bet that can't die isn't a bet — insist every prediction entry has a court and a date it could lose in.
-3. **Sign off what becomes belief.** Findings enter the ledger as testimony only after your sign-off, and their successors (supersession, never edit) route the same way. The record can hold anything; what the *institution asserts* passes through you.
+3. **Sign off what becomes belief.** Dissent enters freely — refutations and testimony from any source land on the record without your sign-off; what your sign-off gates is what becomes *institutional belief*: the successions and dispositions (a claim promoted, a bet adjudicated, a contest resolved), not what may be *said*. The record can hold anything; what the institution asserts passes through you.
 4. **Set the ceilings.** Budgets, pause thresholds, and go-words are operator inputs by construction. Give them as numbers with a checkpoint rule, and the instances will honor them mechanically.
 5. **Release the gates.** Pre-registered cells wait on your word. The word is one message; the discipline is that nothing runs before it.
 

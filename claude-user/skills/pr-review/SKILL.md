@@ -36,6 +36,8 @@ Before reading the diff for taste, run the language-appropriate gate and read it
 - **Go:** `go build ./...` → `go vet ./...` → `golangci-lint run` → `go test ./...` (add `-race` for concurrent code).
 - **Python:** `uv run ruff check .` → `uv run mypy .` → `uv run pytest`.
 - **Shell:** `shellcheck <files>` and `bash -n <file>` (syntax-only parse).
+- **Scala:** `sbt -batch check` (the repo's `check` alias — scalafmt/scalafix + the suites).
+- **TypeScript:** `npm run check`, or where there is no `check` script, `tsc --noEmit` → `vitest run`.
 
 If the repo ships a gate script (e.g. the pack's `sdlc-gate.py`, or a Go gate), prefer it — it encodes the anti-weakening baseline (no new suppressions, no skipped tests, no assertion-count loss versus merge-base).
 

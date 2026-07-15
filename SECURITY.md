@@ -4,7 +4,7 @@ The discipline kit is a **development-discipline aid**, not a security boundary.
 
 ## What a signature means
 
-A `signed` ledger entry means: **a named mechanical check ran and passed** (the gate is the sole writer of `signed`; the pre-commit forgery guard blocks any `signed` line it did not itself mint). It does **not** mean the underlying work is correct — only that the cited check discharged it. Correctness beyond the check rests on whatever the claim names (a second-language recount, an adversarial review, a hand-verified oracle). Read a signature no wider than the check it cites.
+A `signed` ledger entry means: **a named mechanical check ran and passed** (two paths mint a `signed` line — the commit-path gate, and the installer's `harness-verify` run as its own first customer — and both record their line-hashes, so the pre-commit forgery guard blocks any `signed` line neither minted). It does **not** mean the underlying work is correct — only that the cited check discharged it. Correctness beyond the check rests on whatever the claim names (a second-language recount, an adversarial review, a hand-verified oracle). Read a signature no wider than the check it cites.
 
 ## Trust model — single-user mode (what this release ships)
 

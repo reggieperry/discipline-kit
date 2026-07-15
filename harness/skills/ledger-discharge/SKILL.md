@@ -16,9 +16,11 @@ Verification cost falls toward zero when signatures are spent instead of re-earn
 - Not there, and the fact will be needed twice? Mint the claim now (`ledger-write`) so the next instance can cite it instead of re-deriving it.
 - Not there, needed once? Do the work; not everything earns a line.
 
+Citation and audit are different moves: citation spends a signature *within a workflow* — you trust the receipt and skip the re-check — while an audit of a *report* still recomputes, because a report is a claim about the record and the `ledger-verify` stance is to check it, not cite it.
+
 ## How the gate actually signs
 
-Signing is not something you write. It is something the commit-path gate does, and only the gate.
+Signing is not something you write. It is something a minting path does — the commit-path gate, or the installer's `harness-verify` running as its own first customer — never a hand-written line, and both record their line-hashes so the forgery guard admits only what they minted.
 
 1. A landing commit stages code, or a pending unverified claim names a runnable check. The gate runs the repo's mechanical check: `ledger/check.sh` (or, absent that file, the toolchain the gate auto-detects), which must cover every language that builds the system.
 2. On failure the gate appends a `refuted` entry and blocks the commit. Approving review testimony never signs; a green reviewer with a red check still means the commit is blocked.

@@ -9,6 +9,8 @@ metadata:
 
 # Apply the full engineering methodology to interactive code
 
+**Kit mapping note.** The `tdd`, `simplify`, `security-review`, and `review` skills this memory names are source-environment machinery not shipped in this kit. The kit equivalents are the `craft-tdd` rule (and, as of v1.2.0, its "The loop under an agentic author" section), the refactoring rule, the per-language security rules, and the `pr-review` skill. This annotation maps the references; the lesson below stands unchanged.
+
 When I'm writing code interactively that will end up shipped — landing in a PR, pushed to a remote, contributed to another codebase — apply the FULL code-agnostic engineering methodology, not a subset. The language doesn't matter (bash, Python, Go, anything); the principles are universal.
 
 **Why:** Established across two compounding incidents.

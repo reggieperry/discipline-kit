@@ -41,7 +41,7 @@ One object per line: `id, ts, sha, subject, claim, source, kind, about, check, s
 - `kind` — `assertion` (a claim), `testimony` (review output, never signs), `refutation` (a defect, `about` a claim).
 - `status` — `unverified` (asserted, no check ran — the honest "I don't know"); `signed` (a mechanical check discharged it, `discharged_by` mandatory); `refuted` (a check failed it, stays on the record); `retired` (superseded or defeated, moved to `trace/`).
 - **Entries are immutable.** A transition is a NEW appended entry whose `supersedes` names its predecessor; the current status of a claim is the head of its supersedes chain. Only `unverified` may be superseded in place (`unverified → signed | refuted | unverified`); a `signed` or `refuted` claim is never rewritten — it is defeated by a refutation and then retired.
-- **Only a mechanical check signs.** `discharged_by.check` must be a real check with a run reference — never a generative source (`none`, `pr-review`, `deep-reason`, `workflow-verify`, a model). The audit enforces this; the gate is the sole writer of `signed`.
+- **Only a mechanical check signs.** `discharged_by.check` must be a real check with a run reference — never a generative source (`none`, `pr-review`, `deep-reason`, `workflow-verify`, a model). The audit enforces this; two paths mint a `signed` line — the commit-path gate and the installer's `harness-verify` (operator-run, self-recording) — and both record their line-hashes for the forgery guard.
 
 ## The immutability discipline for retirement
 
