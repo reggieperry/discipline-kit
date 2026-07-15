@@ -96,7 +96,33 @@ def main() -> int:
         out = audit(r)
         assert "red-proof coverage: 1/1 test-bearing slices" in out, f"coverage 1/1:\n{out}"
 
-    print("tdd_precedence_test: PASS (precedence good/late; coverage 0/1 then 1/1)")
+    # three-link discharge chain (clm-0030): park-nonrunnable -> repo-check(+test) -> signed. The
+    # repo-check MIDDLE link lands with code, but it is a discharge step, not a claim-first event, so
+    # tdd-precedence must NOT warn (only the ORIGINAL parked claim pairs); AND a red-proof receipt
+    # about the SIGNED 3rd link still credits the slice's coverage (the forward-chain walk).
+    with tempfile.TemporaryDirectory() as td:
+        r = Path(td)
+        init_repo(r)
+        commit_claim(r, {"id": "clm-0001", "claim": "slice D", "kind": "assertion",
+                         "status": "unverified", "check": "loop-preregister"}, "claim D (ledger-only)")
+        commit_claim(r, {"id": "clm-0002", "claim": "slice D", "kind": "assertion", "status": "unverified",
+                         "check": "repo-check", "supersedes": "clm-0001"},
+                     "supersede to repo-check + test", extra=("test_d.py", "assert 1 == 1\n"))
+        commit_claim(r, {"id": "clm-0003", "claim": "slice D", "kind": "assertion", "status": "unverified",
+                         "check": "repo-check", "supersedes": "clm-0002"}, "gate-sign successor (ledger-only)")
+        out = audit(r)
+        assert "[tdd-precedence]" not in out, \
+            f"a three-link discharge chain must NOT warn — the repo-check middle link is a discharge, not claim-first (clm-0030):\n{out}"
+        assert "red-proof coverage: 0/1 test-bearing slices" in out, f"three-link coverage 0/1 before a receipt:\n{out}"
+        commit_claim(r, {"id": "clm-0004", "kind": "testimony", "about": "clm-0003", "status": "unverified",
+                         "check": "none",
+                         "claim": "red-proof: 1 new test path(s) failed against base abcd1234 (red confirmed)"},
+                     "red-proof about the signed 3rd link")
+        out = audit(r)
+        assert "red-proof coverage: 1/1 test-bearing slices" in out, \
+            f"the forward-chain walk must credit a receipt about the signed 3rd link (clm-0030):\n{out}"
+
+    print("tdd_precedence_test: PASS (precedence good/late; coverage 0/1 then 1/1; three-link no warn + 3rd-link coverage)")
     return 0
 
 

@@ -266,14 +266,19 @@ def is_ancestor(root: Path, a: str, b: str) -> bool:
 
 
 def park_supersede_pairs(live: list[dict], by_id: dict) -> list[tuple[dict, dict]]:
-    """(parked X, successor Y): Y supersedes an unverified X with a runnable-check."""
+    """(parked X, successor Y): Y supersedes an unverified X with a runnable-check, where X is an
+    ORIGINAL claim-first claim — one that does not itself supersede anything. A three-link discharge
+    chain (park-nonrunnable -> repo-check -> signed) has a repo-check MIDDLE link that supersedes the
+    parked claim and is superseded by the signed one; that middle link is a discharge step, not a
+    claim-first event, so it is skipped (clm-0030). Only the original parked claim pairs with its
+    runnable successor — the pair whose precedence timestamp actually exists."""
     pairs = []
     for y in live:
         x_id = y.get("supersedes")
         if not x_id or (y.get("check") or "none") not in RUNNABLE:
             continue
         x = by_id.get(x_id)
-        if x and x.get("status") == "unverified":
+        if x and x.get("status") == "unverified" and not x.get("supersedes"):
             pairs.append((x, y))
     return pairs
 
@@ -372,11 +377,34 @@ def certify_precedence(root: Path, live: list[dict], trace: list[dict]) -> tuple
     return emitted, failed
 
 
+def _slice_ids(x_id: str, y_id: str, entries: list[dict]) -> set[str]:
+    """The claim ids that stand for one slice: the parked claim, its runnable successor, and the
+    successor's transitive superseders (the discharge chain FORWARD — e.g. the gate-signed 3rd link of
+    a park->repo-check->signed chain). A red-proof receipt about ANY of them is the slice's receipt
+    (clm-0030): the receipt names the live claim, which is usually the signed descendant, not the
+    pair member the counter walks."""
+    ids = {x_id, y_id}
+    forward: dict = defaultdict(list)
+    for e in entries:
+        if e.get("supersedes"):
+            forward[e["supersedes"]].append(e.get("id"))
+    frontier = [y_id]
+    while frontier:
+        for succ in forward.get(frontier.pop(), []):
+            if succ and succ not in ids:
+                ids.add(succ)
+                frontier.append(succ)
+    return ids
+
+
 def report_red_proof_coverage(root: Path, live: list[dict], trace: list[dict]) -> str | None:
     """`k/n test-bearing slices` carrying a red-proof testimony about their claim (the loop's running
-    follow-through rate), plus the detector-class subset when the parked claim carries the tag."""
-    by_id = {e["id"]: e for e in (live + trace) if e.get("id")}
-    rp_about = {e.get("about") for e in (live + trace)
+    follow-through rate), plus the detector-class subset when the parked claim carries the tag. A
+    receipt counts for the slice when it is `about` any id in the slice's forward chain, so a receipt
+    filed against the signed descendant of a park->repo-check->signed discharge is credited (clm-0030)."""
+    entries = live + trace
+    by_id = {e["id"]: e for e in entries if e.get("id")}
+    rp_about = {e.get("about") for e in entries
                 if e.get("kind") == "testimony" and "red-proof" in (e.get("claim") or "")}
     test_bearing = []
     for x, y in park_supersede_pairs(live, by_id):
@@ -386,11 +414,11 @@ def report_red_proof_coverage(root: Path, live: list[dict], trace: list[dict]) -
     n = len(test_bearing)
     if n == 0:
         return None
-    covered = sum(1 for x, y in test_bearing if x["id"] in rp_about or y["id"] in rp_about)
+    covered = sum(1 for x, y in test_bearing if _slice_ids(x["id"], y["id"], entries) & rp_about)
     line = f"red-proof coverage: {covered}/{n} test-bearing slices (window)"
     det = [(x, y) for x, y in test_bearing if "detector-class" in (x.get("claim") or "")]
     if det:
-        dc = sum(1 for x, y in det if x["id"] in rp_about or y["id"] in rp_about)
+        dc = sum(1 for x, y in det if _slice_ids(x["id"], y["id"], entries) & rp_about)
         line += f"; detector-class {dc}/{len(det)}"
     return line
 
