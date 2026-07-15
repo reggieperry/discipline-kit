@@ -8,8 +8,8 @@ baseline/diff worktree model, the (file, code) multiset identity, rename trackin
 the relocation-advisory downgrade, the waiver system, and the verdict logic — is
 language-agnostic. Each `Toolchain` supplies the scanners: a set of static-analysis
 error-identity scanners (Check A), a suppression scan (Check B), and a test-weakening
-scan (Check D). Detection is by marker file (`build.sbt` → scala, `pyproject.toml` →
-python); `--toolchain` forces it.
+scan (Check D). Detection is by marker file (`build.sbt` → scala, `pom.xml`/`build.gradle` → java,
+`pyproject.toml` → python); `--toolchain` forces it.
 
   python  ruff / mypy / bandit; `#type:ignore`/`#noqa`/`#pyright:ignore`/`#nosec`;
           pytest skip markers + assert-keyword counts.
@@ -21,6 +21,14 @@ python); `--toolchain` forces it.
           a non-compiling tree blocks rather than reading as clean, since a red build
           silences the linters) and, opt-in via `--coverage`, a scoverage coverage-drop
           scan (Check D). Spec: the kit's own scala-testing.md/scala-security.md.
+  java    checkstyle (google_checks, Check A source scan); @SuppressWarnings/
+          @SuppressFBWarnings/`//CHECKSTYLE:OFF`/`//NOPMD`; JUnit @Disabled/@Ignore +
+          assertion sites (assertEquals/assertThat/assertThrows/fail) + jqwik parameter
+          weakening (tries fall, ShrinkingMode.OFF appear — the shrinking key ALWAYS
+          emitted so 0→1 is caught). Shared fail-closed compile precondition (mvn/gradle)
+          and, opt-in via `--coverage`, a JaCoCo per-directory coverage-drop scan. SpotBugs
+          (bytecode) fails CLOSED on a source-only tree; its default-path wiring awaits a
+          compiled pilot. Spec: the kit's own java-* rules (v1.3.0).
 
 Subcommands
 -----------
@@ -79,6 +87,7 @@ import argparse
 import ast
 import json
 import re
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -639,6 +648,270 @@ def _diff_coverage(branch_cov: dict[str, float], baseline_cov: dict[str, float],
     return []
 
 
+# --- Java toolchain scanners (v1.3.0) -----------------------------------------
+# Java is a scanner-plugin: NO engine change. Source-based scanners (Checkstyle Check A,
+# suppression Check B, test-weakening Check D incl. jqwik parameter values) mirror the Scala
+# side; the compile-precondition and coverage seams are shared and toolchain-generic. SpotBugs
+# (bytecode) fails CLOSED on a source-only tree rather than scanning empty and passing.
+
+
+def _walk_java(root: Path):
+    """Yield .java files under root, skipping build/tool dirs."""
+    skip = {"target", "build", "out", "bin", ".git", "node_modules", ".idea", ".vscode", ".gradle"}
+    for path in root.rglob("*.java"):
+        parts = path.relative_to(root).parts[:-1]
+        if any(p in skip or p.startswith(".") for p in parts):
+            continue
+        yield path
+
+
+def _java_quoted_or_blanket(inner: str) -> str:
+    vals = re.findall(r'"([^"]*)"', inner)
+    return " ".join(vals) if vals else "BLANKET"
+
+
+# Suppression directives (brief §1): @SuppressWarnings / @SuppressFBWarnings (SpotBugs) /
+# //CHECKSTYLE:OFF / //NOPMD. A targeted directive is its own key; broadening targeted→blanket
+# registers as a new key, not a preserved count — the same catch as the Python/Scala sides.
+_JAVA_SUPPRESSION_PATTERNS: list[tuple[re.Pattern, callable]] = [
+    (re.compile(r"@SuppressWarnings\((?P<a>[^)]*)\)"),
+     lambda m: f"SuppressWarnings[{_java_quoted_or_blanket(m.group('a'))}]"),
+    (re.compile(r"@SuppressFBWarnings\((?P<a>[^)]*)\)"),
+     lambda m: f"SuppressFBWarnings[{_java_quoted_or_blanket(m.group('a'))}]"),
+    (re.compile(r"//\s*CHECKSTYLE:OFF:\s*(?P<r>\S+)"),
+     lambda m: f"CHECKSTYLE:OFF[{m.group('r')}]"),
+    (re.compile(r"//\s*CHECKSTYLE:OFF\s*$", re.M),
+     lambda m: "CHECKSTYLE:OFF[BLANKET]"),
+    (re.compile(r"//\s*NOPMD:\s*(?P<r>\S+)"),
+     lambda m: f"NOPMD[{m.group('r')}]"),
+    (re.compile(r"//\s*NOPMD\b(?!:)"),
+     lambda m: "NOPMD[BLANKET]"),
+]
+
+
+def scan_java_suppressions(root: Path) -> Counter:
+    """Counter[(relative_path, directive_key)] over all .java files."""
+    counter: Counter = Counter()
+    for path in _walk_java(root):
+        rel = str(path.relative_to(root))
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for pattern, extract in _JAVA_SUPPRESSION_PATTERNS:
+            for m in pattern.finditer(text):
+                counter[(rel, extract(m))] += 1
+    return counter
+
+
+# JUnit 5 skip markers (@Disabled) + JUnit 4 @Ignore; assertion sites (JUnit + AssertJ +
+# jqwik fail); jqwik property-parameter weakening (tries fall, ShrinkingMode.OFF appear).
+_JAVA_SKIP = re.compile(r"@Disabled\b|@Ignore\b")
+_JAVA_ASSERT = re.compile(
+    r"\bassertEquals\b|\bassertNotEquals\b|\bassertTrue\b|\bassertFalse\b|"
+    r"\bassertNull\b|\bassertNotNull\b|\bassertSame\b|\bassertArrayEquals\b|"
+    r"\bassertThrows\b|\bassertThat\b|\bfail\s*\(")
+_JQWIK_TRIES = re.compile(r"@Property\([^)]*\btries\s*=\s*(\d+)")
+_JQWIK_SHRINK = re.compile(r"ShrinkingMode\.OFF")
+
+
+def _java_is_test_file(rel: str) -> bool:
+    return "/src/test/" in ("/" + rel) or rel.startswith("src/test/")
+
+
+def scan_java_test_weakening(root: Path) -> dict:
+    """Per-test-file skip-marker and assertion-site counts, plus jqwik parameter values. Returns
+    {skips:{file:n}, asserts:{file:n}, params:{file:{tries?, shrinkingOff}}}. The engine's Check D
+    handles skips (no-increase) + asserts (no-decrease) exactly as for pytest/munit; the params
+    sub-map drives the jqwik value check (tries must not fall, shrinkingOff must not rise).
+    shrinkingOff is ALWAYS emitted (default 0) so a fresh ShrinkingMode.OFF (0→1) is caught — the
+    only-when-present emission is the fail-open the committee flagged on Scala's forAllNoShrink."""
+    skips: dict[str, int] = {}
+    asserts: dict[str, int] = {}
+    params: dict[str, dict] = {}
+    for path in _walk_java(root):
+        rel = str(path.relative_to(root))
+        if not _java_is_test_file(rel):
+            continue
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        skips[rel] = len(_JAVA_SKIP.findall(text))
+        asserts[rel] = len(_JAVA_ASSERT.findall(text))
+        p: dict = {"shrinkingOff": len(_JQWIK_SHRINK.findall(text))}  # ALWAYS emitted (see docstring)
+        tries = [int(x) for x in _JQWIK_TRIES.findall(text)]
+        if tries:
+            p["tries"] = min(tries)   # the weakest (lowest) tries floor in the file
+        params[rel] = p
+    return {"skips": skips, "asserts": asserts, "params": params}
+
+
+# Check A source scanner: Checkstyle (google_checks). Findings keyed (file, rule-id). Tool absent
+# / not invokable → empty Counter (a repo that has not wired Checkstyle sees a no-op differential,
+# exactly like the sbt-absent Scala scanners). The XML is the documented Checkstyle format; a
+# DOCTYPE is rejected (XXE closed), matching parse_scoverage.
+def _parse_checkstyle(xml: str, root: Path) -> Counter:
+    counter: Counter = Counter()
+    if not xml.strip():
+        return counter
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ValueError("checkstyle report carries a DOCTYPE; refusing to parse (XXE closed)")
+    try:
+        tree = ET.fromstring(xml)
+    except ET.ParseError:
+        return counter
+    for fileel in tree.iter("file"):
+        name = (fileel.get("name") or "").replace("\\", "/")
+        try:
+            rel = str(Path(name).resolve().relative_to(root.resolve()))
+        except ValueError:
+            rel = name.lstrip("/")
+        for err in fileel.iter("error"):
+            source = err.get("source") or "unknown"
+            rule = source.rsplit(".", 1)[-1]  # ...checks.coding.MagicNumberCheck -> MagicNumberCheck
+            counter[(rel, rule)] += 1
+    return counter
+
+
+def run_checkstyle(root: Path) -> Counter:
+    files = [str(p) for p in _walk_java(root)]
+    if not files:
+        return Counter()
+    try:
+        proc = subprocess.run(
+            ["checkstyle", "-c", "/google_checks.xml", "-f", "xml", *files],
+            cwd=root, capture_output=True, text=True, check=False, timeout=600)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: checkstyle not invokable; skipping the Checkstyle scan\n")
+        return Counter()
+    try:
+        return _parse_checkstyle(proc.stdout, root)
+    except ValueError as e:
+        sys.stderr.write(f"sdlc-gate: {e}\n")
+        return Counter()
+
+
+class SpotBugsOperationalError(RuntimeError):
+    """SpotBugs was invoked but could not analyze — it needs compiled bytecode and none was found.
+    Fail-closed (like CoverageOperationalError): a can't-run must never read as 'no bugs found',
+    which would silently disable the scan on a source-only tree (the committee's catch)."""
+
+
+def _spotbugs_tool_present() -> bool:
+    return shutil.which("spotbugs") is not None
+
+
+def _java_classes_present(root: Path) -> bool:
+    for d in ("target/classes", "build/classes"):
+        base = root / d
+        if base.is_dir() and next(base.rglob("*.class"), None) is not None:
+            return True
+    return False
+
+
+def _parse_spotbugs(xml: str, root: Path) -> Counter:
+    counter: Counter = Counter()
+    if not xml.strip():
+        return counter
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ValueError("spotbugs report carries a DOCTYPE; refusing to parse (XXE closed)")
+    try:
+        tree = ET.fromstring(xml)
+    except ET.ParseError:
+        return counter
+    for bug in tree.iter("BugInstance"):
+        kind = bug.get("type") or "unknown"
+        src = bug.find(".//SourceLine")
+        name = (src.get("sourcepath") if src is not None else None) or "unknown"
+        counter[(name.replace("\\", "/"), kind)] += 1
+    return counter
+
+
+def run_spotbugs(root: Path) -> Counter:
+    """Tool absent → empty (a clean skip, an unwired scanner). Tool PRESENT but no bytecode →
+    SpotBugsOperationalError (fail-closed). Bytecode present → findings keyed (file, bug-pattern);
+    that real-invocation path is exercised by a compiled pilot, not the source-only fixtures."""
+    if not _spotbugs_tool_present():
+        return Counter()
+    if not _java_classes_present(root):
+        raise SpotBugsOperationalError(
+            "spotbugs is installed but no compiled classes were found (target/classes or "
+            "build/classes) — refusing to scan a source-only tree and pass (fail-closed)")
+    try:
+        proc = subprocess.run(
+            ["spotbugs", "-textui", "-xml:withMessages", "-low", str(root)],
+            cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise SpotBugsOperationalError(f"spotbugs could not run: {e}") from e
+    return _parse_spotbugs(proc.stdout, root)
+
+
+def java_compile_status(root: Path) -> str:
+    """mvn (default) or the Gradle wrapper → 'ok'/'fail'/'skip'. Hermetic: a scoped compile, no
+    daemon (a daemon inside a pre-commit hook is a hermeticity defect). 'skip' when no build tool
+    is invokable (a no-op, like the sbt-absent path)."""
+    if (root / "pom.xml").exists():
+        cmd = ["mvn", "-B", "-q", "-DskipTests", "test-compile"]
+    elif (root / "gradlew").exists():
+        cmd = ["./gradlew", "--no-daemon", "--console=plain", "testClasses"]
+    elif (root / "build.gradle").exists() or (root / "build.gradle.kts").exists():
+        cmd = ["gradle", "--no-daemon", "--console=plain", "testClasses"]
+    else:
+        return "skip"
+    try:
+        proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: java compile could not run; skipping the compile precondition\n")
+        return "skip"
+    return "ok" if proc.returncode == 0 else "fail"
+
+
+# JaCoCo coverage (opt-in --coverage), mirroring scoverage: per-directory statement coverage,
+# fail-closed on an operational failure. The XML is the documented JaCoCo report format.
+def parse_jacoco(xml: str, source_root: str = "src/main/java") -> dict[str, float]:
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ValueError("jacoco.xml carries a DOCTYPE; refusing to parse (XXE closed)")
+    tree = ET.fromstring(xml)
+    agg: dict[str, list[int]] = {}  # dir -> [covered, missed] for LINE
+    for pkg in tree.iter("package"):
+        pkgname = (pkg.get("name") or "").replace("\\", "/")
+        key = f"{source_root}/{pkgname}" if pkgname else source_root
+        for sf in pkg.iter("sourcefile"):
+            for ctr in sf.findall("counter"):
+                if ctr.get("type") != "LINE":
+                    continue
+                try:
+                    covered = int(ctr.get("covered", ""))
+                    missed = int(ctr.get("missed", ""))
+                except (TypeError, ValueError):
+                    continue
+                slot = agg.setdefault(key, [0, 0])
+                slot[0] += covered
+                slot[1] += missed
+    return {d: (cov / (cov + mis) * 100.0) for d, (cov, mis) in agg.items() if (cov + mis) > 0}
+
+
+def _find_jacoco_xml(root: Path) -> Path | None:
+    for rel in ("target/site/jacoco/jacoco.xml", "build/reports/jacoco/test/jacocoTestReport.xml"):
+        p = root / rel
+        if p.is_file():
+            return p
+    return next(root.rglob("jacoco*.xml"), None)
+
+
+def run_jacoco_coverage(root: Path) -> dict[str, float]:
+    report = _find_jacoco_xml(root)
+    if report is None:
+        raise CoverageOperationalError(
+            "jacoco report not found (target/site/jacoco or build/reports/jacoco) — refusing to "
+            "read coverage as empty (fail-closed); run the build's jacoco report goal first")
+    try:
+        return parse_jacoco(report.read_text())
+    except OSError as e:
+        raise CoverageOperationalError(f"jacoco report unreadable: {e}") from e
+
+
 # --- Toolchain plugins (one engine, per-toolchain scanners) --------------------
 
 
@@ -735,7 +1008,35 @@ class ScalaToolchain(Toolchain):
         return _scala_is_test_file(rel)
 
 
-_TOOLCHAINS = {"python": PythonToolchain(), "scala": ScalaToolchain()}
+class JavaToolchain(Toolchain):
+    name = "java"
+    static_labels = ["checkstyle"]  # SpotBugs is bytecode/opt-in (fail-closed); not a default label
+    param_directions = {"tries": "min", "shrinkingOff": "max"}
+
+    def detect(self, root: Path) -> bool:
+        return ((root / "pom.xml").exists() or (root / "build.gradle").exists()
+                or (root / "build.gradle.kts").exists())
+
+    def static_analysis(self, root: Path) -> dict[str, Counter]:
+        return {"checkstyle": run_checkstyle(root)}
+
+    def suppressions(self, root: Path) -> Counter:
+        return scan_java_suppressions(root)
+
+    def test_weakening(self, root: Path) -> dict:
+        return scan_java_test_weakening(root)
+
+    def compile_check(self, root: Path) -> str:
+        return java_compile_status(root)
+
+    def coverage(self, root: Path) -> dict[str, float]:
+        return run_jacoco_coverage(root)
+
+    def is_test_file(self, rel: str) -> bool:
+        return _java_is_test_file(rel)
+
+
+_TOOLCHAINS = {"python": PythonToolchain(), "scala": ScalaToolchain(), "java": JavaToolchain()}
 
 
 def select_toolchain(root: Path, override: str | None) -> Toolchain:
@@ -744,11 +1045,11 @@ def select_toolchain(root: Path, override: str | None) -> Toolchain:
             sys.stderr.write(f"sdlc-gate: unknown --toolchain {override!r}\n")
             sys.exit(2)
         return _TOOLCHAINS[override]
-    for tc in (ScalaToolchain(), PythonToolchain()):
+    for tc in (ScalaToolchain(), JavaToolchain(), PythonToolchain()):
         if tc.detect(root):
             return tc
-    sys.stderr.write("sdlc-gate: no toolchain detected (no build.sbt or pyproject.toml); "
-                     "pass --toolchain scala|python\n")
+    sys.stderr.write("sdlc-gate: no toolchain detected (no build.sbt, pom.xml/build.gradle, or "
+                     "pyproject.toml); pass --toolchain scala|java|python\n")
     sys.exit(2)
 
 
@@ -1272,8 +1573,9 @@ def main() -> None:
     p_baseline.add_argument("--sha", required=True, help="SHA being captured")
     p_baseline.add_argument("--out", required=True, help="Output directory")
     p_baseline.add_argument("--root", default=".", help="Project root (default: cwd)")
-    p_baseline.add_argument("--toolchain", default=None, choices=["python", "scala"],
-                            help="Force the toolchain (default: auto-detect build.sbt/pyproject.toml)")
+    p_baseline.add_argument("--toolchain", default=None, choices=["python", "scala", "java"],
+                            help="Force the toolchain (default: auto-detect build.sbt/pom.xml/"
+                                 "build.gradle/pyproject.toml)")
     p_baseline.add_argument("--no-static", action="store_true",
                             help="Skip the static-analysis scanners (sbt/uv); run only the fast "
                                  "regex checks (suppressions + test-weakening). Use the SAME flag on "
