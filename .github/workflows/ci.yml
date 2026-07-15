@@ -29,6 +29,9 @@ jobs:
       - name: red-proof fixture (genuine test passes, tautology rejected)
         run: python3 harness/ledger/fixtures/red_proof_test.py
 
+      - name: tdd-precedence + coverage fixture (claim precedes code; red-proof coverage counts)
+        run: python3 harness/ledger/fixtures/tdd_precedence_test.py
+
       - name: differential gate unit tests (20 stdlib tests)
         run: python3 reference/test_sdlc_gate.py
 
