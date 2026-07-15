@@ -44,6 +44,10 @@ jobs:
       - name: squash-safe precedence fixture (--certify emits; main-side consumes the certificate)
         run: python3 harness/ledger/fixtures/squash_precedence_test.py
 
+      - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
+        if: github.event_name == 'pull_request'
+        run: python3 harness/ledger/audit.py --certify
+
       - name: differential gate unit tests (36 stdlib tests, incl. the Java toolchain)
         run: python3 reference/test_sdlc_gate.py
 

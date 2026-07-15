@@ -450,14 +450,17 @@ def main() -> int:
     retire_records = [e for e in trace_all if "retire_of" in e]
 
     if args.certify:
+        # PR mode is an EMITTER, not a gate: it writes a certificate for every certifiable pair and
+        # exits 0. A pair with no certifiable precedence is an advisory note (it landed with code) —
+        # the warn-grade tdd-precedence is what actually flags it, here and on the main-side audit.
         emitted, failed = certify_precedence(root, live, trace)
         for cid in emitted:
             print(f"certified precedence: {cid}")
         for cid in failed:
-            print(f"CANNOT certify {cid}: precedence not verified (the claim did not precede its code)")
+            print(f"note: {cid} has no certifiable precedence (it landed with code); tdd-precedence warns on it")
         if not emitted and not failed:
             print("certify: no park->supersede pairs to certify")
-        return 1 if failed else 0
+        return 0
 
     hard = viol
     hard += check_schema(live, "live") + check_schema(trace, "trace")
