@@ -2,6 +2,31 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.2.0 — 2026-07-14
+
+The development loop as doctrine and its enforceable subset as mechanism. The loop never asks the agent whether it did TDD — it arranges the world so the claim precedes the code in git, the red is a receipt on the board, the green passes a gate that watches the checks, and the rate is a number in the audit report. Design rule throughout: authoring order is testimony, detection power is mechanical, precedence is git, coverage is counted.
+
+### Added
+- **The agentic TDD loop** (`craft-tdd` rule, `ledger-preregister`, `report-conventions`, `ledger-verify`, operators-manual): the five beats (claim → red-receipt → green under the gate → refactor → disclose), the order-vs-detection decomposition (order is testimony forever; detection is provable by `red-proof`), and court selection — red-first is **mandatory for detector-class slices** (gates, checks, tamper proofs, fail-closed properties, discriminating mechanisms) and negotiable-with-disclosure elsewhere. The claim-first ledger-only commit is the precedence timestamp; a discriminating mechanism states its contrast obligation.
+- **`red-proof --about clm-NNNN --ledger`** — files a `testimony` receipt (red confirmed, or the not-red finding on a tautology) via `ledger/append`; no gate change, no schema change, no behavior change without the flags.
+- **`audit.py` `tdd-precedence`** warn check (park→supersede pairs: the parked claim's commit is ledger-only and precedes the code — C1 at development granularity, subsuming the preregistration audit's dev-side half) and the **`red-proof coverage`** `--report` line (`k/n` test-bearing slices carrying a receipt, plus the detector-class subset).
+- **The deep-reason adversary contract** (`deep-reason` skill + reference): findings ship the raw command+output, a paste-and-rerun repro, and the named check that would confirm them; findings route as `kind: refutation`; a clean pass is an absence report, not an approval; escalation-tier scope (routine PR review → `pr-review`); cross-family with lineage disclosure; the report carries its own reliability boundary.
+- **`install-harness.sh --upgrade`** — overwrites kit-owned verbatim files (helpers, fixtures, skills) when the kit is newer, never touching repo-owned `check.sh` / `languages` / `claims.jsonl` / `trace/`; writes a `ledger/VERSION` stamp. Without it the v1.1.0 retire fix could never reach an existing install.
+- **Two one-fact memories** (`retire-any-commit`, `adversary-not-second-opinion`), and the `check.sh.example` red-proof graduation block (documented, not enabled — a norm earns blocking power only after a season of receipts).
+
+### Fixed / reconciled (the obsolescence audit of 2026-07-14)
+- **The retire law** corrected in the three satellites still teaching the pre-v1.1.0 rewrite-in-place, same-commit-only rule (the `ledger-retire` skill, the `librarian` docstring, `CLAUDE-harness-section.md`) to the verbatim-move-plus-sidecar form (safe in any later commit); the `--sweep` scar kept as history.
+- **The second-minter semantics line**: "the gate is the sole writer of `signed`" corrected everywhere (SECURITY.md, `harness/ledger/README.md`, `ledger-write`, `ledger-discharge`) — two paths mint, the commit-path gate and the installer's `harness-verify`, both recording their line-hashes for the forgery guard.
+- Three one-sentence reconciles (`ledger-discharge` citation-vs-audit; operators-manual verb 3, dissent-enters-freely; `pr-review` Step 3, Scala + TypeScript gate commands); the dangling-reference memory annotated; the deep-reasoning-agent memory's "second opinion" framing marked superseded.
+
+### Hardened (the automated party's cheap bypasses)
+- **`git commit --no-verify` / `-n`** added to the settings deny-list, closing the hook bypass that sat inside the broad `git commit*` allow.
+- **`gate.py` env overrides** (`LEDGER_CHECK_CMD` / `LEDGER_CODE_EXTS`) are honored only when the `ledger/.test-mode` sentinel exists (gitignored; only `harness-verify` and the fixtures create it), logging a stderr line when honored.
+- New red-first fixtures wired into `harness-verify.sh` + CI: `tdd_precedence_test`, `install_upgrade_test` (kit-only), `gate_sentinel_test`; `red_proof_test` extended. red-proof stays advisory this release by its own docstring's law.
+
+### Sources
+- This build brief (the agentic-TDD-loop, the adversary contract, the v1.2 reconciliation), the TDD-loop design discussion, and the obsolescence audit of 2026-07-14.
+
 ## v1.1.1 — 2026-07-13
 
 The ledger's conventions get their formal companion: a machine-checked note establishing which ledger moves are theorems of the claim algebra and which are new axioms, its validation script wired into CI, and the registration and render rules the note licenses.

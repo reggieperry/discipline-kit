@@ -7,6 +7,8 @@ metadata:
   volatility: durable
 ---
 
+**Framing superseded (kit v1.2.0 §5).** The current contract recuts deep-reason from a *second opinion* to a dischargeable **adversary** — correlated approval is near-worthless (Axiom E3), so its job is to refute, its findings route as `kind: refutation`, and a clean pass is an absence report, not an approval. See [[feedback_adversary_not_second_opinion]], the `deep-reason` skill's "The adversary's contract", and `reference/deep-reasoning-agent.md` Discipline rules 7–12. This memory's history stands; its "use it as a second opinion" instruction is superseded.
+
 The "new reasoning model" is the deep reasoning agent pattern documented in a self-contained prompt template kept on disk and referenced by tools and memory pointers.
 
 The pattern is a way to delegate multi-file research, evaluation, and synthesis to a fresh-context Opus subagent running at max effort, with a self-contained six-section prompt (goal + framing, working environment, context, steps, output spec, discipline rules).
