@@ -75,6 +75,19 @@ After the agent returns:
 2. Name what changed in my plan as a result (or "agent confirmed; no plan change")
 3. Pass the full report through if the operator needs to see it; otherwise summarize and proceed
 
+## The adversary's contract
+
+Deep-reason is not a second opinion; it is a fresh-context **adversary** whose job is to refute. Its framing predates the agreement-discount finding (`ledger-verify`, Axiom E3): correlated approval is near-worthless, so the value is the attack, not the agreement.
+
+- **The findings contract.** Every finding ships with the **raw quoted command and its output lines** (never a summarized count), a **paste-and-rerun repro**, and the **named mechanical check** that would confirm it — the `ledger-preregister` dischargeability rule applied to attacks. A finding no check can dispose is labeled **pure interpretation**, not a defect.
+- **Baseline control.** Any delta claim resting on tool output requires the **identical command run on the base**, in the same environment, as a control — plus a run scoped to the changed files. A fresh context has no environmental baseline; establish one before reading any count as abnormal (the incident: `feedback_deep_reason_command_output_confabulation`).
+- **Ledger routing.** Findings land as `kind: refutation` entries `about` the slice's claim id via `ledger/append` (`source: subagent`; refutations never sign, so the schema fits). A clean pass lands as an **absence-report testimony** — attack surface searched, queries quoted — explicitly **not an approval**; its weight is one lineage under the agreement discount.
+- **Scope.** Deep-reason is the **escalation tier**: plan attacks, waiver adjudication, thesis-evidence cross-checks, contested claims, detector-class slices. Routine PR review redirects to the `pr-review` skill. And **never as a substitute for a mechanical check that exists** — run the check.
+- **Cross-family.** High-stakes invocations prefer a **different model family** than the authoring session where the harness allows; where it does not, the report header states the shared-lineage caveat so the reader grades it correctly.
+- **The report carries its own reliability boundary** — which claims rest on quoted tool output and which on inference — the same demand `ledger-verify` makes of any self-report.
+
+Mechanisms confirm, adversaries refute, and nobody's agreement is evidence.
+
 ## Anti-patterns (refuse on sight)
 
 - Auto-generating the prompt from a one-line operator request without walking the 6 sections — produces shallow generic results

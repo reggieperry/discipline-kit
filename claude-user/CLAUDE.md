@@ -10,10 +10,10 @@ Invoke the `deep-reason` skill without being asked when any of these fire:
 
 1. **About to draft an ADR, design doc, or multi-story design pack.** Pressure-test the model before the second draft, not after the fifth.
 2. **About to make a verdict-shaped, hard-to-reverse commit.** Tag push, PR merge, destructive op affecting shared state.
-3. **Defending a position under pressure across more than one message.** The second opinion breaks the tie between sycophancy and genuine correction.
+3. **Defending a position under pressure across more than one message.** The fresh context breaks the tie between sycophancy and genuine correction.
 4. **Question requires synthesizing across 5+ files or repos** held in working memory.
 5. **About to recommend an action based on a memory citing a specific identifier** — story ID, function name, commit SHA, build-plan item number — without having freshly verified the identifier exists and is current.
-6. **Audit-shape or review-shape question whose answer is a verdict.** "Is X done?" "Are these issues real?" "Does this plan hold?" "Is this PR safe to merge?"
+6. **Audit-shape or review-shape question whose answer is a verdict.** "Is X done?" "Are these issues real?" "Does this plan hold?" Routine PR review is the `pr-review` skill's job; deep-reason is the escalation for a contested or detector-class change, never a substitute for a mechanical check that already runs.
 
 Skip when:
 

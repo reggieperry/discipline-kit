@@ -139,6 +139,8 @@ You are evaluating whether the team's design-doc thesis at
 
 ## Worked example: PR review
 
+> Routine PR review is the `pr-review` skill's job. Deep-reason enters only as the **escalation** — a contested change, a thesis-evidence cross-check, or a detector-class slice — and never as a substitute for a mechanical gate that already runs.
+
 ```
 You are reviewing PR #N in repo X.
 
@@ -208,6 +210,38 @@ Apply these in every prompt:
    work that changes state — closes issues, writes files, opens PRs —
    tell the agent to dry-run / verify first. "List what you'd do
    before doing it" is cheap insurance.
+
+7. **The findings contract (adversary invocations).** Every finding ships
+   with the raw quoted command and its output lines (never a summarized
+   count), a paste-and-rerun repro, and the named mechanical check that
+   would confirm it. A finding no check can dispose is labeled pure
+   interpretation, not a defect.
+
+8. **Absence claims are re-runnable, and double-searched.** An absence
+   finding ("grep returned nothing", "no producer for this type") quotes
+   the exact command and its raw output, and a load-bearing absence gets
+   two differently-phrased searches, both reported and labeled "verify
+   before acting" — absence is the most failure-prone claim for an LLM
+   (`feedback_deep_reason_command_output_confabulation`).
+
+9. **Baseline control for any delta.** A claim resting on tool output
+   requires the identical command run on the base, in the same
+   environment, as a control, plus a run scoped to the changed files. A
+   fresh context has no environmental baseline; establish one before
+   reading any count as abnormal.
+
+10. **Say versus does.** Distinguish what the docs and specs SAY from what
+    the code DOES; the gap is the point — it is the line that surfaces a
+    feature already shipped while the plan assumed it unbuilt.
+
+11. **Verdict first, no preamble.** The first line of the output is the
+    verdict; drop the chatty "ground truth is complete, writing the
+    verdict" block.
+
+12. **Findings route to the ledger as refutations.** In a ledgered repo,
+    findings land as `kind: refutation` entries `about` the slice's claim
+    (`source: subagent`); a clean pass is an absence-report testimony, not
+    an approval, and carries one lineage under the agreement discount.
 
 ## Tone notes
 

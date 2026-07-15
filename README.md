@@ -16,7 +16,7 @@ It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy
 claude-user/            → installs into ~/.claude
   CLAUDE.md               deep-reason self-trigger criteria + review pointer
   settings.json           conservative permissions (local git only, no auto-bypass)
-  skills/deep-reason/     fresh-context Opus second-opinion subagent
+  skills/deep-reason/     fresh-context adversary and verdict subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
 claude-project/         → copies into each repo's .claude/
   rules/                  42 auto-loading rules in three layers:
