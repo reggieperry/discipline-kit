@@ -2,7 +2,7 @@
 
 Portable engineering discipline for Claude Code — the auto-loading rules, principal-engineer guides, review skills, methodology memories, and the differential gate, packaged to drop into a fresh Claude Code install on another machine.
 
-It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
+It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
 
 ## Status, scope, and license
 
@@ -19,7 +19,7 @@ claude-user/            → installs into ~/.claude
   skills/deep-reason/     fresh-context adversary and verdict subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
 claude-project/         → copies into each repo's .claude/
-  rules/                  42 auto-loading rules in three layers:
+  rules/                  50 auto-loading rules in three layers:
                           craft-* (language-neutral: abstraction, complexity,
                             documentation, domain-modeling, refactoring, tdd, xunit)
                             + decoupling + writing-style
@@ -29,6 +29,9 @@ claude-project/         → copies into each repo's .claude/
                             testing, security, llm)
                           scala-*  (8: style, errors, types, concurrency, modules,
                             testing, security, llm)
+                          java-*   (8: style, errors, types, concurrency, modules,
+                            testing, security, llm — Java 21 LTS floor; Checkstyle
+                            + SpotBugs static stack)
                           ts-*     (9: style, errors, types, concurrency, modules,
                             testing, security, llm, react — TypeScript/React+Vite)
   sdlc-discipline/guides/ 5 long-form guides (ddd, goos, modularity, refactoring,
@@ -71,7 +74,7 @@ cp /path/to/discipline-kit/claude-project/rules/*.md                  .claude/ru
 cp /path/to/discipline-kit/claude-project/sdlc-discipline/guides/*.md .claude/sdlc-discipline/guides/
 ```
 
-Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `tests/**`, `docs/**`, …) when you edit a matching file: the `go-*` rules fire on Go files, `python-*` on Python, `scala-*` on Scala, `craft-*` on all of them, no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
+Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `tests/**`, `docs/**`, …) when you edit a matching file: the `go-*` rules fire on Go files, `python-*` on Python, `scala-*` on Scala, `java-*` on Java, `craft-*` on all of them, no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
 
 ## Using it
 
