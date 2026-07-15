@@ -13,3 +13,21 @@ cd "$(dirname "$0")/.."
 sh ledger/board.sh --selftest
 sbt -batch -Dsbt.color=false check
 ( cd path/to/frontend && npm run check )   # e.g. prettier --check && eslint && tsc --noEmit && vitest run
+
+# ── Graduation path (commented; uncomment for detector-class paths once the registered bet resolves) ──
+# red-proof is advisory by its own docstring's law: "a norm earns blocking power only after a season
+# of receipts." Once the season claim resolves — the red-proof-coverage sweep at date D gavels it —
+# a repo may promote red-proof from a done-report line to a hard gate for DETECTOR-CLASS paths:
+#
+#   for path in $(git diff --cached --name-only); do
+#     case "$path" in
+#       *[Gg]ate*|*[Cc]heck*|*guard*)          # detector-class paths — tune to the repo
+#         ledger/red-proof --test-cmd '<cmd running this slice's new detector tests>' || {
+#           echo "red-proof: detector-class change without a confirmed red — blocked"; exit 1; }
+#         ;;
+#     esac
+#   done
+#
+# Until then keep red-proof OUT of the blocking path: run it by hand (or with --ledger to file the
+# receipt) and disclose the result in the process paragraph. Blocking before a season of receipts
+# punishes the honest and teaches nothing.
