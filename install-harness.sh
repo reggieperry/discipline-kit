@@ -15,13 +15,21 @@ KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 H="$KIT/harness"
 TARGET="."
 VERIFY=0
+UPGRADE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) TARGET="$2"; shift 2 ;;
     --verify) VERIFY=1; shift ;;
-    *) echo "usage: install-harness.sh [--dir <repo>] [--verify]" >&2; exit 2 ;;
+    --upgrade) UPGRADE=1; shift ;;
+    *) echo "usage: install-harness.sh [--dir <repo>] [--verify] [--upgrade]" >&2; exit 2 ;;
   esac
 done
+KIT_VERSION="$(grep -m1 -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$KIT/CHANGELOG.md" 2>/dev/null || echo v0.0.0)"
+
+# Kit-owned verbatim files: --upgrade overwrites them when the kit is newer; a first install copies
+# only what is ABSENT. Repo-owned files (check.sh, languages, claims.jsonl, trace/) are NEVER touched.
+kit_file() { if [ "$UPGRADE" = 1 ] || [ ! -f "$2" ]; then cp "$1" "$2"; fi; }
+kit_dir()  { if [ "$UPGRADE" = 1 ]; then rm -rf "$2"; cp -R "$1" "$2"; elif [ ! -d "$2" ]; then cp -R "$1" "$2"; fi; }
 
 cd "$TARGET"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "✖ not a git repo: $TARGET" >&2; exit 1; }
@@ -31,19 +39,24 @@ echo "Installing dev-ledger harness into $TARGET"
 # 1. ledger helpers — copy only what is ABSENT, so a re-run (or a repo with a
 # customized gate) is a true no-op and nothing is clobbered.
 mkdir -p ledger/trace ledger/fixtures
-for f in audit.py append retire gate.py librarian board.sh README.md operators-manual.md; do
-  [ -f "ledger/$f" ] || cp "$H/ledger/$f" "ledger/$f"
+for f in audit.py append retire gate.py librarian red-proof board.sh README.md operators-manual.md; do
+  kit_file "$H/ledger/$f" "ledger/$f"
 done
-[ -f ledger/fixtures/board-fixture.jsonl ] || cp "$H/ledger/fixtures/board-fixture.jsonl" ledger/fixtures/
-chmod +x ledger/append ledger/retire ledger/gate.py ledger/librarian ledger/audit.py ledger/board.sh
+# the ledger-tooling fixtures adopting repos verify (NOT install_upgrade_test — that tests the
+# installer itself, a kit-only concern, and would recurse through --upgrade's harness-verify).
+for fx in board-fixture.jsonl retire_immutable_test.py red_proof_test.py tdd_precedence_test.py; do
+  kit_file "$H/ledger/fixtures/$fx" "ledger/fixtures/$fx"
+done
+chmod +x ledger/append ledger/retire ledger/gate.py ledger/librarian ledger/audit.py ledger/board.sh ledger/red-proof
 [ -f ledger/trace/.gitkeep ] || touch ledger/trace/.gitkeep
-echo "  ledger/ helpers + board + README in place"
+echo "$KIT_VERSION" > ledger/VERSION
+echo "  ledger/ helpers + board + README + fixtures in place ($KIT_VERSION)"
 
 # 1b. the ledger-discipline skills — teach the next instance to use the ledger correctly
 # (read before writing, cite before re-checking, claim before building). Additive; absent-only.
 mkdir -p .claude/skills
 for s in ledger-board ledger-write ledger-preregister ledger-discharge ledger-retire ledger-verify; do
-  [ -d ".claude/skills/$s" ] || cp -R "$H/skills/$s" ".claude/skills/$s"
+  kit_dir "$H/skills/$s" ".claude/skills/$s"
 done
 echo "  ledger-* skills in .claude/skills/"
 
@@ -114,7 +127,10 @@ else
 fi
 
 echo "Done."
-if [ "$VERIFY" = 1 ]; then
+if [ "$UPGRADE" = 1 ]; then
+  echo "Upgraded kit-owned files to $KIT_VERSION (repo-owned check.sh / languages / claims.jsonl / trace/ left untouched)."
+  "$KIT/harness-verify.sh" || echo "  (harness-verify reported issues — review above)"
+elif [ "$VERIFY" = 1 ]; then
   echo "--- verify ---"
   exec "$KIT/harness-verify.sh"
 fi
