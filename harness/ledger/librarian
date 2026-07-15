@@ -8,8 +8,10 @@ Reports (default) and, with --sweep, RETIRES:
     no successor — the glut signal. Which side wins is a human call (the channel test
     cannot decide it), recorded in trace_reason when retired by hand.
 
-Retire in the SAME commit as the supersession (immutability discipline — see the
-ledger README); --sweep is meant to run in the working tree before that commit.
+Retire is verbatim-move plus sidecar (see harness/ledger/README.md): the committed line
+is preserved byte-identical, so a claim is immutability-safe to retire in ANY later
+commit — a late sweep at a landing is legal. --sweep retires the whole
+superseded-but-live backlog, so run it as its own deliberate cleanup pass.
 The memory half of the rule (contradicted `memories/` files move to `memories/trace/`)
 has no target in this repo and is left to wherever the memories live.
 """
