@@ -2,6 +2,22 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.1 — 2026-07-15
+
+Squash-safe precedence, and the clm-0030 discharge-chain fix it surfaced. The loop's precedence check reads per-commit ancestry; a squash-merge erases it. The fix is the gate's own pattern — verify where the history exists, persist the verdict as content.
+
+### Added
+- **`audit.py --certify` (PR mode)** — on the intact branch (pre-squash), emits a `precedence verified: …` certificate (a `testimony`, `source: hook`) for each verifiable park→supersede pair. The certificate rides a squash as content; the main-side `tdd-precedence`, where the two introducing commits collapse into one code-carrying commit (`xc == yc`), consumes the certificate in place of the erased ancestry. Rebase-merge and merge-commit keep the richer per-commit ancestry for free. `--certify` is an emitter (exit 0); the warn-grade `tdd-precedence` flags a pair with no certifiable precedence. New red-first fixture `squash_precedence_test.py`; a `pull_request` CI step runs `--certify`; `harness/ledger/README.md` and the operators-manual gain a "Squash-merge compatibility" paragraph.
+
+### Fixed
+- **clm-0030 (the three-link discharge chain), check-side.** `park_supersede_pairs` skips a parked claim that itself supersedes something — a `park → repo-check → signed` chain's repo-check *middle* link is a discharge step, not a claim-first event — so it no longer false-warns in `tdd-precedence`, false-fails in `--certify`, or miscounts coverage. `report_red_proof_coverage` walks the forward supersession chain, so a red-proof receipt filed about the signed 3rd link (the live claim) credits the slice: coverage read 0/3 before, 3/3 now. Surfaced during v1.3.0 as the first loop-built release's own dogfood; resolved here because §10's `--certify` wiring needs it.
+
+### Sources
+- The updated agentic-TDD-loop build brief's §10 amendment (squash-safe precedence, 2026-07-14) and the v1.3.0 dogfooding finding (clm-0030).
+
+### Process
+- Built under the kit's self-installed loop: claim-first, red-first for the detector-class slices (`squash_precedence_test.py`, the three-link `tdd_precedence` case), gate-signed, red-proof receipts filed. Disclosed deviations: the brief has CI emit+commit the certificate, but the kit's read-only/fork-safe CI can't push, so the author emits it pre-merge and CI verifies; and the "squashing destroys the trail" warning the brief asks to replace was never in a committed doc (PR bodies + commit messages), so the correct framing is established in the docs.
+
 ## v1.3.0 — 2026-07-15
 
 The first language added under the loop, measured by the loop, and merged only where a human said so. Two waves by warrant grade: wave one is mechanism (the gate's Java toolchain and plumbing — detector-class, autonomous under the gate); wave two is judgment (the eight `java-*` rules — drafts for the operator's gavel, testimony until signed).
