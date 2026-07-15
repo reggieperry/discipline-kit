@@ -36,6 +36,14 @@ When a verification or review summary grades corroboration-class support — sev
 
 A check is only a check if it can fail the build. A script wired into CI must exit non-zero on any failed assertion — otherwise the step passes regardless of results, and a green pipeline certifies nothing. A validator shipped once printing its `0 fail` summary but exiting 0 unconditionally; wired naively it was a light that never turned red. Confirm a checker fails closed the way you confirm any claim — force a failure and watch the exit code, not the output — before you trust the green.
 
+## Check the process paragraph against the red-proof testimony
+
+A slice's process paragraph is a claim like any other, so check it against the ledger. A **detector-class** slice (a gate, check, tamper proof, fail-closed property, or discriminating mechanism) that claims *observed red* with no `red-proof` testimony entry `about` its claim id is sent back for the receipt — the same treatment a self-report missing its reliability boundary gets. Order is the author's word; the red receipt is the record's. Trust the record.
+
 ## Demand the reliability boundary on any self-report
 
 A retrospective process document — an authorship note, a post-hoc reconstruction of who did what when — must state the granularity at which it is evidence and the granularity at which it is memory: accurate at commit-and-ledger granularity, best-effort below, anchors cited where grounded, recollection labeled where not. A reconstruction that does not name where its evidence ends is a rumor forming; send it back for the boundary line.
+
+## Escalation is an adversary, not a committee
+
+High-stakes slices do not escalate to a second reviewer of the same kind; they escalate to a single fresh-context `deep-reason` **attack** — a different model family where the harness allows — whose job is to *refute*, and whose findings land as `kind: refutation` entries `about` the slice's claim. A clean pass is an absence report, not an approval, and its weight is bounded by the agreement discount above: approval headcounts are excluded, because correlated reviewers share a blind spot. Mechanisms confirm, adversaries refute, and nobody's agreement is evidence.

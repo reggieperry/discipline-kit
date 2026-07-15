@@ -12,6 +12,10 @@ A "done" you write after the fact is a story. A claim you write before the run i
 
 Write the acceptance claim verbatim first: what will be true, and the exact check that will show it. Append it `unverified`.
 
+## The claim is its own commit (the precedence timestamp)
+
+The slice's acceptance claim lands as its **own ledger-only commit before any code commit** — a commit that touches `ledger/claims.jsonl` and nothing that builds the system. That commit is not ceremony: it is the precedence timestamp the `tdd-precedence` audit check reads, git's record that the claim preceded the code. Bundle the claim into the code commit and the timestamp is gone; the check warns, and rightly. Claim, commit, then build.
+
 ## Check every clause for dischargeability
 
 For each clause, ask whether the named check can actually recompute it. A clause no check can discharge is a design error, and surfacing it now, before the work, is the point of writing the claim early.
@@ -32,6 +36,10 @@ Append the parked claim:
 ## Predictions are separate entries
 
 A prediction rides its own line, not folded into the acceptance claim, because a bet that cannot independently die is not a bet. Fix the court rules before any evidence exists (what counts as pass, and the sparse-data contingency) so the result cannot renegotiate the standard it is judged against.
+
+## A discriminating mechanism states its contrast obligation
+
+A slice that ships a *discriminating* mechanism — anything whose job is to make an outcome differ — states the **contrast obligation** in the claim: "an input exists where the outcome differs with versus without this mechanism." Naming it at S0 forces the test that a green suite would otherwise let you skip: the one that fails when the mechanism is absent. A mechanism with no such input is either untested or doing nothing, and the shadowed-mechanism lesson (`feedback_claims_need_tests`) is what a missing contrast costs — a feature that looked tested because the suite was green, and did nothing because no test could tell.
 
 ## Composed, existence, and interval claims register their shape at S0
 

@@ -20,9 +20,14 @@ guarantees legible to every future reader.
 4. **Process paragraph.** Per slice, one short paragraph answers four questions, with the reliability
    boundary applied (definitive statements only for direct-recall work): (a) for each test suite
    touched, was it written *before*, *alongside*, or *after* the code it exercises; (b) which new
-   tests were **observed red**, and by what route — natural TDD red, a red-proof run, or never-red
-   with the reason stated; (c) any assertion or golden **adjusted after seeing actual output**, with
-   the justification (the green-by-weakening disclosure — adjusting a wrong expectation is legitimate;
-   saying so is the price); (d) the refactor pass, done or skipped with the reason. Four sentences
+   tests were **observed red**, and by what route — for any test-bearing slice, either a pasted
+   `red-proof` receipt line or a declared allocation ("build-then-verify; dual-leg discharge cited"),
+   where a **detector-class** slice (a gate, check, tamper proof, fail-closed property, or
+   discriminating mechanism) may take only the first branch — never-red is not an option for a
+   detector; (c) any assertion or golden **adjusted after seeing actual output**, with the
+   justification (the green-by-weakening disclosure — adjusting a wrong expectation is legitimate;
+   saying so is the price); (d) the refactor pass — done, naming its catalog moves or giving a real
+   justification, or skipped with the reason, and confirming any `refactor:` commit is separate from
+   the functional change. Four sentences
    suffice — "I ran it and the tests passed" describes an outcome, not the process the reader asked
    about. The `red-proof` check (harness/ledger/red-proof) is the mechanical court for (b).
