@@ -38,7 +38,10 @@ jobs:
       - name: gate sentinel fixture (env overrides ignored without ledger/.test-mode)
         run: python3 harness/ledger/fixtures/gate_sentinel_test.py
 
-      - name: differential gate unit tests (20 stdlib tests)
+      - name: java plumbing fixture (mvn/gradle check_command; .java auto-detect; vendored-java inert)
+        run: python3 harness/ledger/fixtures/java_plumbing_test.py
+
+      - name: differential gate unit tests (36 stdlib tests, incl. the Java toolchain)
         run: python3 reference/test_sdlc_gate.py
 
       - name: algebra check (re-prove the ledger-dynamics laws + laundering exhibits)

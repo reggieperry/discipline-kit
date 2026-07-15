@@ -69,6 +69,13 @@ def check_command() -> list[str] | None:
         return ["bash", "ledger/check.sh"]
     if (ROOT / "build.sbt").exists():
         return ["sbt", "-batch", "-Dsbt.color=false", "check"]
+    if (ROOT / "pom.xml").exists():
+        return ["mvn", "-B", "-q", "verify"]
+    if (ROOT / "gradlew").exists():
+        # the wrapper, never a daemon: a gradle daemon inside a pre-commit hook is a hermeticity defect
+        return ["./gradlew", "--no-daemon", "--console=plain", "check"]
+    if (ROOT / "build.gradle").exists() or (ROOT / "build.gradle.kts").exists():
+        return ["gradle", "--no-daemon", "--console=plain", "check"]
     if (ROOT / "pyproject.toml").exists():
         return ["uv", "run", "pytest", "-q"]
     return None
@@ -99,6 +106,9 @@ def code_exts() -> tuple[str, ...]:
     detected: list[str] = []
     if (ROOT / "build.sbt").exists():
         detected += [".scala", ".sc", ".sbt"]
+    if ((ROOT / "pom.xml").exists() or (ROOT / "build.gradle").exists()
+            or (ROOT / "build.gradle.kts").exists()):
+        detected += [".java"]
     if (ROOT / "tsconfig.json").exists() or (ROOT / "package.json").exists():
         detected += [".ts", ".tsx"]
     if (ROOT / "go.mod").exists():
