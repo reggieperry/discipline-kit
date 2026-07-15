@@ -14,7 +14,7 @@ The shipped mode trusts the **local machine and the local git repository**. With
 - **silently weakening the test suite or the ledger** versus the merge-base — the differential gate and the audit's immutability check flag it;
 - **editing a committed ledger line** — the append-only immutability check flags any historically-committed line not present verbatim in the live board or the trace.
 
-It does **not** defend against a party who controls the local machine. A local operator can bypass the hooks (`git commit --no-verify`), rewrite history, or edit `ledger/.hook-signed`. In single-user mode that party is *you*; the gate keeps an automated collaborator and your own future carelessness honest, not a hostile local admin.
+It does **not** defend against a party who controls the local machine. A local operator can bypass the hooks (`git commit --no-verify`), rewrite history, or edit `ledger/.hook-signed`. In single-user mode that party is *you*; the gate keeps an automated collaborator and your own future carelessness honest, not a hostile local admin. The cheapest automated bypasses are closed by name: `git commit --no-verify` / `-n` sit on the settings deny-list, and the gate honors the `LEDGER_CHECK_CMD` / `LEDGER_CODE_EXTS` overrides only when the `ledger/.test-mode` sentinel is present — a file only `harness-verify.sh` and the fixtures create — and logs a stderr line whenever it does, so a bypass is on the record it bypasses.
 
 ## Team / multi-writer mode — NOT in this release
 

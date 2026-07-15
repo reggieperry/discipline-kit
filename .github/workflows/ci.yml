@@ -35,6 +35,9 @@ jobs:
       - name: installer --upgrade fixture (kit-owned overwritten, repo-owned untouched, VERSION stamped)
         run: python3 harness/ledger/fixtures/install_upgrade_test.py
 
+      - name: gate sentinel fixture (env overrides ignored without ledger/.test-mode)
+        run: python3 harness/ledger/fixtures/gate_sentinel_test.py
+
       - name: differential gate unit tests (20 stdlib tests)
         run: python3 reference/test_sdlc_gate.py
 

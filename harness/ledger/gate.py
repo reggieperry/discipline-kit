@@ -42,6 +42,19 @@ CHECK_NAME = "repo-check"
 STANDARD_CLAIM = "the repo's mechanical check passes"
 RUNNABLE = {"repo-check", "scala-check", "scala-suite", "typecheck"}
 CODE_EXTS = (".scala", ".sc", ".sbt", ".py", ".go", ".ts", ".tsx", ".js", ".rs", ".java", ".kt")
+TESTMODE = ROOT / "ledger" / ".test-mode"  # gitignored sentinel; only harness-verify + the fixtures create it
+
+
+def override_allowed(var: str) -> bool:
+    """An env override (LEDGER_CHECK_CMD / LEDGER_CODE_EXTS) is honored ONLY when the test-mode
+    sentinel exists — a file only harness-verify.sh and the fixtures create, gitignored beside
+    .hook-signed. Otherwise the override is ignored, closing the cheap bypass an automated
+    collaborator could otherwise take (inject a fake check, narrow the checked languages). A honored
+    override writes one stderr line, so a bypass is on the record it bypasses."""
+    if not TESTMODE.exists():
+        return False
+    sys.stderr.write(f"gate: honoring {var} override (ledger/.test-mode present)\n")
+    return True
 
 
 def check_command() -> list[str] | None:
@@ -50,7 +63,7 @@ def check_command() -> list[str] | None:
     exact check). Otherwise a toolchain default; None means no check is wired, so the
     gate runs the forgery guard + audit only."""
     env = os.environ.get("LEDGER_CHECK_CMD")
-    if env is not None:
+    if env is not None and override_allowed("LEDGER_CHECK_CMD"):
         return env.split()
     if (ROOT / "ledger" / "check.sh").exists():
         return ["bash", "ledger/check.sh"]
@@ -76,7 +89,7 @@ def code_exts() -> tuple[str, ...]:
     def norm(toks) -> tuple[str, ...]:
         return tuple(dict.fromkeys(t if t.startswith(".") else "." + t for t in toks))
     env = os.environ.get("LEDGER_CODE_EXTS")
-    if env:
+    if env and override_allowed("LEDGER_CODE_EXTS"):
         return norm(env.replace(",", " ").split())
     decl = ROOT / "ledger" / "languages"
     if decl.exists():

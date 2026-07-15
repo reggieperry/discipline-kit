@@ -40,7 +40,7 @@ fi
 cp "$BAK" ledger/claims.jsonl; rm -f "$BAK"   # restore the pre-probe ledger verbatim
 
 echo "verify 3/3: ledger tooling fixtures (retire immutability-safe; red-proof rejects tautologies; tdd-precedence + coverage)"
-for fx in retire_immutable_test red_proof_test tdd_precedence_test; do
+for fx in retire_immutable_test red_proof_test tdd_precedence_test gate_sentinel_test; do
   if [ -f "ledger/fixtures/$fx.py" ]; then
     if python3 "ledger/fixtures/$fx.py" >/dev/null 2>&1; then
       echo "  PASS  $fx"
