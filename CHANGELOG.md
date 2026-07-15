@@ -2,6 +2,23 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.0 — 2026-07-15
+
+The first language added under the loop, measured by the loop, and merged only where a human said so. Two waves by warrant grade: wave one is mechanism (the gate's Java toolchain and plumbing — detector-class, autonomous under the gate); wave two is judgment (the eight `java-*` rules — drafts for the operator's gavel, testimony until signed).
+
+### Added
+- **The Java toolchain in the differential gate** (`reference/sdlc-gate.py` `JavaToolchain`) — a scanner-plugin, no engine change: detection by `pom.xml` / `build.gradle(.kts)`; Checkstyle Check A (google_checks, source, DOCTYPE-rejecting parser); suppression Check B (`@SuppressWarnings` / `@SuppressFBWarnings` / `//CHECKSTYLE:OFF` / `//NOPMD`); test-weakening Check D (`@Disabled`/`@Ignore`, assertion sites, and jqwik parameter weakening — a `@Property(tries=N)` fall and a `ShrinkingMode.OFF` appearance, with the shrinking key ALWAYS emitted so 0→1 is caught through the shared parameter check); the shared fail-closed compile precondition (mvn/gradle); and opt-in JaCoCo coverage. SpotBugs (bytecode) fails CLOSED on a source-only tree rather than scanning empty and passing — its default-path wiring awaits a compiled pilot.
+- **`gate.py` Java plumbing** — `check_command()` gains the Maven default (`mvn -B -q verify`) and the hermetic gradle-wrapper fallback (`--no-daemon --console=plain`); `code_exts()` auto-detects `.java` for `pom.xml`/`build.gradle(.kts)` roots, and a vendored `.java` under a non-Java root does not fire the gate.
+- **Templates and `pr-review`** — `languages.example` notes `.java`; `check.sh.example` gains a hermetic Java stanza (`mvn -B -q -DskipITs test` in a hook, gradle via the no-daemon wrapper); `pr-review` maps `*.java` → Java, lists the Java gate commands, and loads `java-*` rules.
+- **The eight `java-*` rules** (`java-style/errors/types/concurrency/modules/testing/security/llm`) — the modern-Java doctrine: google-java-format as a build gate; records/sealed/pattern-matching defaults; unchecked-by-default errors with try-with-resources and `Optional`-as-return-only; JSpecify nullness; virtual threads and structured concurrency at the Java 21 floor; package-by-feature with the ≤ 7-public-names cap; JUnit 5 + AssertJ + jqwik (one shared `Arbitraries` provider, `frequency` corner-pinning, a `Statistics` distribution property); OWASP-plus-JVM-first security (deserialization, XXE, path traversal, parameterized SQL, secrets) with a Spring Boot subsection gated on `spring-boot-starter` detection; and a `java-llm` skeleton. Delivered as drafts on a branch for the operator's gavel — testimony until signed; the instance does not merge them.
+
+### Sources
+- The operator's build brief (the Java layer, v1.3.0) and its parameter block: formatter google-java-format; testing JUnit 5 + AssertJ + jqwik; floor Java 21 LTS (virtual threads / structured concurrency by default); build tool Maven default, Gradle via the wrapper; static stack Checkstyle + SpotBugs standalone.
+- Public canon only (the IP wall holds): *Effective Java* 3rd ed, *Java Concurrency in Practice*, the JUnit 5 / jqwik / AssertJ / google-java-format documentation, OWASP, and JSpecify. Nothing ported from employer material.
+
+### Process
+- The first release built under the agentic loop it ships: the kit self-installed its own dev-ledger (a top-level `ledger/`, separate from the shipped `harness/ledger/` template it vendors to adopters), so every wave-one slice was claim-first with a `red-proof` receipt and gate-signed, and each rule draft entered as a `testimony` ledger entry naming the operator's review as its court.
+
 ## v1.2.0 — 2026-07-14
 
 The development loop as doctrine and its enforceable subset as mechanism. The loop never asks the agent whether it did TDD — it arranges the world so the claim precedes the code in git, the red is a receipt on the board, the green passes a gate that watches the checks, and the rate is a number in the audit report. Design rule throughout: authoring order is testimony, detection power is mechanical, precedence is git, coverage is counted.
