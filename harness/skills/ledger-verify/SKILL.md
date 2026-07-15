@@ -32,6 +32,10 @@ A `403` is a claim by some server about some condition, so read the body before 
 
 When a verification or review summary grades corroboration-class support — several sources agreeing — count *distinct lineages*, not raw confirmations: two reviews by the same model configuration are one lineage, not two. The founding project's correlated-reviewers episode is the cited reason: four of five errors were shared across reviewers of the same configuration, so a headcount of agreements measured the shared blind spot, not independent support. Deduplicate per lineage before the grade is written, in prose and in verdict lines alike. This is a discipline on how grades are written, not code (Axiom E3 of `docs/ledger-dynamics-note.html`).
 
+## A checker wired into CI must fail closed
+
+A check is only a check if it can fail the build. A script wired into CI must exit non-zero on any failed assertion — otherwise the step passes regardless of results, and a green pipeline certifies nothing. A validator shipped once printing its `0 fail` summary but exiting 0 unconditionally; wired naively it was a light that never turned red. Confirm a checker fails closed the way you confirm any claim — force a failure and watch the exit code, not the output — before you trust the green.
+
 ## Demand the reliability boundary on any self-report
 
 A retrospective process document — an authorship note, a post-hoc reconstruction of who did what when — must state the granularity at which it is evidence and the granularity at which it is memory: accurate at commit-and-ledger granularity, best-effort below, anchors cited where grounded, recollection labeled where not. A reconstruction that does not name where its evidence ends is a rumor forming; send it back for the boundary line.
