@@ -26,6 +26,7 @@ The repo signals its primary language (`go.mod` → Go; `pyproject.toml` / `setu
 
 - `*.go` → **Go**
 - `*.py` → **Python**
+- `*.java` → **Java** (`pom.xml` / `build.gradle(.kts)` signal the primary language)
 - `*.sh` / bash scripts → **Shell** (a first-class target here)
 - otherwise infer from extension; if no layer fits, the neutral core + craft lens still apply.
 
@@ -37,6 +38,7 @@ Before reading the diff for taste, run the language-appropriate gate and read it
 - **Python:** `uv run ruff check .` → `uv run mypy .` → `uv run pytest`.
 - **Shell:** `shellcheck <files>` and `bash -n <file>` (syntax-only parse).
 - **Scala:** `sbt -batch check` (the repo's `check` alias — scalafmt/scalafix + the suites).
+- **Java:** `mvn -B -q verify` (Maven) or `./gradlew --no-daemon --console=plain check` (Gradle wrapper) — the repo's own `check.sh` or pinned command wins.
 - **TypeScript:** `npm run check`, or where there is no `check` script, `tsc --noEmit` → `vitest run`.
 
 If the repo ships a gate script (e.g. the pack's `sdlc-gate.py`, or a Go gate), prefer it — it encodes the anti-weakening baseline (no new suppressions, no skipped tests, no assertion-count loss versus merge-base).
@@ -52,7 +54,7 @@ ls "$ROOT/.claude/rules/" "$ROOT/.claude/rules/project/" 2>/dev/null
 
 Load, in priority order, whatever exists:
 
-1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, and `ts-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` carries `scala-concurrency` for its cats-effect boundary). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
+1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, `java-*.md`, and `ts-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` and `java-*` carry `*-concurrency` for their effect/virtual-thread boundary). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
 2. **Craft-core rules** — `craft-*.md` (complexity / abstraction / tdd / refactoring / domain-modeling). These are language-neutral and glob across `**/*.go`, `**/*.sh`, and `**/*.py`, so they apply to every changed file regardless of language. If the repo ships none, the embedded craft lens below covers it.
 3. **Rig-specific rules** — the *reviewed project's own* domain, architecture, security, and review rules (`*-<project>.md`, `architecture.toml`, `review-*.md`, `security-*.md`, a slop rubric). When reviewing a cloned target repo, this layer is the **target's** rules, not the reviewer's; the reviewing repo may ship none. These bind hardest: a repo may *specialize* the general discipline but never *weaken* it.
 
