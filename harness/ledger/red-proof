@@ -24,6 +24,7 @@ earns blocking power only after a season of receipts. Exit 0 = red confirmed; 1 
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import tempfile
@@ -56,12 +57,36 @@ def derive_tests(root: Path, base: str) -> list[str]:
             if p.strip() and any(h in p for h in TEST_HINTS)]
 
 
+def file_receipt(root: Path, about: str, n: int, base: str, red: bool) -> None:
+    """Append a red-proof testimony receipt about `about` through <root>/ledger/append. A not-red
+    finding is recorded too — a tautology is worth MORE on the record, not less. Testimony never
+    signs and requires `about`, so the schema already fits; no gate change."""
+    wording = (f"red-proof: {n} new test path(s) failed against base {base[:8]} (red confirmed)"
+               if red else
+               f"red-proof: {n} new test path(s) did NOT fail against base {base[:8]} "
+               f"(NOT red — tautological or green-by-weakening)")
+    receipt = {"claim": wording, "kind": "testimony", "about": about,
+               "source": "claude-code", "status": "unverified", "check": "none"}
+    appender = root / "ledger" / "append"
+    if not appender.exists():
+        print(f"  red-proof: --ledger given but {appender} not found", file=sys.stderr)
+        return
+    a = subprocess.run([sys.executable, str(appender)], input=json.dumps(receipt),
+                       capture_output=True, text=True)
+    if a.returncode == 0:
+        print(f"  filed red-proof testimony {a.stdout.strip()} about {about}")
+    else:
+        print(f"  red-proof: ledger append failed: {a.stderr.strip()}", file=sys.stderr)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
     ap.add_argument("--base", default=None, help="merge-base sha (default: merge-base with upstream, else HEAD~1)")
     ap.add_argument("--test-cmd", required=True, help="command that runs the NEW tests (scoped by the caller)")
     ap.add_argument("--tests", nargs="*", default=None, help="new test paths (default: derived from the diff)")
+    ap.add_argument("--about", default=None, help="claim id the red-proof receipt is filed about (needs --ledger)")
+    ap.add_argument("--ledger", action="store_true", help="file a red-proof testimony receipt via ledger/append")
     args = ap.parse_args()
     root = Path(args.root).resolve()
 
@@ -110,6 +135,10 @@ def main() -> int:
     if not red:
         print("  the new tests PASS against the old implementation — they do not detect the diff.",
               file=sys.stderr)
+    if args.ledger and args.about:
+        file_receipt(root, args.about, overlaid, base, red)
+    elif args.ledger:
+        print("  red-proof: --ledger needs --about <claim id> to file a receipt", file=sys.stderr)
     return 0 if red else 1
 
 
