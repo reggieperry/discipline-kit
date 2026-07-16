@@ -61,8 +61,10 @@ reference/
   voicing-document.md     the human-prose writing register
 harness/                → the dev-ledger + commit-path gate (per-repo; install-harness.sh)
   ledger/                 append / audit / gate / librarian / retire + board.sh (read-only board views)
-  skills/                 six ledger-* skills: read before writing, claim before building, cite before re-checking
-  templates/              check.sh / languages / hook snippets
+  skills/                 six ledger-* skills (read before writing, claim before building, cite
+                          before re-checking) + the optional authoring layer: adr-write,
+                          story-write, story-tighten, story-intake (default off — a Tour choice)
+  templates/              check.sh / languages / hook snippets + ADR + story templates
 memories/               → optional, per-project memory dir
   68 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)
