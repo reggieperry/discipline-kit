@@ -24,7 +24,7 @@ It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy
 
 ## Status, scope, and license
 
-**v1.4.0.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+**v1.4.1.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
 
 **Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The latest releases add the Java coding-discipline layer (the gate's `JavaToolchain` and the eight `java-*` rules), squash-safe precedence (`audit.py --certify`), and enforcement-grade labels on the security rules — all built under the kit's own self-installed agentic loop; see `CHANGELOG.md`.
 
@@ -36,6 +36,7 @@ claude-user/            → installs into ~/.claude
   settings.json           conservative permissions (local git only, no auto-bypass)
   skills/deep-reason/     fresh-context adversary and verdict subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
+  skills/adversarial-review/  N role-partitioned adversaries against a diff (pre-pr/own-pr/foreign-pr)
 claude-project/         → copies into each repo's .claude/
   rules/                  50 auto-loading rules in three layers:
                           craft-* (language-neutral: abstraction, complexity,
@@ -66,7 +67,7 @@ harness/                → the dev-ledger + commit-path gate (per-repo; install
                           story-write, story-tighten, story-intake (default off — a Tour choice)
   templates/              check.sh / languages / hook snippets + ADR + story templates
 memories/               → optional, per-project memory dir
-  69 scrubbed methodology memories + MEMORY.md index
+  70 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)
 scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
@@ -111,6 +112,7 @@ Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `
 - **Rules** load themselves on edit. Nothing to invoke.
 - **`/deep-reason`** spins up a fresh-context Opus subagent for verdict-shaped or hard-to-reverse decisions; the self-trigger criteria are in the installed `CLAUDE.md`.
 - **`/pr-review`** reviews a PR, branch, or diff — it runs the gate first, loads the *reviewed repo's own* rules, then applies the language-neutral core.
+- **`/adversarial-review`** fans out N fresh-context adversaries decorrelated by role against a diff (modes `pre-pr` / `own-pr` / `foreign-pr`) — the tier-two red-team above `pr-review`, reserved for detector-class, sensitive, contested, or hairy-state changes; it hunts what no check encodes yet and never votes.
 - **The gate** enforces anti-weakening on a branch: no new ruff/mypy/bandit errors, no new suppressions, no new skipped tests, no assertion-count loss versus the merge-base.
 
   ```
