@@ -2,6 +2,24 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.4 — 2026-07-15
+
+The conversational front door. The kit's operator is Claude Code and its interface is the utterance, so the entry path is a first-class, tested artifact — not folklore.
+
+### Added
+- **README "Quick start — say this to Claude Code" (item 47)** — six verbatim, paste-ready prompts (Install, Orient, Work, When-a-commit-blocks, Upgrade, Tour), each read-first, receipt-demanding, and dual-audience. The two-stage model is stated plainly: the Install prompt is the only ceremony; after it the injected `CLAUDE.md` section and the auto-loaded `ledger-*` skills make the discipline ambient.
+- **`install.md`** — a concise, accurate install guide (prerequisites, the idempotent installer, the correct `harness-verify` invocation, the tier, upgrade, rollback), so the Install prompt's doc triad (`README` / `install.md` / `SECURITY.md`) is real.
+- **`docs/week-with-the-kit.md` (item 48)** — the day-zero-through-payoff lifecycle walkthrough (install and jurisdiction, claims before code, the inner loop, the red fork, the librarian, the session rhythm, the kernel moment), linked from the README as the second thing a curious reader opens.
+- **The operators-manual "Options" section (item 50)** — every operator-facing knob with four fields each (what / default / when to change / where it lands): tier, `ledger/check.sh`, `ledger/languages`, audit warn-vs-`--strict`, the memory-index budget, the coverage opt-in, red-proof's advisory status, waivers, the sweep, and deep-reason escalation. Closing convention: **configuration is a claim** — the Tour's final act appends one `check: none` assertion recording every choice, defaults included.
+- Two one-fact memories: `config-is-a-claim` and `prompts-are-the-api`.
+
+### Tested (item 49) — the front door is itself acceptance-tested
+- A fresh Claude Code instance in a clean scratch repo, given **only the Install prompt verbatim** with no further guidance, reached a **green `harness-verify`** (audit exit 0; forgery probe blocked; fixtures pass), signed the installed claim, and stamped `VERSION`. The kernel-moment test applied to the documentation.
+- The test earned its keep: it **caught a real defect** in the just-written `install.md` — it instructed a bare `./harness-verify.sh`, but the installer never copies that script into the target (running it from the kit dir would silently verify the *kit's* ledger). Filed as a refutation (clm-0068), fixed (the documented invocation is now `install-harness.sh --dir . --verify`, or `cd <target> && <kit>/harness-verify.sh`), and re-verified green.
+
+### Sources
+- The agentic-TDD-loop build brief's §14 amendment (the conversational front door, 2026-07-14).
+
 ## v1.3.3 — 2026-07-15
 
 The mnemosyne learnings. One-sentence diagnosis of the ancestor: it was detectors without a constitution — its measured failures (a contrary flag firing 33 days unresolved, five broken recipes erroring daily, an index that silently truncated past its own budget guard) are all the missing transitions-and-obligations layer, and its measured value (recall of durable discipline) is the layer the kit's memories already carry. This release ports the transitions the kit was missing.

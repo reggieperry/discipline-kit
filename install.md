@@ -27,15 +27,23 @@ Or run it from inside the target repo with no `--dir`. The installer is **idempo
 - writes a `ledger/VERSION` stamp so staleness is detectable;
 - bootstraps `ledger/claims.jsonl` with a genesis line and a single `unverified` claim parked under the `harness-verify` check.
 
+If the target repo already has a `CLAUDE.md`, the installer injects the harness section into it; if it does not, the installer says so and you add `harness/templates/CLAUDE-harness-section.md` by hand.
+
 **Tier.** The kit ships the **single-user (private, local) tier** — the only shipped mode. Your ledger is local; the gate keeps an automated collaborator and your own future carelessness honest, not a hostile local admin. Shared/team mode (server-side signing, provenance-verifiable discharge) is a named roadmap, deferred; `SECURITY.md` states the boundary plainly. There is no tier flag to set.
 
 ## Verify
 
+`harness-verify.sh` is a **kit script that runs against the current directory's `ledger/`** — it is deliberately *not* copied into the target repo (it is kit machinery, not per-repo policy). So run it from *inside* the target, by path — or, simplest, let the installer run it for you in one command:
+
 ```
-./harness-verify.sh
+# one command — install and verify (the installer runs the verifier from the target):
+./install-harness.sh --dir /path/to/your/repo --verify
+
+# or, after a plain install, run the kit's verifier FROM the target repo (not ./):
+cd /path/to/your/repo && /path/to/discipline-kit/harness-verify.sh
 ```
 
-This is the installer acting as its own first customer. It proves three things before it will sign the installed claim:
+Do **not** run `./harness-verify.sh` from the kit directory to check an adopting repo — it would verify the *kit's* own ledger, not yours. It is the installer acting as its own first customer, and it proves three things before it will sign the installed claim:
 
 1. `ledger/audit.py` exits 0 on the live ledger (the structural invariants hold);
 2. **hook-is-a-hook** — a forged `signed` commit on a scratch branch is **blocked** (a signature with no check behind it is a forgery, and a gate that lets one through is not a gate);
