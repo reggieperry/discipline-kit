@@ -31,3 +31,8 @@ guarantees legible to every future reader.
    the functional change. Four sentences
    suffice — "I ran it and the tests passed" describes an outcome, not the process the reader asked
    about. The `red-proof` check (harness/ledger/red-proof) is the mechanical court for (b).
+
+   Optionally, add a **"memories consulted:"** line when a memory materially shaped the slice, naming
+   the ones it drew on. This is the recall numerator a memory layer otherwise never has — the cheap
+   signal (one sentence per slice) that tells the weekly prune which memories earn their keep and which
+   are dead weight. Name only memories that changed a decision, not every one glanced at.
