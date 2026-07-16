@@ -2,6 +2,24 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.3 — 2026-07-15
+
+The mnemosyne learnings. One-sentence diagnosis of the ancestor: it was detectors without a constitution — its measured failures (a contrary flag firing 33 days unresolved, five broken recipes erroring daily, an index that silently truncated past its own budget guard) are all the missing transitions-and-obligations layer, and its measured value (recall of durable discipline) is the layer the kit's memories already carry. This release ports the transitions the kit was missing.
+
+### Added
+- **The MEMORY.md index-size check with teeth (item 41).** `audit.py` gains `memory-index`: `memories/MEMORY.md` over a soft budget (16 KB) WARNs, over a hard budget (24 KB) is a genuine FAIL — because a warn-only budget fires into a void (the ancestor's index truncated at 38 KB past a working 24 KB guard). Config-keyed (`LEDGER_MEM_SOFT_KB` / `LEDGER_MEM_HARD_KB`); an absent index is a no-op. Red-first fixture `memory_index_test.py` (oversized FAILs where the shipped audit passed; soft WARNs and strict-fails; small is clean).
+- **The memory/ledger boundary law (item 40)** — a memory carries durable discipline; a mechanically checkable assertion is a ledger claim with a named check, and the memory cites its `clm-` id (a recheck recipe in a memory is a claim in the wrong courthouse). One line in the `MEMORY.md` header and one in the operators-manual; on detection, register the claim, annotate the memory, never delete.
+- **The fail-posture taxonomy (item 42)** — an operators-manual paragraph naming the three postures by role: a blocking control fails **closed**, an advisory nudge fails **quiet**, a safety constraint fails **strict**. The kit already practices all three; the names keep a contributor from inverting one.
+- **The auto-park law (item 43)** — doctrine line: a scheduled or repeated check that could-not-run N (default 3) consecutive times files a claim naming its own brokenness and exits the rotation, so a broken detector is a visible parked obligation, not daily noise. The mechanical lint lands with the kit's first scheduled verifier, not before.
+- **Recall telemetry via disclosure (item 44)** — `report-conventions.md`'s process paragraph gains an optional "memories consulted:" line, the recall numerator a memory layer otherwise never has, feeding the prune signal at the cost of a sentence.
+- Two one-fact memories: `memory-ledger-boundary` and `fail-posture-taxonomy`.
+
+### Candidates (not built)
+- **SessionStart board-manifest (item 45)** — port the ancestor's M-SUMMARY pattern (computed independently, prepended, engineered to survive every loader failure) as an optional hook rendering the board's weakness-first summary (contested and needs-docket before signed counts) at session start. Per the ancestor's own D6 method, this ships only behind a season of item-44 recall telemetry showing session-start staleness actually bites — until then it is a named candidate, nothing more.
+
+### Sources
+- The mnemosyne postmortem (usefulness report) and its DECISIONS.md, 2026-05-30 → 2026-07-15, reconciled against the kit.
+
 ## v1.3.2 — 2026-07-15
 
 Truth in labeling: no rule reads stronger than its gate, and no residue lives only in a report. Docs and ledger, no code — the §11.33–34 chain-aware counters this amendment set was written against already shipped in v1.3.1 (the clm-0030 fix).
