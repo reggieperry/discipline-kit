@@ -2,6 +2,17 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.4.1 — 2026-07-15
+
+The adversarial-review harness — one skill, three modes, N attackers that hunt and never vote. E3 poisons confirmation, not refutation-hunting: the harness fans attacks out and disposes them with mechanisms, never a headcount.
+
+### Added
+- **`adversarial-review` skill** (`claude-user/skills/`, a tier-two sibling of `deep-reason` and `pr-review`), modes `pre-pr` / `own-pr` / `foreign-pr`. Fresh-context agents on the deep-reason pattern under its findings contract; **default two adversaries decorrelated by role** (logic-and-state, abuse-and-boundaries), 1..N, cross-family with lineage disclosure. The E3 rules encoded — agreements weightless (a clean pass is two absence reports with quoted queries), dedupe by lineage, a dead adversary is a loud could-not-run (`feedback_reviewer_harness_fail_closed`), the harness fans out and never votes. Findings grammar (verdict-first, then `file:line` / quoted evidence / repro / disposing check / severity) with a platform-comment-or-markdown rendering adapter and documented degradation tiers; ledger routing by mode (`pre-pr`/`own-pr` → `refutation` about the slice's claims, `foreign-pr` writes no foreign ledger — the artifact is the record). The pre-PR court-ladder doctrine: a finding whose disposing check does not exist is a new test the attack authors, red-first.
+- The `ledger-verify` "escalation is an adversary, not a committee" section **amended** from a single `deep-reason` attack to "one to N role-partitioned adversaries under the union-never-votes rules" — the singular was the anti-committee point, and the N-form honors it. README component table and "Using it" list updated. One memory: `adversaries-hunt-never-vote`.
+
+### Tested (item 60)
+- The harness run end to end on a toy `pre-pr` diff with two seeded defects, a shared plant, and a clean file: the logic-and-state adversary found the idempotency defect (and deferred the injection to the sibling), abuse-and-boundaries found the SQL injection, both caught the destructive-op plant which **deduped to one finding** (two lineages), the clean file yielded **absence reports with quoted queries** (not "LGTM"), the deduped finding routed as a `kind: refutation` about the parked slice claim, launches reconciled against completions (2 = 2, no dead lens), and every finding named a red-first authored check where none existed.
+
 ## v1.4.0 — 2026-07-15
 
 The authoring layer — an optional, default-off layer that carries the discipline up to decision and spec grain. An ADR's falsifier and a story's acceptance criteria are the prose parents of registered ledger claims; the record-home rule (a falsifier living only in prose is a court nobody convenes) applies at every grain.
