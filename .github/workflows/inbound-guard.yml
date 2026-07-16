@@ -1,0 +1,35 @@
+name: inbound-guard
+
+# Reject a signed ledger line that arrives through an un-gated commit path. The forgery guard in the
+# pre-commit hook (gate.py) is hook-local — it runs on a commit made on a harnessed machine. A FORK PR
+# is a commit path with no such hook, so a contributor (or an impostor) could add a `"status":"signed"`
+# ledger line that nothing structurally rejects on the way in. This closes the inbound side.
+#
+# Scoped to FORK PRs only: a same-repo PR from a harnessed maintainer carries lines the local gate
+# already signed, and rejecting those would break the maintainer's own flow. A fork's added signature
+# can never be trusted, and the doctrine is that a contributor sends the claim, not the verdict — the
+# maintainer's gate signs after merge.
+#
+# Adopters: copy this file to .github/workflows/inbound-guard.yml. It needs no secrets and only
+# read access; it runs `ledger/inbound_guard.py` (installed by the harness). On a private solo repo
+# there are no fork PRs, so this guard is inert — see the operators-manual Options section.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  inbound-guard:
+    if: ${{ github.event.pull_request.head.repo.fork == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: reject added signed ledger lines
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          git diff "$BASE".."$HEAD" -- 'ledger/**' | python3 ledger/inbound_guard.py

@@ -50,6 +50,12 @@ jobs:
       - name: install-completeness fixture (referenced docs vendored into the target on install)
         run: python3 harness/ledger/fixtures/install_completeness_test.py
 
+      - name: inbound-guard fixture (an added signed ledger line is rejected on the inbound path)
+        run: python3 harness/ledger/fixtures/inbound_guard_test.py
+
+      - name: interchange fixture (valid/receipt-failing/forged-passing/malformed blocks graded)
+        run: python3 harness/ledger/fixtures/interchange_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify

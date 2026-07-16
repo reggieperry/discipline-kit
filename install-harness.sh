@@ -39,7 +39,7 @@ echo "Installing dev-ledger harness into $TARGET"
 # 1. ledger helpers — copy only what is ABSENT, so a re-run (or a repo with a
 # customized gate) is a true no-op and nothing is clobbered.
 mkdir -p ledger/trace ledger/fixtures
-for f in audit.py append retire gate.py librarian red-proof board.sh README.md operators-manual.md; do
+for f in audit.py append retire gate.py librarian red-proof board.sh inbound_guard.py interchange.py README.md operators-manual.md; do
   kit_file "$H/ledger/$f" "ledger/$f"
 done
 # the ledger-tooling fixtures adopting repos verify (NOT install_upgrade_test — that tests the

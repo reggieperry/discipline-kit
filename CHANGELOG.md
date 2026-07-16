@@ -2,6 +2,20 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## Unreleased
+
+- **Sender-repo attestation (shared-tier roadmap).** Where cryptographic provenance is wanted, the sender's CI — on a green `harness-verify` — emits a keyless GitHub artifact attestation ("harness verified green at `<sha>`, kit `<VERSION>`", via the workflow's OIDC identity); the PR body links it, and the receiver's inbound workflow verifies it in one call. Bounded guarantee, stated so it never reads stronger: this proves a repo whose CI vouches for a green harness sent the contribution — it does not and cannot prove what kind of author wrote it, which is unprovable in principle and, under this constitution, unnecessary. Verify the claims, never the badge (memory `verify-claims-not-badges`).
+
+## v1.5.0 — 2026-07-15
+
+Inbound machinery for any adopting repo — the kit's own repo is the first customer. Organizing rule: inbound is claim-algebra traffic. A bug report is an attempted refutation of a claim, a feature request is an externally authored story, a foreign PR is a testimony-grade contribution. On a private, solo, local repo the machinery is inert and the Options section says so.
+
+### Added
+- **The inbound signed-line guard (detector-class, red-first).** `harness/ledger/inbound_guard.py` reads a diff and rejects any *added* signed ledger line — the forgery guard in `gate.py` is hook-local, and a fork PR is a commit path with no hook. `harness/templates/inbound-guard.yml` is the `pull_request` workflow, **scoped to fork PRs** (`head.repo.fork`), so the maintainer's own gate-signed same-repo PRs are exempt; the kit's `.github/workflows/inbound-guard.yml` is the filled instance. Message: *"signatures are minted only by this repo's gate; contribute the claim, not the verdict."* Red-first fixture `inbound_guard_test.py`.
+- **The kit-interchange block + parser (detector-class, red-first).** `harness/ledger/interchange.py` parses a `kit-interchange: v1` PR/issue body block (sender, claim, disposing check, red line, `harness-verify` hash) and, under `--verify`, re-runs the disposing check to grade — DISCHARGEABLE / RECEIPT-FAILED / MALFORMED. **The block authenticates nothing; it makes contributions dischargeable** — a forged block whose check passes is still DISCHARGEABLE (verify the claims, never the badge). Red-first fixture `interchange_test.py` (valid / receipt-failing / forged-passing / malformed).
+- **Receipt-demanding issue templates** (`harness/templates/.github-issue-templates/` + the kit's own `.github/ISSUE_TEMPLATE/`): the bug template asks for the `ledger/VERSION` receipt, the verification output, and the failing command verbatim; the feature template asks for the outcome and what would be accepted as done.
+- **Triage doctrine** (operators-manual), an **Inbound Options choice-point** (default relevant only above the private-solo tier), **`CONTRIBUTING.md`** (external PRs welcome as testimony; the maintainer wraps them in the claim and the gate signs after merge; no contributor runs the full loop), the **`SECURITY.md`** private-disclosure line strengthened (the kit enables private vulnerability reporting), and `story-intake` gaining a public issue as a second board source. Two memories: `inbound-is-claim-traffic`, `verify-claims-not-badges`.
+
 ## v1.4.1 — 2026-07-15
 
 The adversarial-review harness — one skill, three modes, N attackers that hunt and never vote. E3 poisons confirmation, not refutation-hunting: the harness fans attacks out and disposes them with mechanisms, never a headcount.
