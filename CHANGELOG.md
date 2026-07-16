@@ -2,6 +2,21 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.2 — 2026-07-15
+
+Truth in labeling: no rule reads stronger than its gate, and no residue lives only in a report. Docs and ledger, no code — the §11.33–34 chain-aware counters this amendment set was written against already shipped in v1.3.1 (the clm-0030 fix).
+
+### Added
+- **Enforcement-grade labels on the five per-language security rules (§12.37).** Each states at the top whether the gate mechanically polices it: `python-security` names `bandit` as its wired enforcer (the only one of five with a scanner — it rides Check A, findings diff, `#nosec` policed); `go-security` (gosec), `ts-security` (`eslint-plugin-security`/`semgrep`), and `java-security` (FindSecBugs on the SpotBugs engine, pending a compiled pilot) state "review and convention until the toolchain is wired"; `scala-security` states the honest hard case — the wired Scala scanners (scalafix, WartRemover) are purity tools and no native `bandit`-equivalent exists.
+- **A "Security-scanner parity" roadmap** in the README rule section (§12.38): the per-language wiring path, each detector-class when it lands, with the standing rule that the wiring commit deletes that rule's enforcement-grade disclaimer in the same diff — the label and the gate move together or not at all. The wirings are future slices, not this release.
+- **Residue homes so findings outlive the done-report (§11.35).** The Scala toolchain's latent `forAllNoShrink` fail-open (emit-only-when-present, unlike Java's always-emit `shrinkingOff`) is filed as a tracked kit ledger claim under a check naming its future fixture, rather than living only in a report (the glut-laundering incident's shape). A standing doc line in the README and the operators-manual records that SpotBugs is fail-closed and deliberately outside default Check A until a compiled pilot exists, naming the enabling path.
+
+### Deferred
+- **The `D.scalacheck` → `D.property` display alias (§11.35c)** stays deferred: the label lives inside the shared `_check_scalacheck_params` engine helper, so a per-toolchain alias would touch the engine — the standing wager holds it until a reason to touch the engine arrives anyway.
+
+### Sources
+- The agentic-TDD-loop build brief's §§11–12 amendments (2026-07-14), and the v1.3.0 dogfooding residues (the Java-layer done report + clm-0030).
+
 ## v1.3.1 — 2026-07-15
 
 Squash-safe precedence, and the clm-0030 discharge-chain fix it surfaced. The loop's precedence check reads per-commit ancestry; a squash-merge erases it. The fix is the gate's own pattern — verify where the history exists, persist the verdict as content.

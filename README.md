@@ -6,9 +6,9 @@ It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy
 
 ## Status, scope, and license
 
-**v1.3.0.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing fixtures, and the differential-gate unit tests — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+**v1.3.2.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
 
-**Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The Java coding-discipline layer — the gate's `JavaToolchain` and the eight `java-*` rules — is the latest release, built under the kit's own self-installed agentic loop; see `CHANGELOG.md`.
+**Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The latest releases add the Java coding-discipline layer (the gate's `JavaToolchain` and the eight `java-*` rules), squash-safe precedence (`audit.py --certify`), and enforcement-grade labels on the security rules — all built under the kit's own self-installed agentic loop; see `CHANGELOG.md`.
 
 ## What's in here
 
@@ -46,11 +46,21 @@ harness/                → the dev-ledger + commit-path gate (per-repo; install
   skills/                 six ledger-* skills: read before writing, claim before building, cite before re-checking
   templates/              check.sh / languages / hook snippets
 memories/               → optional, per-project memory dir
-  58 scrubbed methodology memories + MEMORY.md index
+  66 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)
 scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
 ```
+
+### Security-scanner parity
+
+A security rule states its **enforcement grade** at the top — no rule reads stronger than its gate. Today only one of the five is mechanically policed; the roadmap closes the gap, and each wiring is detector-class when it lands (red-first fixtures, and the wiring commit deletes that rule's enforcement-grade disclaimer in the same diff — the label and the gate move together or not at all):
+
+- **Python** — wired now: `bandit` rides Check A (findings diff, `#nosec` suppressions policed). The reference point.
+- **Go** — roadmap: `gosec` as a `GoToolchain` (bandit's exact analog, the same scanner-plugin exercise `java` proved); the rule's G-code citations become live finding identities.
+- **Java** — roadmap: FindSecBugs on the existing SpotBugs engine, when the compiled pilot opens.
+- **TypeScript** — roadmap: `eslint-plugin-security` or `semgrep`, with the TS toolchain.
+- **Scala** — deferred: no native `bandit`-equivalent; options are bytecode-side FindSecBugs or `semgrep`.
 
 ## What this is NOT — the autonomous chain
 
@@ -89,6 +99,8 @@ Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `
   ```
 
   It needs `uv` (for ruff/mypy) and `git`; without `uv`, follow `review-checklist.md` by hand.
+
+- **SpotBugs (Java) is implemented fail-closed and deliberately outside default Check A** until a compiled pilot exists: it analyzes bytecode, and a source-snapshot differential cannot compile a tree, so wiring it into the default path would fail *open* on a source-only repo — instead it raises `SpotBugsOperationalError` when the tool is present but no `target/classes`/`build/classes` bytecode is found. The enabling path is a compiled pilot repo (bytecode on disk), where FindSecBugs can then ride the same SpotBugs engine as the Java security scanner.
 
 ## Refreshing and provenance
 

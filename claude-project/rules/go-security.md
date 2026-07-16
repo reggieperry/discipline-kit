@@ -5,6 +5,8 @@ paths:
 
 # Go security
 
+**Enforcement grade:** review and convention until the `gosec` toolchain is wired; the gate does not yet police this file's topics mechanically. The gosec CWE citations below are canon, not a live finding surface.
+
 The defenses against a program's real attack surface — when it shells out to external tools (`git`, a linter, the `go` toolchain), creates and reads temp files and working directories, parses untrusted JSON/stdout from external tools, and makes bounded LLM calls. So command injection, path traversal, untrusted-input parsing, resource exhaustion, and the model I/O boundary are the load-bearing classes for that kind of program, but this is a general Go-security rule. Sources, all primary: the gosec rule catalog (`securego/gosec` `RULES.md`, with every CWE here read from gosec's own `ruleToCWE` map in `issue/issue.go`), go.dev/security (best-practices, govulncheck, the module reference), the Go stdlib package docs (`os/exec`, `path/filepath`, `database/sql`, `html/template`, `crypto/rand`, `crypto/subtle`, `os.Root`), the Go blog (`go.dev/blog/osroot`, `go.dev/blog/path-security`), OWASP Go-SCP, and the CISA/MITRE 2024 CWE Top 25 — corroborated by the Snyk, Datadog, and Semgrep Go cheat sheets.
 
 > See `go-errors.md` for never dropping an error and never leaking secrets into error strings (gosec G104, CWE-703), `go-concurrency.md` for the context timeout on every external call, `go-types.md` for encoding invariants so bad input can't construct a bad value, `go-modules.md` for pinning and verifying `go.mod`/`go.sum`, `go-testing.md` for fuzzing the parsing boundary, and `go-llm.md` for the bounded structured-output schema as the typed model boundary.
