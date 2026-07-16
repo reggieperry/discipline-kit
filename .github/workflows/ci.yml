@@ -56,6 +56,9 @@ jobs:
       - name: interchange fixture (valid/receipt-failing/forged-passing/malformed blocks graded)
         run: python3 harness/ledger/fixtures/interchange_test.py
 
+      - name: authoring-artifacts fixture (the ADR/story templates + four skills keep their structure)
+        run: python3 harness/ledger/fixtures/authoring_artifacts_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify
