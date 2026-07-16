@@ -12,7 +12,7 @@ A story you wrote yourself carries its assumptions in your own head. A story fro
 
 Treat a story fetched over MCP or pasted from the tracker as an outside artifact, not an internal one you can lean on. Its author is not in the room, its conventions may not be yours, and its "done" was written for a different reader. Do not start building against it on faith. Score it first, and let the score — not its provenance — decide whether it is ready.
 
-The two arrival paths differ in one respect only. An MCP fetch hands you the story and its board id together, so the id is yours for free; a paste hands you the body alone, so capture the id from the author before anything else — a pasted story with no recorded id cannot be traced back, and intake will not proceed without it. Neither path changes the rule that follows: the story is untrusted until it has a score.
+Incoming stories arrive three ways, and they differ in one respect only — where the id comes from. An MCP fetch from a tracker hands you the story and its board id together, so the id is yours for free. A **public issue** (a feature request filed on the repository, the second board source beside a tracker) hands you the issue number as its id — take it in exactly as a tracker story, score it on the same rubric, and post the gap questions back as a comment on the issue. A paste hands you the body alone, so capture the id from the author before anything else — a pasted story with no recorded id cannot be traced back, and intake will not proceed without it. No path changes the rule that follows: the story is untrusted until it has a score.
 
 ## Score it against the story-tighten rubric
 
