@@ -2,6 +2,21 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.4.0 — 2026-07-15
+
+The authoring layer — an optional, default-off layer that carries the discipline up to decision and spec grain. An ADR's falsifier and a story's acceptance criteria are the prose parents of registered ledger claims; the record-home rule (a falsifier living only in prose is a court nobody convenes) applies at every grain.
+
+### Added
+- **ADR and story templates** — `harness/templates/ADR-template.md` (fixed section order: Context, numbered Decisions, Consequences, Alternatives, a non-negotiable Falsification condition, Cross-references; stable never-renumbered ids; a Status line that cites the acceptance-gate verdict as testimony; per-Decision superseded-in-part-with-retains, never delete) with a `docs/adrs/README.md` registry; and `harness/templates/story-template.md` (portable frontmatter `id`/`title`/`deps`/`labels`/`sensitive_files`/`status`; six body sections; the problem grounded against HEAD at `path:line`; the anti-weakening contract carried verbatim in the acceptance criteria) with a `stories/README.md`.
+- **Four authoring skills** (`harness/skills/`): `adr-write` (the pre-draft `deep-reason` gate whose verdict lands as Status-line testimony, the falsifier registered as a ledger claim, status flips gated on named artifacts, per-Decision supersession), `story-write` (the six sections, problem at HEAD, anti-weakening verbatim, a detector story declares its red), `story-tighten` (the six-dimension 0/1/2 readiness rubric, dispatch at 10+, the SSD rule — split on file-ownership and dependency seams, never conceptual boundaries, each child independently 10+), and `story-intake` (an incoming board story is untrusted until scored; one parked claim per acceptance criterion recording the board id; gaps surfaced as questions, never silent repairs).
+- **The record-home rule and grain statement** in the operators-manual, and an **Options choice-point** for the authoring layer (default off, one word to enable). One memory: `specs-are-claim-parents`.
+
+### Tested (item 55)
+- Two fresh-instance acceptance runs, unaided: `adr-write` on a toy decision produced a gated ADR (Status citing testimony, falsifier registered and cited, six sections, a real Decision, audit 9/9); `story-intake` on a deliberately loose pasted story scored it 3/12, raised seven gap questions, parked a claim per criterion with the board id, and made no silent repairs. Both earned their keep — they caught two skill ambiguities (the vague-band vs park-each-criterion reconciliation, and the ADR acceptance testimony's `about` target), fixed in the same release.
+
+### Note
+- The `memory-index` check fired for real this release — adding the `specs-are-claim-parents` memory pushed `MEMORY.md` to 16.2 KB, over the soft budget; the index was pruned back to one terse line per memory (15.4 KB). The guard working as designed.
+
 ## v1.3.5 — 2026-07-15
 
 The three defects the v1.3.4 front-door acceptance caught, fixed. The acceptance test refuted its own docs — the loop working on documentation — and this closes what it found.

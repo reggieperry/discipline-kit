@@ -24,7 +24,7 @@ It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy
 
 ## Status, scope, and license
 
-**v1.3.5.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+**v1.4.0.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
 
 **Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The latest releases add the Java coding-discipline layer (the gate's `JavaToolchain` and the eight `java-*` rules), squash-safe precedence (`audit.py --certify`), and enforcement-grade labels on the security rules — all built under the kit's own self-installed agentic loop; see `CHANGELOG.md`.
 
@@ -61,10 +61,12 @@ reference/
   voicing-document.md     the human-prose writing register
 harness/                → the dev-ledger + commit-path gate (per-repo; install-harness.sh)
   ledger/                 append / audit / gate / librarian / retire + board.sh (read-only board views)
-  skills/                 six ledger-* skills: read before writing, claim before building, cite before re-checking
-  templates/              check.sh / languages / hook snippets
+  skills/                 six ledger-* skills (read before writing, claim before building, cite
+                          before re-checking) + the optional authoring layer: adr-write,
+                          story-write, story-tighten, story-intake (default off — a Tour choice)
+  templates/              check.sh / languages / hook snippets + ADR + story templates
 memories/               → optional, per-project memory dir
-  68 scrubbed methodology memories + MEMORY.md index
+  69 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)
 scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
