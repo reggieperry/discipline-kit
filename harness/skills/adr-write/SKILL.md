@@ -44,7 +44,16 @@ D2. Route inter-service claims through the typed schema, not free prose.
 
 Before an ADR is drafted — and again before its second draft — a fresh-context `deep-reason` attack pressure-tests the decision. This is the standing trigger, not an optional courtesy: a verdict-shaped, hard-to-reverse call earns an adversary that did not help you reach it and does not share your session's blind spots. The attack hunts the case where the chosen Decision fails and a rejected Alternative would have held.
 
-Its verdict is **receipted testimony recorded on the ADR's Status line**, never a self-reported "reviewed." The `deep-reason` pass lands as a `testimony` or `refutation` entry on the ledger (`ledger-write`), and the Status line cites that entry — for example, `Status: Proposed — deep-reason attack clm-0212, no reachable refutation`. A pass that finds a defect appends a `refutation`; a clean pass appends `testimony` and signs nothing. A deep-reason verdict is not a signature — it is an adversary's absence report, bounded as such, and the ADR says so rather than dressing it as approval.
+Its verdict is **receipted testimony recorded on the ADR's Status line**, never a self-reported "reviewed." The `deep-reason` pass lands as a `testimony` or `refutation` entry on the ledger (`ledger-write`), and the Status line cites that entry in the template's two-line form — the state on the first line, the gate citation on the second:
+
+```
+**Status:** Accepted — <date>.
+Acceptance gate: deep-reason pass, testimony clm-0212 (no reachable refutation).
+```
+
+A pass that finds a defect appends a `refutation`; a clean pass appends `testimony` and signs nothing. A deep-reason verdict is not a signature — it is an adversary's absence report, bounded as such, and the ADR says so rather than dressing it as approval.
+
+The testimony entry needs an `about` target, and there is no `clm-` id for the ADR itself, so point it at the **falsifier claim** the Falsification section registers — which means **append the falsifier claim first**, then the acceptance testimony `about` it. The one ledger id the ADR already owns is its falsifier; the acceptance verdict attaches to the same court the decision will be judged in.
 
 ## Status flips are gated on named artifacts
 

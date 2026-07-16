@@ -18,9 +18,11 @@ The two arrival paths differ in one respect only. An MCP fetch hands you the sto
 
 Reuse the six-dimension 0/1/2 readiness rubric from `story-tighten` — scope named, out-of-scope declared, acceptance criteria atomic and verifiable, reference pattern given, verification concrete, frontmatter complete — and total it. Do not reinvent the dimensions or the bands; `story-tighten` owns the one rubric, so an incoming story and a locally authored one are held to the same bar.
 
-- **10–12 (tight):** intake-ready. Proceed to derive the claims.
-- **6–9 (moderate):** name the weak dimensions as questions (below), and do not proceed on the gaps.
-- **0–5 (vague):** send it back. A vague external spec is not yours to guess at.
+- **10–12 (tight):** intake-ready — derive the claims and the story can enter the loop.
+- **6–9 (moderate):** derive the claims, but name the weak dimensions as questions (below) and do not *build* past them until they are answered.
+- **0–5 (vague):** derive the claims for the record, send the story back with its gap questions, and do not build against it — a vague external spec is not yours to guess at.
+
+Deriving the claims and building against the story are two different acts. Intake **always** parks the criteria — parking records what the story asked for, claim-first, at every band; it is not building. What the band governs is whether the story may proceed *past* its questions into the loop: a tight story may, a moderate or vague one may not until the gaps are answered. "Send it back" means do not build, not do not record.
 
 Score each dimension against what the story actually says, not against what you can infer it meant. An acceptance criterion that reads "the export is correct" scores 0 on dimension 3 — it names no observable outcome, and inferring one is exactly the repair intake forbids. Record the per-dimension scores; they are the map of which questions to raise, and the moderate band is where most externally authored stories land.
 
@@ -38,7 +40,7 @@ The incoming story enters the courthouse the same way any work does — claim-fi
 
     echo '{"claim":"<acceptance criterion, verbatim> (board: <board-id>)","subject":"<slice>","source":"claude-code","kind":"assertion","status":"unverified","check":"<non-runnable-name>"}' | ledger/append
 
-A criterion that no check can discharge is the same design error `ledger-preregister` warns about — surface it as a question, not a parked claim under an undischargeable name. Deriving the claims before the code also lands the intake's ledger-only commit ahead of any build commit, so the precedence timestamp is intact (`ledger-preregister`, "The claim is its own commit").
+Two shapes of weak criterion split here. A criterion that is *vague but mechanizable* — "performance is not affected" names no metric yet, but a benchmark check could exist — parks under a non-runnable check name (the future check's address, for supersede-at-landing) **and** raises the gap as a question: what metric, what baseline, what threshold. A criterion that can *never* be mechanized — a pure judgment no check could ever settle — is surfaced as a question and not parked as a dischargeable claim; if it must be recorded it goes under `check: none` as the judgment it is, per `ledger-write`. Parking the mechanizable-but-vague is not the design error `ledger-preregister` warns about; parking the genuinely-undischargeable under a check name that pretends a court exists is. Deriving the claims before the code also lands the intake's ledger-only commit ahead of any build commit, so the precedence timestamp is intact (`ledger-preregister`, "The claim is its own commit").
 
 If the story carries a target metric — a throughput number, an error rate, a coverage floor — that is a prediction, and it rides its own claim line rather than folding into an acceptance criterion, per `ledger-preregister`. A bet that cannot independently die is not a bet.
 
