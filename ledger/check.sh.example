@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ledger/check.sh — the repo's mechanical check, run by the commit-path gate.
+# It must check EVERY language declared in ledger/languages; a non-zero exit blocks the
+# commit and records a refuted entry. Keep it HERMETIC (no network, no live services) —
+# it runs inside the pre-commit hook. Fail fast; `set -e` stops at the first failure.
+#
+# Single-language repos usually need no check.sh at all (the gate auto-detects the
+# toolchain). Write one when the repo builds from several languages, or to pin the exact
+# command. Example — a Scala backend and a TypeScript frontend:
+set -euo pipefail
+cd "$(dirname "$0")/.."
+# Fast, deterministic: the ledger board views must match their committed fixture (fail first).
+sh ledger/board.sh --selftest
+sbt -batch -Dsbt.color=false check
+( cd path/to/frontend && npm run check )   # e.g. prettier --check && eslint && tsc --noEmit && vitest run
+# Java (Maven) — the gate's auto-detected default is `mvn -B -q verify`, but `verify` runs
+# integration tests; inside a pre-commit hook pin a SCOPED, hermetic command instead:
+#   mvn -B -q -DskipITs test          # unit tests only; no ITs, no daemon, no network
+# Gradle: use the wrapper, never a daemon — `./gradlew --no-daemon --console=plain check`.
+
+# ── Graduation path (commented; uncomment for detector-class paths once the registered bet resolves) ──
+# red-proof is advisory by its own docstring's law: "a norm earns blocking power only after a season
+# of receipts." Once the season claim resolves — the red-proof-coverage sweep at date D gavels it —
+# a repo may promote red-proof from a done-report line to a hard gate for DETECTOR-CLASS paths:
+#
+#   for path in $(git diff --cached --name-only); do
+#     case "$path" in
+#       *[Gg]ate*|*[Cc]heck*|*guard*)          # detector-class paths — tune to the repo
+#         ledger/red-proof --test-cmd '<cmd running this slice's new detector tests>' || {
+#           echo "red-proof: detector-class change without a confirmed red — blocked"; exit 1; }
+#         ;;
+#     esac
+#   done
+#
+# Until then keep red-proof OUT of the blocking path: run it by hand (or with --ledger to file the
+# receipt) and disclose the result in the process paragraph. Blocking before a season of receipts
+# punishes the honest and teaches nothing.

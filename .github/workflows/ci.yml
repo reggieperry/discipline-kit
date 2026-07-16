@@ -47,6 +47,9 @@ jobs:
       - name: memory-index size fixture (soft WARNs, hard FAILs — index honesty with teeth)
         run: python3 harness/ledger/fixtures/memory_index_test.py
 
+      - name: install-completeness fixture (referenced docs vendored into the target on install)
+        run: python3 harness/ledger/fixtures/install_completeness_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify
