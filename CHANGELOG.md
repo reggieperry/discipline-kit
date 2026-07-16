@@ -2,6 +2,18 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## v1.3.5 — 2026-07-15
+
+The three defects the v1.3.4 front-door acceptance caught, fixed. The acceptance test refuted its own docs — the loop working on documentation — and this closes what it found.
+
+### Fixed
+- **Install-completeness (finding 2, detector-class).** The installed operators-manual, the `ledger-write` skill, and the ledger README reference `report-conventions.md` and `check.sh.example`, but the installer never vendored them — a fresh instance working from the installed repo alone could not find the conventions it was pointed at. `install-harness.sh` now copies both into the target's `ledger/`, and the four references point at the installed `ledger/` path. Red-first fixture `install_completeness_test.py` (a fresh install must leave both docs present).
+- **The bare-script fail-open gloss (finding 1).** The operators-manual check.sh entry and the ledger README overstated auto-detection: a repo with source files but **no build marker** (loose scripts, no `pyproject.toml`) auto-detects *no* check, so a code change commits with only the forgery guard and audit and nothing ever signs. Both now say so and direct you to pin `ledger/check.sh`.
+- **The dangling `SECURITY.md` reference (finding 3).** The Options "Tier" entry said the boundary "lands in `SECURITY.md`," but the installer does not drop `SECURITY.md` into the target. Reworded to reference the kit's own `SECURITY.md` (the trust model you install under), which does not dangle.
+
+### Sources
+- The §14.49 front-door acceptance run (2026-07-15): the fresh-instance Tour + Work test whose findings these three fixes close.
+
 ## v1.3.4 — 2026-07-15
 
 The conversational front door. The kit's operator is Claude Code and its interface is the utterance, so the entry path is a first-class, tested artifact — not folklore.
