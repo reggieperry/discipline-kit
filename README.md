@@ -46,7 +46,7 @@ harness/                → the dev-ledger + commit-path gate (per-repo; install
   skills/                 six ledger-* skills: read before writing, claim before building, cite before re-checking
   templates/              check.sh / languages / hook snippets
 memories/               → optional, per-project memory dir
-  58 scrubbed methodology memories + MEMORY.md index
+  66 scrubbed methodology memories + MEMORY.md index
 install.sh              user-level installer (guards existing config)
 scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
