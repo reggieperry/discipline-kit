@@ -27,7 +27,7 @@ The skills teach the instances; `ledger/operators-manual.md` (installed alongsid
 
 ## Which languages fire the check
 
-The gate must fire for **every language that builds the system**, and `ledger/check.sh` must in turn check **every** one of them — firing for a language you don't check lets that language weaken unseen (a fail-open). A repo built from one language needs neither file: the gate auto-detects the toolchain and its extensions. A repo built from several — or whose build markers are nested or sit beside vendored code in another language — declares them explicitly:
+The gate must fire for **every language that builds the system**, and `ledger/check.sh` must in turn check **every** one of them — firing for a language you don't check lets that language weaken unseen (a fail-open). A repo built from one language *with a build marker* (`build.sbt`, `pom.xml`/`build.gradle`, `pyproject.toml`) needs neither file: the gate auto-detects the toolchain and its extensions. A repo with **no** build marker — loose scripts, say — auto-detects nothing, so it must pin `ledger/check.sh` or code commits with no mechanical check behind them. A repo built from several — or whose build markers are nested or sit beside vendored code in another language — declares them explicitly:
 
 - `ledger/languages` lists the extensions that fire the check (e.g. `.scala .sc .sbt` + `.ts .tsx`).
 - `ledger/check.sh` runs the check for all of them (e.g. `sbt check` **and** the frontend's `npm run check`).
