@@ -13,5 +13,6 @@ python3 harness/ledger/fixtures/gate_sentinel_test.py
 python3 harness/ledger/fixtures/java_plumbing_test.py
 python3 harness/ledger/fixtures/squash_precedence_test.py
 python3 harness/ledger/fixtures/memory_index_test.py
+python3 harness/ledger/fixtures/install_completeness_test.py
 python3 reference/test_sdlc_gate.py
 python3 harness/algebra/validate_note.py

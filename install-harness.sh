@@ -47,6 +47,11 @@ done
 for fx in board-fixture.jsonl retire_immutable_test.py red_proof_test.py tdd_precedence_test.py gate_sentinel_test.py java_plumbing_test.py squash_precedence_test.py memory_index_test.py; do
   kit_file "$H/ledger/fixtures/$fx" "ledger/fixtures/$fx"
 done
+# referenced docs — the operators-manual, the ledger-write skill, and the ledger README point at
+# these by name, so vendor them into ledger/ or the reference dangles in an installed repo.
+for f in report-conventions.md check.sh.example; do
+  kit_file "$H/templates/$f" "ledger/$f"
+done
 chmod +x ledger/append ledger/retire ledger/gate.py ledger/librarian ledger/audit.py ledger/board.sh ledger/red-proof
 [ -f ledger/trace/.gitkeep ] || touch ledger/trace/.gitkeep
 echo "$KIT_VERSION" > ledger/VERSION
