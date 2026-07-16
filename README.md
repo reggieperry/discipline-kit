@@ -2,11 +2,29 @@
 
 Portable engineering discipline for Claude Code — the auto-loading rules, principal-engineer guides, review skills, methodology memories, and the differential gate, packaged to drop into a fresh Claude Code install on another machine.
 
+## Quick start — say this to Claude Code
+
+The kit's operator is Claude Code; its interface is the utterance. Paste these prompts. Each is **read-first** (it points the instance at the docs before it acts), ends with a **receipt demand** (show me the output), and is **dual-audience** — the instance reading this README executes the prompt as its own checklist. There is one ceremony: the **Install** prompt. After it, the injected `CLAUDE.md` harness section and the auto-loaded `ledger-*` skills make the discipline ambient — the rest are orientation and recovery, not setup.
+
+> **Install (one time):** "The discipline kit is at `<path>` (or: clone `<repo-url>` to a sibling directory). Read its `README.md`, `install.md`, and `SECURITY.md` first. Then install the harness into this repository and run its acceptance in one command — `install-harness.sh --dir . --verify` — the single-user (private) tier is the only shipped mode. Show me the full verify output, including the forgery-probe result and the `VERSION` stamp. After install, most users should run the Tour prompt next."
+>
+> **Orient (each new project, or when unsure):** "Read `ledger/operators-manual.md` and the six ledger skills, then give me the board — weaknesses first."
+>
+> **Work (a slice):** "Take on `<task>` as a kit slice: register the acceptance claim per `ledger-preregister` as its own ledger-only commit before any code, tell me the `clm` id, then proceed — red-first if this is detector-class, otherwise your declared allocation. Done-report per `report-conventions` when the gate signs."
+>
+> **When a commit blocks:** "Show me the refuted claim and the check output verbatim, then walk me through the three honest moves before touching anything."
+>
+> **Upgrade:** "Run `install-harness.sh --upgrade`, show me the `VERSION` delta, and re-run `harness-verify`."
+>
+> **Tour the options (recommended after install):** "Walk me through this kit's options for this repo, one at a time, from the operators-manual's Options section: the tier, the pinned check command, language coverage, the audit's strict-versus-warn modes and the preregistration check, the coverage opt-in, red-proof's advisory status, and the waiver rules. For each: the default, what changing it buys, and your recommendation for this repo. Apply what I choose to the repo-owned files, then append one configuration claim to the ledger recording every choice — including the defaults I kept — and show it to me."
+
+This installs the private tier: your ledger is local and binds against re-narration, not against you. The full lifecycle is walked in [`docs/week-with-the-kit.md`](docs/week-with-the-kit.md); the trust model is `SECURITY.md`.
+
 It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
 
 ## Status, scope, and license
 
-**v1.3.3.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+**v1.3.4.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the ledger board selftest, the retire / red-proof / gate-sentinel / java-plumbing / squash-precedence / memory-index fixtures, the differential-gate unit tests, and the PR-mode precedence certifier — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
 
 **Shipped mode: single-user.** The dev-ledger runs with the legacy `claims.jsonl` as its one shard; the audit recognizes the sharded layout as the concurrency foundation, but real multi-writer sharding and **team mode** (server-side signing, provenance-verifiable discharge, the GitHub post-merge reconcile) are **deferred** — designed in the reconciliation, not shipped in this release. Single-user is the only supported mode today; multi-writer support ships when a real deployment needs it. Do not rely on any server-side or fork-PR guarantee here (`SECURITY.md` states this plainly). The latest releases add the Java coding-discipline layer (the gate's `JavaToolchain` and the eight `java-*` rules), squash-safe precedence (`audit.py --certify`), and enforcement-grade labels on the security rules — all built under the kit's own self-installed agentic loop; see `CHANGELOG.md`.
 
