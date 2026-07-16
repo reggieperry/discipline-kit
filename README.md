@@ -36,6 +36,7 @@ claude-user/            → installs into ~/.claude
   settings.json           conservative permissions (local git only, no auto-bypass)
   skills/deep-reason/     fresh-context adversary and verdict subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
+  skills/adversarial-review/  N role-partitioned adversaries against a diff (pre-pr/own-pr/foreign-pr)
 claude-project/         → copies into each repo's .claude/
   rules/                  50 auto-loading rules in three layers:
                           craft-* (language-neutral: abstraction, complexity,
@@ -111,6 +112,7 @@ Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `
 - **Rules** load themselves on edit. Nothing to invoke.
 - **`/deep-reason`** spins up a fresh-context Opus subagent for verdict-shaped or hard-to-reverse decisions; the self-trigger criteria are in the installed `CLAUDE.md`.
 - **`/pr-review`** reviews a PR, branch, or diff — it runs the gate first, loads the *reviewed repo's own* rules, then applies the language-neutral core.
+- **`/adversarial-review`** fans out N fresh-context adversaries decorrelated by role against a diff (modes `pre-pr` / `own-pr` / `foreign-pr`) — the tier-two red-team above `pr-review`, reserved for detector-class, sensitive, contested, or hairy-state changes; it hunts what no check encodes yet and never votes.
 - **The gate** enforces anti-weakening on a branch: no new ruff/mypy/bandit errors, no new suppressions, no new skipped tests, no assertion-count loss versus the merge-base.
 
   ```
