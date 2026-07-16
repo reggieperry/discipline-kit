@@ -55,6 +55,10 @@ Two generative confirmers share their blind spots — correlated confirmation is
 
 When a refutation defeats a claim (a standing refutation, no surviving support), the defeated entry moves to `ledger/trace/` with `trace_reason` pointing at the refuting id. The live file never carries a claim whose defeat is on the record. `ledger/librarian` does this for superseded claims and reports contested ones. Recovery is allowed — a traced entry can return via a new entry that cites it — but the traced original is immutable.
 
+## Squash-merge compatibility
+
+Precedence is certified pre-merge and carried in-ledger as a verdict line; squash-merge freely — the audit trail is content, not commit topology. `tdd-precedence` reads per-commit ancestry where it survives (rebase-merge and merge-commit keep the richer per-commit provenance, and are preferred where the operator owns the merge policy). Where a squash collapses the claim-first commit and its code into one, run `python3 ledger/audit.py --certify` on the intact branch **before** merging: it emits a `precedence verified: …` testimony (a certificate) for each verifiable park→supersede pair, which rides the squash as content, and the main-side audit consumes it in place of the erased ancestry. `--certify` is an emitter (exit 0); the warn-grade `tdd-precedence` flags a pair with no certifiable precedence. GitHub's retained `refs/pull/N/head` is a recovery path for a dangling branch sha — documented as a convenience, never relied on.
+
 ## Rollback
 
 `git checkout pre-harness-baseline` restores the pre-harness tree (the installer tags it). Removal is: delete `ledger/`, revert the hook wiring (`.githooks/pre-commit` gate block, `.githooks/post-commit`), revert the CLAUDE.md demotion section. Accumulated ledger contents should be archived, not destroyed.

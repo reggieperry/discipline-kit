@@ -28,9 +28,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 REQUIRED = ("id", "ts", "claim", "source", "kind", "status")
@@ -264,14 +266,19 @@ def is_ancestor(root: Path, a: str, b: str) -> bool:
 
 
 def park_supersede_pairs(live: list[dict], by_id: dict) -> list[tuple[dict, dict]]:
-    """(parked X, successor Y): Y supersedes an unverified X with a runnable-check."""
+    """(parked X, successor Y): Y supersedes an unverified X with a runnable-check, where X is an
+    ORIGINAL claim-first claim — one that does not itself supersede anything. A three-link discharge
+    chain (park-nonrunnable -> repo-check -> signed) has a repo-check MIDDLE link that supersedes the
+    parked claim and is superseded by the signed one; that middle link is a discharge step, not a
+    claim-first event, so it is skipped (clm-0030). Only the original parked claim pairs with its
+    runnable successor — the pair whose precedence timestamp actually exists."""
     pairs = []
     for y in live:
         x_id = y.get("supersedes")
         if not x_id or (y.get("check") or "none") not in RUNNABLE:
             continue
         x = by_id.get(x_id)
-        if x and x.get("status") == "unverified":
+        if x and x.get("status") == "unverified" and not x.get("supersedes"):
             pairs.append((x, y))
     return pairs
 
@@ -280,26 +287,124 @@ def warn_tdd_precedence(root: Path, live: list[dict], trace: list[dict]) -> list
     """C1 at development granularity — subsumes the preregistration audit's dev-side half. For every
     park→supersede pair, the parked claim's introducing commit must be ledger-only and an ancestor of
     the successor's commit; either failure means the claim did not precede its code (a missing/late
-    precedence timestamp)."""
-    by_id = {e["id"]: e for e in (live + trace) if e.get("id")}
+    precedence timestamp).
+
+    Squash-safe (§10): where the two introducing commits collapse into one code-carrying commit
+    (xc == yc — the squash signature that destroys the per-commit ancestry), the ancestry is gone, so
+    the check consumes a pre-merge precedence CERTIFICATE (`has_precedence_certificate`) instead and
+    warns only on its absence. Rebase-merge and merge-commit repos keep the richer per-commit
+    verification for free (xc != yc)."""
+    entries = live + trace
+    by_id = {e["id"]: e for e in entries if e.get("id")}
     viol = []
     for x, y in park_supersede_pairs(live, by_id):
         xc = introducing_commit(root, x["id"])
         yc = introducing_commit(root, y["id"])
         if not xc or not yc:
-            continue  # commits unlocatable (shallow clone / squashed) — silent, not a warn
-        if not is_ledger_only(root, xc):
+            continue  # commits unlocatable (shallow clone) — silent, not a warn
+        if xc == yc and not is_ledger_only(root, xc):
+            # Squash-collapsed: claim, successor, and code share one commit. Ancestry is gone; the
+            # pre-merge certificate is the squash-proof substitute — a line, not a topology.
+            if not has_precedence_certificate(x["id"], entries):
+                viol.append(V("tdd-precedence", f"no precedence certificate for {x['id']}; run the PR-mode check (audit.py --certify) before merge, or verify the branch manually while its ref survives"))
+        elif not is_ledger_only(root, xc):
             viol.append(V("tdd-precedence", f"{x['id']} (parked for {y['id']}) landed with code, not as a ledger-only commit — the claim did not precede its code; the precedence timestamp is missing or late"))
         elif not is_ancestor(root, xc, yc):
             viol.append(V("tdd-precedence", f"{x['id']} does not precede its successor {y['id']} in git history — the precedence timestamp is missing or late"))
     return viol
 
 
+_CERT_PREFIX = "precedence verified:"
+
+
+def has_precedence_certificate(x_id: str, entries: list[dict]) -> bool:
+    """A pre-merge precedence certificate for the parked claim: a testimony about it whose text
+    begins with the certificate prefix. It is content, not commit topology — so it survives a squash
+    that erased the ancestry the direct check reads."""
+    return any(
+        e.get("kind") == "testimony" and e.get("about") == x_id
+        and (e.get("claim") or "").startswith(_CERT_PREFIX)
+        for e in entries
+    )
+
+
+def _current_branch(root: Path) -> str:
+    b = (git(root, "rev-parse", "--abbrev-ref", "HEAD") or "").strip()
+    return b if b and b != "HEAD" else "detached"
+
+
+def _next_claim_id(entries: list[dict]) -> str:
+    nums = [int(e["id"].split("-", 1)[1]) for e in entries
+            if isinstance(e.get("id"), str) and e["id"].startswith("clm-")
+            and e["id"].split("-", 1)[1].isdigit()]
+    return f"clm-{(max(nums) + 1) if nums else 0:04d}"
+
+
+def certify_precedence(root: Path, live: list[dict], trace: list[dict]) -> tuple[list[str], list[str]]:
+    """PR mode (§10.28): on the intact branch (where full history is present, pre-squash), emit a
+    precedence certificate for each park→supersede pair whose ledger-only claim precedes its code by
+    ancestry. The certificate is ordinary testimony (never signs), written straight into
+    ledger/claims.jsonl so a later squash carries it as content. Idempotent (skips a pair already
+    certified). Returns (emitted_ids, failed_ids); a pair whose precedence does NOT verify is a
+    failure, never certified — you cannot certify a claim that did not precede its code."""
+    entries = live + trace
+    by_id = {e["id"]: e for e in entries if e.get("id")}
+    branch = _current_branch(root)
+    run_id = os.environ.get("GITHUB_RUN_ID", "local")
+    ts = datetime.now(timezone.utc).isoformat()
+    emitted, failed = [], []
+    for x, y in park_supersede_pairs(live, by_id):
+        xc = introducing_commit(root, x["id"])
+        yc = introducing_commit(root, y["id"])
+        if not xc or not yc:
+            continue
+        if is_ledger_only(root, xc) and is_ancestor(root, xc, yc):
+            if has_precedence_certificate(x["id"], entries):
+                continue  # already certified — idempotent
+            cert = {
+                "id": _next_claim_id(entries), "ts": ts,
+                "claim": f"{_CERT_PREFIX} {x['id']} ledger-only commit {xc[:8]} precedes its code "
+                         f"at {yc[:8]} (branch {branch}, run {run_id})",
+                "subject": "precedence-certificate", "source": "hook", "kind": "testimony",
+                "status": "unverified", "check": "none", "about": x["id"],
+            }
+            with (root / "ledger" / "claims.jsonl").open("a") as f:
+                f.write(json.dumps(cert, separators=(",", ":")) + "\n")
+            entries.append(cert)  # a second pair in the same run sees it, keeping ids monotonic
+            emitted.append(x["id"])
+        else:
+            failed.append(x["id"])
+    return emitted, failed
+
+
+def _slice_ids(x_id: str, y_id: str, entries: list[dict]) -> set[str]:
+    """The claim ids that stand for one slice: the parked claim, its runnable successor, and the
+    successor's transitive superseders (the discharge chain FORWARD — e.g. the gate-signed 3rd link of
+    a park->repo-check->signed chain). A red-proof receipt about ANY of them is the slice's receipt
+    (clm-0030): the receipt names the live claim, which is usually the signed descendant, not the
+    pair member the counter walks."""
+    ids = {x_id, y_id}
+    forward: dict = defaultdict(list)
+    for e in entries:
+        if e.get("supersedes"):
+            forward[e["supersedes"]].append(e.get("id"))
+    frontier = [y_id]
+    while frontier:
+        for succ in forward.get(frontier.pop(), []):
+            if succ and succ not in ids:
+                ids.add(succ)
+                frontier.append(succ)
+    return ids
+
+
 def report_red_proof_coverage(root: Path, live: list[dict], trace: list[dict]) -> str | None:
     """`k/n test-bearing slices` carrying a red-proof testimony about their claim (the loop's running
-    follow-through rate), plus the detector-class subset when the parked claim carries the tag."""
-    by_id = {e["id"]: e for e in (live + trace) if e.get("id")}
-    rp_about = {e.get("about") for e in (live + trace)
+    follow-through rate), plus the detector-class subset when the parked claim carries the tag. A
+    receipt counts for the slice when it is `about` any id in the slice's forward chain, so a receipt
+    filed against the signed descendant of a park->repo-check->signed discharge is credited (clm-0030)."""
+    entries = live + trace
+    by_id = {e["id"]: e for e in entries if e.get("id")}
+    rp_about = {e.get("about") for e in entries
                 if e.get("kind") == "testimony" and "red-proof" in (e.get("claim") or "")}
     test_bearing = []
     for x, y in park_supersede_pairs(live, by_id):
@@ -309,11 +414,11 @@ def report_red_proof_coverage(root: Path, live: list[dict], trace: list[dict]) -
     n = len(test_bearing)
     if n == 0:
         return None
-    covered = sum(1 for x, y in test_bearing if x["id"] in rp_about or y["id"] in rp_about)
+    covered = sum(1 for x, y in test_bearing if _slice_ids(x["id"], y["id"], entries) & rp_about)
     line = f"red-proof coverage: {covered}/{n} test-bearing slices (window)"
     det = [(x, y) for x, y in test_bearing if "detector-class" in (x.get("claim") or "")]
     if det:
-        dc = sum(1 for x, y in det if x["id"] in rp_about or y["id"] in rp_about)
+        dc = sum(1 for x, y in det if _slice_ids(x["id"], y["id"], entries) & rp_about)
         line += f"; detector-class {dc}/{len(det)}"
     return line
 
@@ -323,6 +428,10 @@ def main() -> int:
     ap.add_argument("--root", default=".")
     ap.add_argument("--strict", action="store_true", help="warn checks also fail the run")
     ap.add_argument("--report", action="store_true", help="print the UNVERIFIED map and claim rate")
+    ap.add_argument("--certify", action="store_true",
+                    help="PR mode (§10): on the intact branch, emit a precedence certificate for each "
+                         "verifiable park->supersede pair, then exit. Run before a squash-merge so the "
+                         "certificate rides the squash as content.")
     args = ap.parse_args()
     root = Path(args.root).resolve()
     ledger_rel = "ledger/claims.jsonl"
@@ -339,6 +448,19 @@ def main() -> int:
     # records (`retire_of`, no `id`). Only claim entries face the claim-shaped checks.
     trace = [e for e in trace_all if "retire_of" not in e]
     retire_records = [e for e in trace_all if "retire_of" in e]
+
+    if args.certify:
+        # PR mode is an EMITTER, not a gate: it writes a certificate for every certifiable pair and
+        # exits 0. A pair with no certifiable precedence is an advisory note (it landed with code) —
+        # the warn-grade tdd-precedence is what actually flags it, here and on the main-side audit.
+        emitted, failed = certify_precedence(root, live, trace)
+        for cid in emitted:
+            print(f"certified precedence: {cid}")
+        for cid in failed:
+            print(f"note: {cid} has no certifiable precedence (it landed with code); tdd-precedence warns on it")
+        if not emitted and not failed:
+            print("certify: no park->supersede pairs to certify")
+        return 0
 
     hard = viol
     hard += check_schema(live, "live") + check_schema(trace, "trace")
