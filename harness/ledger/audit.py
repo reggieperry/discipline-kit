@@ -52,6 +52,12 @@ CODE_EXTS = (".py", ".go", ".scala", ".sc", ".ts", ".tsx", ".js", ".jsx", ".sh",
              ".rs", ".java", ".rb", ".c", ".cc", ".cpp", ".h", ".hpp")
 TEST_HINTS = ("test", "Suite", "spec")
 
+# MEMORY.md index-size budgets (§13.41). Index honesty with teeth: a warn-only budget fires into a
+# void (the mnemosyne index truncated at 38 KB past a working 24 KB guard), so the hard budget is a
+# genuine FAIL. Config-keyed via LEDGER_MEM_SOFT_KB / LEDGER_MEM_HARD_KB.
+MEMORY_INDEX_SOFT_KB = 16
+MEMORY_INDEX_HARD_KB = 24
+
 
 class V:
     def __init__(self, check: str, msg: str):
@@ -423,6 +429,31 @@ def report_red_proof_coverage(root: Path, live: list[dict], trace: list[dict]) -
     return line
 
 
+def check_memory_index_size(root: Path) -> tuple[str, "V | None"]:
+    """Index honesty with teeth (§13.41). memories/MEMORY.md over the soft budget WARNs; over the
+    hard budget is a genuine FAIL — the mnemosyne lesson is that a warn-only budget fires into a void
+    (its index truncated at 38 KB past a working 24 KB guard). Budgets are config-keyed via
+    LEDGER_MEM_SOFT_KB / LEDGER_MEM_HARD_KB. An absent index is a no-op. Returns (state, finding),
+    state in {'ok','soft','hard'}."""
+    index = root / "memories" / "MEMORY.md"
+    if not index.exists():
+        return ("ok", None)
+    try:
+        size = index.stat().st_size
+    except OSError:
+        return ("ok", None)
+    soft = int(os.environ.get("LEDGER_MEM_SOFT_KB", MEMORY_INDEX_SOFT_KB)) * 1024
+    hard = int(os.environ.get("LEDGER_MEM_HARD_KB", MEMORY_INDEX_HARD_KB)) * 1024
+    kb = size / 1024
+    if size > hard:
+        return ("hard", V("memory-index", f"MEMORY.md index is {kb:.1f} KB, over the hard budget "
+                          f"({hard // 1024} KB) — prune it to one terse line per memory; detail lives in the topic file"))
+    if size > soft:
+        return ("soft", V("memory-index", f"MEMORY.md index is {kb:.1f} KB, over the soft budget "
+                          f"({soft // 1024} KB) — trim toward one terse line per memory"))
+    return ("ok", None)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
@@ -472,6 +503,13 @@ def main() -> int:
 
     warn = warn_contested(live) + warn_tdd_precedence(root, live, trace)
 
+    # MEMORY.md index size (§13.41): soft → warn, hard → a genuine FAIL (teeth).
+    mem_state, mem_v = check_memory_index_size(root)
+    if mem_state == "hard":
+        hard.append(mem_v)
+    elif mem_state == "soft":
+        warn.append(mem_v)
+
     for v in hard:
         print(f"FAIL {v}")
     for v in warn:
@@ -495,6 +533,7 @@ def main() -> int:
     warned = {v.check for v in warn}
     for wn in ("contested", "tdd-precedence"):
         print(f"{'WARN' if wn in warned else 'PASS'}  {wn}")
+    print(f"{'FAIL' if mem_state == 'hard' else 'WARN' if mem_state == 'soft' else 'PASS'}  memory-index")
 
     if hard or (args.strict and warn):
         return 1
