@@ -2,6 +2,8 @@
 
 Portable engineering-discipline memories, scrubbed of all machine, project, and personal identifiers. One file per fact; this index is loaded into context each session. Drop these into your project (or user) memory directory and keep the one-line-per-memory convention when you add your own.
 
+**The memory/ledger boundary law:** a memory carries *durable discipline*; any mechanically checkable assertion belongs in the dev-ledger as a claim with a named check, and the memory cites its `clm-` id — a recheck recipe living in a memory file is a claim in the wrong courthouse. On detecting a memory that asserts a checkable mechanical fact, register the claim, annotate the memory with the id, and never delete the memory.
+
 ## Feedback — how to work (corrections, confirmed approaches)
 
 - [As simple as possible, but no simpler](feedback_simplicity_principle.md) — Guiding design principle — Einstein's "as simple as possible, but no simpler." Use it to calibrate recommendations.
