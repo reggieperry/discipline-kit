@@ -6,6 +6,14 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 - **Sender-repo attestation (shared-tier roadmap).** Where cryptographic provenance is wanted, the sender's CI — on a green `harness-verify` — emits a keyless GitHub artifact attestation ("harness verified green at `<sha>`, kit `<VERSION>`", via the workflow's OIDC identity); the PR body links it, and the receiver's inbound workflow verifies it in one call. Bounded guarantee, stated so it never reads stronger: this proves a repo whose CI vouches for a green harness sent the contribution — it does not and cannot prove what kind of author wrote it, which is unprovable in principle and, under this constitution, unnecessary. Verify the claims, never the badge (memory `verify-claims-not-badges`).
 
+## v1.5.1 — 2026-07-16
+
+Discharging a `check: none` claim by building its court. clm-0078 (the v1.4.0 authoring-layer claim) was parked without a check because it was treated as a docs slice — but most of what it asserted is structural and mechanically checkable.
+
+### Added
+- **`authoring_artifacts_test.py`** — a standing structural guard for the authoring layer: the ADR template's six sections in fixed order with a non-negotiable Falsification condition, the registry, the story template's portable frontmatter, six body sections, and the anti-weakening contract verbatim, the four authoring skills, and no leaked chain-coupled field. Wired into `check.sh` and CI. Red-first (observed red against the pre-artifacts v1.3.5 tree via `red-proof`).
+- **clm-0078 is now signed** — superseded to `repo-check` (clm-0078 → clm-0099 → signed clm-0101), so the gate discharged it once `check.sh` (now carrying the structural guard) went green. Semantics: the signature certifies the **structure**; the "matching the kit skill format" quality rests on the acceptance testimony clm-0080, unchanged. The fixture is also a guard — a future edit that reorders the ADR sections or drops the anti-weakening lines fails here.
+
 ## v1.5.0 — 2026-07-15
 
 Inbound machinery for any adopting repo — the kit's own repo is the first customer. Organizing rule: inbound is claim-algebra traffic. A bug report is an attempted refutation of a claim, a feature request is an externally authored story, a foreign PR is a testimony-grade contribution. On a private, solo, local repo the machinery is inert and the Options section says so.
