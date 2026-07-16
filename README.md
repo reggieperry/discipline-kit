@@ -52,6 +52,16 @@ scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
 ```
 
+### Security-scanner parity
+
+A security rule states its **enforcement grade** at the top — no rule reads stronger than its gate. Today only one of the five is mechanically policed; the roadmap closes the gap, and each wiring is detector-class when it lands (red-first fixtures, and the wiring commit deletes that rule's enforcement-grade disclaimer in the same diff — the label and the gate move together or not at all):
+
+- **Python** — wired now: `bandit` rides Check A (findings diff, `#nosec` suppressions policed). The reference point.
+- **Go** — roadmap: `gosec` as a `GoToolchain` (bandit's exact analog, the same scanner-plugin exercise `java` proved); the rule's G-code citations become live finding identities.
+- **Java** — roadmap: FindSecBugs on the existing SpotBugs engine, when the compiled pilot opens.
+- **TypeScript** — roadmap: `eslint-plugin-security` or `semgrep`, with the TS toolchain.
+- **Scala** — deferred: no native `bandit`-equivalent; options are bytecode-side FindSecBugs or `semgrep`.
+
 ## What this is NOT — the autonomous chain
 
 The source system also runs an autonomous worker → tester → reviewer → documenter → finalizer chain under a supervisor with a durable work-item store. None of that is here, by design: it needs a long-running supervisor daemon, a database-backed queue, per-machine native builds, and an unattended-execution posture that a managed corporate laptop will not host and corporate policy will not allow. This kit is the discipline a human-in-the-loop session applies — not the robot that runs it.
