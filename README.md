@@ -90,6 +90,8 @@ Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `
 
   It needs `uv` (for ruff/mypy) and `git`; without `uv`, follow `review-checklist.md` by hand.
 
+- **SpotBugs (Java) is implemented fail-closed and deliberately outside default Check A** until a compiled pilot exists: it analyzes bytecode, and a source-snapshot differential cannot compile a tree, so wiring it into the default path would fail *open* on a source-only repo — instead it raises `SpotBugsOperationalError` when the tool is present but no `target/classes`/`build/classes` bytecode is found. The enabling path is a compiled pilot repo (bytecode on disk), where FindSecBugs can then ride the same SpotBugs engine as the Java security scanner.
+
 ## Refreshing and provenance
 
 The rule layer has three upstreams: the SDLC pack (the guides, the gate, `decoupling`/`writing-style`), a Go-harness repo (the `craft-*`/`go-*`/`python-*` rules), and a Scala dev-ledger harness repo (the `scala-*` rules, authored there against the Scala canon rather than ported from the Go-harness). All of it is scrubbed of machine, project, and personal identifiers; `./scrub-gate.sh` enforces that across four checks (infra/PII anywhere, chain vocab and harness vocab in the scrubbed surfaces, and a dangling-cross-ref check) and is the last step before packaging.
