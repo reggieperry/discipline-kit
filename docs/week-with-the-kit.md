@@ -2,11 +2,11 @@
 
 A lifecycle walkthrough, day zero through payoff. One operator, one repo — a billing service with a stubborn invoice-reconciler module — adopting the dev-ledger and its commit-path gate.
 
-Nothing here is aspirational. Every command and every mechanic is one the harness already ships; where a step is judgment rather than tooling, it is named as judgment. Read it as the shape of a first week, then keep the parts that fit your cadence.
+Nothing here is aspirational. Every command and every mechanic is one the harness already ships; where a step is judgment rather than tooling, it is named as judgment. The operator drives all of it through the kit's README prompts — the kit's interface is the spoken utterance, not a menu — so this walks what those copy-paste prompts set in motion. Read it as the shape of a first week, then keep the parts that fit your cadence.
 
 ## Day 0 — install and jurisdiction
 
-The harness installs into a git repo, not a machine. From the repo root you run `./install-harness.sh` — idempotent by construction, so a re-run against an already-installed tree is a no-op rather than a second layer.
+The harness installs into a git repo, not a machine. The README's **Install** prompt is the one ceremony — it points the instance at the kit's docs, runs `install-harness.sh --dir . --verify` in a single move, and demands the full verify output back. The installer is idempotent by construction, so a re-run against an already-installed tree is a no-op rather than a second layer, and the **Upgrade** prompt (`install-harness.sh --upgrade`) later refreshes the kit-owned files when a newer kit ships while leaving your repo-owned check and languages untouched.
 
 The install does several things in one pass. It tags the current commit `pre-harness-baseline` for one-move rollback. It drops `ledger/` — the `append` writer, `audit.py`, `gate.py`, `librarian`, `retire`, `board.sh`, `red-proof`, the fixtures, the README, and the operators-manual. It copies the six `ledger-*` skills into `.claude/skills/`, so the next Claude Code session loads the right ledger procedure at the right moment.
 
@@ -26,11 +26,23 @@ What the harness governs from here is narrow and total: the commit path over thi
 
 `gate.py` is byte-identical across every repo that installs the kit; this repo's behavior comes from `ledger/languages` and `ledger/check.sh`, never from editing the gate. That separation is the jurisdiction — the machinery is shared and unforkable, the policy is yours.
 
-The one policy call worth making on Day 0 is which languages fire the check. The gate must fire for every language that builds the system, and `ledger/check.sh` must in turn check every one of them, because firing for a language you do not check lets that language weaken unseen. A single-toolchain repo needs neither file — the gate auto-detects. A billing service with, say, a typed frontend beside the backend declares both extensions in `ledger/languages` and runs both checks in `ledger/check.sh`, so a change on either side meets a real gate rather than a green shrug.
+The first policy call worth making on Day 0 is which languages fire the check. The gate must fire for every language that builds the system, and `ledger/check.sh` must in turn check every one of them, because firing for a language you do not check lets that language weaken unseen. A single-toolchain repo needs neither file — the gate auto-detects. A billing service with, say, a typed frontend beside the backend declares both extensions in `ledger/languages` and runs both checks in `ledger/check.sh`, so a change on either side meets a real gate rather than a green shrug.
+
+Language coverage is the sharpest Day-0 call, but not the only one. The README's **Tour** prompt — the recommended step right after install — walks every option one at a time (the tier, the pinned check command, the audit's strict-versus-warn modes, the coverage opt-in, red-proof's advisory status) and records your choices, defaults included, as a single configuration claim on the ledger, so a later session reads how the repo is armed rather than guessing. One of those choices opens the next grain.
+
+## The design grain — ADRs and stories
+
+The loop so far runs on claims and code, and a code-first repo can stop there. A design-first repo turns on one more grain — the **authoring layer**, off by default and enabled with the README's **Enable authoring** prompt (a Tour choice). It lands two artifact kinds and the four skills that write and score them, and both kinds feed the same ledger.
+
+An architecture decision is the first. When the reconciler team commits to a strategy — netting before rounding, say, rather than after — that is a verdict-shaped, hard-to-reverse fork, the kind that also earns a `deep-reason` pass. `adr-write` records it against the ADR template: the context, the numbered Decisions with stable ids that are never renumbered, the consequences and the rejected alternatives, and — non-negotiable — the falsification condition, the observable that would show the call wrong. That falsifier does not stay in prose wherever a check can reach it — it registers as a parked ledger claim the ADR cites by `clm-` id, so the day the observable fires the board raises it; where the condition is genuinely unmechanizable, the ADR says so in one line and names what would decide it instead. An ADR is a decision you can be held to precisely because its court is already on the docket.
+
+A story is the second, and it is where the next section's acceptance claims come from. `story-write` drafts the reconciler slice against the story template — portable frontmatter, a problem grounded at `path:line` against HEAD, and acceptance criteria that carry the anti-weakening contract verbatim. `story-tighten` sharpens it until every criterion is one a check can reach. Then each acceptance criterion enters the courthouse as a pre-registered claim, one criterion, one line — which is exactly the claim-first move the next section walks.
+
+A story you did not write arrives the same way through `story-intake`. A ticket pulled from your team's board — over an MCP tracker, or through a thin read-only client Claude Code builds against the board's API — is untrusted until scored, so intake scores it against the same rubric, parks one claim per acceptance criterion with the board id embedded verbatim so a signed `clm-` walks back to the ticket, and sends every gap back as a question rather than a silent guess. Whichever way the story arrives, `docs/stories-with-the-kit.md` walks both paths end to end.
 
 ## Claims before code
 
-The habit that pays for everything downstream is writing the claim before the work. When you start a contestable slice — a milestone, an experiment, anything whose "done" someone could argue with — you draft the acceptance claim verbatim first: what will be true, and the exact check that will show it.
+The habit that pays for everything downstream is writing the claim before the work. When you start a contestable slice — a milestone, an experiment, anything whose "done" someone could argue with — you draft the acceptance claim verbatim first: what will be true, and the exact check that will show it. When the authoring layer is on, that acceptance claim is usually a story's acceptance criterion; without it you write the claim directly, and the discipline from here is identical either way.
 
 You append it through the one schema-validating writer, `echo '{...}' | ledger/append`, which assigns the id and timestamp and validates the shape. It lands `unverified` — the honest "I don't know yet," which read as a column is the entire research program. The `kind` is `assertion`; review output would be `testimony`, and a defect would be a `refutation` about a claim, but a fresh bet is an assertion.
 
@@ -66,7 +78,7 @@ Sooner or later the gate refuses a commit. This is the machinery working, not fa
 
 A blocking control fails closed: the commit-path gate denies on any doubt, because an unverifiable state is treated as unsafe. The check ran and the claim did not clear — the reconciler's tolerance guard rejected a total the test said it should accept, or coverage dropped past the floor — and the commit does not land. The claim stays on the board as the open obligation it is, unsigned, because no mechanical check discharged it.
 
-There are exactly three honest moves, and naming them is most of the discipline.
+The README's **When a commit blocks** prompt is the utterance for exactly this moment: show the refuted claim and the check output verbatim, then walk the honest moves before touching anything. There are exactly three of them, and naming them is most of the discipline.
 
 Fix the code — the common case, where the claim was right and the implementation was not. Fix the test if the expectation itself was wrong, and disclose it — adjusting an assertion after seeing actual output is legitimate, but it is the green-by-weakening disclosure and it is owed a sentence in the process paragraph, so a later reader knows the goalpost moved and why. Or park the claim, if the honest problem is that the check to settle it is not built yet: supersede the claim into a parked state that names its future court, so it is waiting rather than rotting.
 
@@ -96,7 +108,7 @@ One demotion rule sits underneath all of this: generative review testifies, neve
 
 Two phrases put the machinery to work, and you say them early — a board check after design has started is a seatbelt fastened mid-crash.
 
-Open every session with **"check the board first."** Thirty seconds against `ledger/board.sh open` answers two questions: does anything open bear on today's work, and did anything land since you last looked that today's work should *cite* rather than redo. Start every new effort with **"write the claim before the work."** Everything else is elaboration.
+Open every session with **"check the board first."** Thirty seconds against `ledger/board.sh open` answers two questions: does anything open bear on today's work, and did anything land since you last looked that today's work should *cite* rather than redo. Start every new effort with **"write the claim before the work."** The README's **Orient** and **Work** prompts put both utterances in copy-paste form; everything else is elaboration.
 
 Once a week, calendared, you spend ten minutes as the judgment the machine cannot automate. Run `ledger/board.sh open`, `ledger/board.sh stale 30`, and `ledger/board.sh checks`.
 
