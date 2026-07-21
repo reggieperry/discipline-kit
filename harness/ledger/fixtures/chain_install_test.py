@@ -61,6 +61,9 @@ def main() -> int:
             "--with-chain must install the trusted-base list: .claude/chain/trusted-base missing"
         assert fence_pred.exists() and os.access(fence_pred, os.X_OK), \
             "--with-chain must install the executable fence predicate: .claude/chain/trusted-base-touched.sh"
+        postc = repo / ".claude" / "chain" / "postcondition.py"
+        assert postc.exists() and postc.read_text().strip(), \
+            "--with-chain must install the driver postcondition predicate: .claude/chain/postcondition.py"
 
     # 2. A base install (no flag) installs NEITHER — chain is opt-in, base stays CI-neutral.
     with tempfile.TemporaryDirectory() as td:
