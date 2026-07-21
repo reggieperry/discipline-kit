@@ -165,7 +165,39 @@ def main() -> int:
         r = pc("no-open-refutation", story, ledger=led)
         assert r.returncode == 0, f"a resolved entry about the refutation must dispose it, got {r.returncode}:\n{r.stderr}"
 
-    print("chain_acceptance_test: PASS (3 fail-closed refusals halt; clean states advance)")
+        # 4. worker-complete: an UNTOUCHED planner-original criterion (never built) HALTS the worker
+        # phase — the worker must not hand off a story with an open obligation.
+        write_ledger(led, [
+            {"id": "clm-60", "subject": story, "claim": "criterion A (story: %s)" % story,
+             "kind": "assertion", "status": "unverified", "check": "a-selftest"},  # untouched
+        ])
+        r = pc("worker-complete", story, ledger=led)
+        assert r.returncode == 2 and "clm-60" in r.stderr, \
+            f"worker-complete must HALT on an untouched criterion, got {r.returncode}:\n{r.stderr}"
+
+        # 4b. a BUILT criterion (superseded by a signed successor) -> PASS.
+        write_ledger(led, [
+            {"id": "clm-70", "subject": story, "claim": "criterion A (story: %s)" % story,
+             "kind": "assertion", "status": "unverified", "check": "a-selftest"},
+            {"id": "clm-71", "subject": story, "claim": "criterion A, built (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check", "supersedes": "clm-70"},
+        ])
+        r = pc("worker-complete", story, ledger=led)
+        assert r.returncode == 0, f"worker-complete must PASS a built (superseded->signed) criterion, got {r.returncode}:\n{r.stderr}"
+
+        # 4c. a DEFERRED criterion (worker re-parked it with a reason — supersedes the original under a
+        # non-runnable check) -> PASS (parked-with-reason is a legitimate, addressed disposition).
+        write_ledger(led, [
+            {"id": "clm-80", "subject": story, "claim": "criterion A (story: %s)" % story,
+             "kind": "assertion", "status": "unverified", "check": "a-selftest"},
+            {"id": "clm-81", "subject": story, "claim": "criterion A deferred: blocked on X (story: %s)" % story,
+             "kind": "assertion", "status": "unverified", "check": "a-deferred", "supersedes": "clm-80"},
+        ])
+        r = pc("worker-complete", story, ledger=led)
+        assert r.returncode == 0, f"worker-complete must PASS a deferred (re-parked) criterion, got {r.returncode}:\n{r.stderr}"
+
+    print("chain_acceptance_test: PASS (3 fail-closed refusals halt; clean states advance; "
+          "worker-complete halts an untouched criterion)")
     return 0
 
 

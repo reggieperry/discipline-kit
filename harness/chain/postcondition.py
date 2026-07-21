@@ -103,6 +103,28 @@ def tester_clean(base: str) -> int:
     return 0
 
 
+def worker_complete(story: str) -> int:
+    ents = model.load(ledger_path())
+    resolved = model.resolved_ids(ents)
+    superseded = model.superseded_ids(ents)
+    # An UNTOUCHED planner criterion is an open obligation the worker never addressed: an unverified,
+    # non-runnable claim that names the story, supersedes NOTHING (a planner original, not a re-park),
+    # and has NO successor (not superseded). A BUILT criterion is superseded toward a signature; a
+    # DEFERRED one is re-parked (it supersedes the original, carrying its reason) — both are addressed.
+    untouched = [e for e in ents
+                 if e.get("kind") == "assertion" and e.get("status") == "unverified"
+                 and not model.is_runnable(e) and model.mentions(e, story)
+                 and not e.get("supersedes")
+                 and e.get("id") not in superseded and e.get("id") not in resolved]
+    if untouched:
+        ids = ", ".join(str(e.get("id")) for e in untouched)
+        sys.stderr.write(f"worker postcondition VIOLATED: criterion(s) never built or deferred for "
+                         f"story {story!r}: {ids} — the worker cannot hand off an open obligation. "
+                         f"Halt.\n")
+        return 2
+    return 0
+
+
 def no_open_refutation(story: str) -> int:
     ents = model.load(ledger_path())
     by_id: dict[str, model.Claim] = {e["id"]: e for e in ents if e.get("id")}
@@ -147,13 +169,15 @@ def no_open_refutation(story: str) -> int:
 def main() -> int:
     if len(sys.argv) < 2:
         sys.stderr.write("usage: postcondition.py "
-                         "{planner-parked <story-id> | tester-clean <base-ref> | "
-                         "no-open-refutation <story-id>}\n")
+                         "{planner-parked <story-id> | worker-complete <story-id> | "
+                         "tester-clean <base-ref> | no-open-refutation <story-id>}\n")
         return 1
     check = sys.argv[1]
     arg = sys.argv[2] if len(sys.argv) > 2 else ""
     if check == "planner-parked":
         return planner_parked(arg) if arg else 1
+    if check == "worker-complete":
+        return worker_complete(arg) if arg else 1
     if check == "tester-clean":
         return tester_clean(arg)
     if check == "no-open-refutation":

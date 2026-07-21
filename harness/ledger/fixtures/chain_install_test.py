@@ -67,6 +67,9 @@ def main() -> int:
         verd = repo / ".claude" / "chain" / "verdict.py"
         assert verd.exists() and verd.read_text().strip(), \
             "--with-chain must install the committee verdict aggregator: .claude/chain/verdict.py"
+        # the chain predicates are executables the driver shells out to — the +x bit must be set.
+        assert os.access(postc, os.X_OK), ".claude/chain/postcondition.py must be installed executable"
+        assert os.access(verd, os.X_OK), ".claude/chain/verdict.py must be installed executable"
         # the authoring skills the driver's entry phase (story-write/tighten/intake) invokes must
         # install too — else /chain cannot reach a `ready` story on a fresh --with-chain install.
         for sk in ("story-write", "story-tighten", "story-intake"):

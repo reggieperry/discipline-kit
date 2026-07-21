@@ -24,6 +24,13 @@ warrant and this verdict can only BLOCK. It drives routing:
   CONTESTED      -> escalate to the operator (deep review)                         exit 3
   INDETERMINATE  -> escalate to the operator (deep review; incomplete committee)   exit 4
 
+Note on CONTESTED: the base-tier driver's ledger→verdict derivation only ever emits `clean`,
+`refuted`, or `error`/absent (a refutation about the story → refuted; an absence-report → clean;
+nothing/could-not-run → INDETERMINATE). `contested` is implemented and unit-tested here but is
+RESERVED for the auto-merge tier, where a split panel or a finding with no disposing check is a
+distinct route; in the base tier it never fires, and CONTESTED and INDETERMINATE both escalate to the
+operator anyway, so nothing is lost.
+
 Usage: verdict.py <manifest.json> <verdicts-dir>
   manifest.json : a JSON array of the role names that were launched.
   verdicts-dir  : one <role>.json per role, each an object with a "verdict" of
