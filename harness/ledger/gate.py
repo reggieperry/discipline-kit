@@ -207,8 +207,12 @@ def run_ref() -> tuple[str, str]:
     return parent, patch
 
 
-def pre_commit() -> int:
-    # 1. forgery guard
+def forgery_violation() -> dict | None:
+    """The sole-signer guard, read fresh each call: return the first `signed` line in the STAGED
+    ledger diff whose line-hash the gate never recorded in .hook-signed (a signature the gate did
+    not write), or None. Called on the operator's staged content BEFORE signing, and again on the
+    FINAL staged content AFTER the in-commit `git add` — because that `git add` stages the whole
+    working-tree file, an unstaged forged line would otherwise ride in past the pre-signing check."""
     hs = hook_hashes()
     for l in staged_added_ledger_lines():
         try:
@@ -216,18 +220,32 @@ def pre_commit() -> int:
         except Exception:
             continue
         if e.get("status") == "signed" and line_hash(l) not in hs:
-            sys.stderr.write("✖ dev-ledger: a `signed` entry is staged that the gate did not write "
-                             "— forged signature, commit blocked.\n")
-            sys.stderr.write(f"   {e.get('id', '?')}: {(e.get('claim') or '')[:80]}\n")
-            return 1
+            return e
+    return None
 
-    # 2. check-discharge
+
+def _block_forgery(e: dict) -> int:
+    sys.stderr.write("✖ dev-ledger: a `signed` entry is staged that the gate did not write "
+                     "— forged signature, commit blocked.\n")
+    sys.stderr.write(f"   {e.get('id', '?')}: {(e.get('claim') or '')[:80]}\n")
+    return 1
+
+
+def pre_commit() -> int:
+    # 1. forgery guard — on the operator's staged content.
+    f = forgery_violation()
+    if f is not None:
+        return _block_forgery(f)
+
+    # 2. check-discharge — run the check, but do NOT sign yet (sign after the audit, so an audit
+    # block leaves nothing signed). Capture whether a runnable check passed and its ref.
     code = staged_code()
     pend = pending_runnable()
     cmd = check_command()
+    ref = None
     if (code or pend) and cmd:
         parent, patch = run_ref()
-        ref = f"{CHECK_NAME}@{parent}+{patch}"
+        ref = (f"{CHECK_NAME}@{parent}+{patch}", f"{parent}+{patch}")
         sys.stderr.write(f"dev-ledger gate: running `{' '.join(cmd)}` "
                          f"({'code staged' if code else 'pending claims'})…\n")
         r = sh(cmd, env=clean_env())
@@ -236,28 +254,33 @@ def pre_commit() -> int:
                 "claim": STANDARD_CLAIM, "subject": "verification-surface", "source": "hook",
                 "kind": "assertion", "status": "refuted", "check": CHECK_NAME,
                 "sha": f"{parent}+{patch}",
-                "discharged_by": {"check": CHECK_NAME, "run": ref, "ts": now()},
+                "discharged_by": {"check": CHECK_NAME, "run": ref[0], "ts": now()},
             })
             sys.stderr.write("✖ dev-ledger: mechanical check FAILED — commit blocked, refuted "
                              "entry recorded. Approving review testimony does not sign.\n")
             return 1
-        # in-commit signing: sign the verification-surface + each pending runnable claim NOW and
-        # stage the appended lines into THIS commit, so the signature is atomic with the change that
-        # earned it — no post-commit phase, no signature left dirty in the working tree. Mirrors the
-        # refuted branch above, which already records its verdict in pre-commit with a parent+patch ref.
-        # The forgery guard (step 1) already ran on the pre-signing staged content, so these entries
-        # (written by the gate, their hashes recorded in .hook-signed) are not seen as forged.
-        _sign(STANDARD_CLAIM, "verification-surface", CHECK_NAME, ref, f"{parent}+{patch}")
-        for e in pend:
-            _sign(e["claim"], e.get("subject"), e["check"], ref, f"{parent}+{patch}", supersedes=e["id"])
-        sh(["git", "add", "--", "ledger/claims.jsonl"])
 
-    # 3. audit
+    # 3. audit — BEFORE signing, so a hard violation blocks with nothing signed (fail closed clean).
     a = sh([sys.executable, str(AUDIT), "--root", "."])
     if a.returncode != 0:
         sys.stderr.write("✖ dev-ledger: audit.py found a hard violation — commit blocked.\n")
         sys.stderr.write(a.stdout[-1000:])
         return 1
+
+    # 4. in-commit signing (check + audit both passed): sign the verification-surface + each pending
+    # runnable claim NOW and stage them into THIS commit — atomic with the change that earned it, no
+    # post-commit phase, no signature left dirty. Then RE-VERIFY: the `git add` stages the whole file,
+    # so re-run the forgery guard on the final staged content — the gate's own lines carry recorded
+    # hashes and pass, but any unstaged forged `signed` line swept in has none and is blocked.
+    if ref is not None:
+        run_str, sha_str = ref
+        _sign(STANDARD_CLAIM, "verification-surface", CHECK_NAME, run_str, sha_str)
+        for e in pend:
+            _sign(e["claim"], e.get("subject"), e["check"], run_str, sha_str, supersedes=e["id"])
+        sh(["git", "add", "--", "ledger/claims.jsonl"])
+        f = forgery_violation()
+        if f is not None:
+            return _block_forgery(f)
     return 0
 
 
