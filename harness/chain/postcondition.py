@@ -102,12 +102,43 @@ def tester_clean(base: str) -> int:
     return 0
 
 
+def _resolved_ids(ents: list[dict]) -> set[str]:
+    """Ids that have 'made it through the gate': every signed entry, plus every claim transitively
+    superseded toward a signed one. The worker loop-back re-registers a fix (parked, repo-check), the
+    gate signs a successor that SUPERSEDES the parked fix, and that fix may in turn supersede the
+    original claim — so a signature can be several supersession hops from what it ultimately resolves."""
+    superseded_by = {e["supersedes"]: e["id"] for e in ents if e.get("supersedes") and e.get("id")}
+    resolved = {e["id"] for e in ents if e.get("status") == "signed" and e.get("id")}
+    changed = True
+    while changed:
+        changed = False
+        for e in ents:
+            eid = e.get("id")
+            if not eid or eid in resolved:
+                continue
+            succ = superseded_by.get(eid)
+            if succ and succ in resolved:
+                resolved.add(eid)
+                changed = True
+    return resolved
+
+
 def no_open_refutation(story: str) -> int:
     ents = load()
-    disposed = {e.get("about") for e in ents if e.get("status") == "signed" and e.get("about")}
+    # A refutation R about claim C is DISPOSED when the fix that addresses it has been signed — via any
+    # of the reachable shapes: R itself resolved; the refuted claim C resolved (a signed successor
+    # superseded it); or a RESOLVED fix-claim is `about` R (the worker's fix references the refutation
+    # and then passes the gate). Keying only on a signed entry `about==R.id` — which the gate's _sign,
+    # writing `supersedes` not `about`, can never produce and the forgery guard blocks by hand — was a
+    # permanent loop-back deadlock.
+    resolved = _resolved_ids(ents)
+    about_resolved = {e.get("about") for e in ents if e.get("id") in resolved and e.get("about")}
     open_refs = [e for e in ents
                  if e.get("kind") == "refutation" and e.get("status") == "unverified"
-                 and _mentions(e, story) and e.get("id") not in disposed]
+                 and _mentions(e, story)
+                 and e.get("id") not in resolved
+                 and e.get("about") not in resolved
+                 and e.get("id") not in about_resolved]
     if open_refs:
         ids = ", ".join(str(e.get("id")) for e in open_refs)
         sys.stderr.write(f"reviewer postcondition VIOLATED: blocking refutation(s) stand open "

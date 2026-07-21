@@ -111,17 +111,35 @@ def main() -> int:
         assert r.returncode == 2 and "clm-11" in r.stderr, \
             f"no-open-refutation must HALT on an open refutation, got {r.returncode}:\n{r.stderr}"
 
-        # 3b. the refutation healed by a signed successor about it -> PASS
+        # 3b. the REACHABLE disposal: the worker loop-back fixes the refuted claim, and the gate signs
+        # a successor that SUPERSEDES it (gate _sign writes `supersedes`, never `about`). That must
+        # dispose the refutation -> PASS. (The old fixture keyed on a signed entry `about` the
+        # refutation — a state the gate cannot produce and the forgery guard blocks: a permanent
+        # deadlock. This is the state the system actually reaches.)
         write_ledger(led, [
             {"id": "clm-10", "subject": story, "claim": "widget behaves (story: %s)" % story,
              "kind": "assertion", "status": "unverified", "check": "widget-selftest"},
             {"id": "clm-11", "subject": story, "claim": "widget is wrong (story: %s)" % story,
              "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-10"},
-            {"id": "clm-12", "subject": story, "claim": "fixed; refutation disposed (story: %s)" % story,
-             "kind": "assertion", "status": "signed", "check": "repo-check", "about": "clm-11"},
+            {"id": "clm-12", "subject": story, "claim": "widget behaves, fixed (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check", "supersedes": "clm-10"},
         ])
         r = pc("no-open-refutation", story, ledger=led)
-        assert r.returncode == 0, f"no-open-refutation must PASS once the refutation is disposed, got {r.returncode}:\n{r.stderr}"
+        assert r.returncode == 0, \
+            f"no-open-refutation must PASS once a signed successor supersedes the refuted claim " \
+            f"(the reachable loop-back disposal), got {r.returncode}:\n{r.stderr}"
+
+        # 3c. a signed entry directly about/superseding the refutation also disposes it -> PASS
+        write_ledger(led, [
+            {"id": "clm-20", "subject": story, "claim": "widget behaves (story: %s)" % story,
+             "kind": "assertion", "status": "unverified", "check": "widget-selftest"},
+            {"id": "clm-21", "subject": story, "claim": "widget is wrong (story: %s)" % story,
+             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-20"},
+            {"id": "clm-22", "subject": story, "claim": "refutation addressed (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check", "about": "clm-21"},
+        ])
+        r = pc("no-open-refutation", story, ledger=led)
+        assert r.returncode == 0, f"a signed entry about the refutation must also dispose it, got {r.returncode}:\n{r.stderr}"
 
     print("chain_acceptance_test: PASS (3 fail-closed refusals halt; clean states advance)")
     return 0
