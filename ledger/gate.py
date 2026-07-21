@@ -35,6 +35,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # ledger/ — for the shared calculus
+import model  # noqa: E402  (RUNNABLE, load, superseded_ids)
+
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = ROOT / "ledger" / "claims.jsonl"
 HOOKSIGNED = ROOT / "ledger" / ".hook-signed"
@@ -43,7 +46,7 @@ APPEND = ROOT / "ledger" / "append"
 AUDIT = ROOT / "ledger" / "audit.py"
 CHECK_NAME = "repo-check"
 STANDARD_CLAIM = "the repo's mechanical check passes"
-RUNNABLE = {"repo-check", "scala-check", "scala-suite", "typecheck"}
+RUNNABLE = model.RUNNABLE
 CODE_EXTS = (".scala", ".sc", ".sbt", ".py", ".go", ".ts", ".tsx", ".js", ".rs", ".java", ".kt")
 TESTMODE = ROOT / "ledger" / ".test-mode"  # gitignored sentinel; only harness-verify + the fixtures create it
 
@@ -169,21 +172,8 @@ def hook_hashes() -> set[str]:
 
 def pending_runnable() -> list[dict]:
     out = []
-    if not LEDGER.exists():
-        return out
-    entries = []
-    superseded = set()
-    for l in LEDGER.read_text().splitlines():
-        if not l.strip():
-            continue
-        try:
-            e = json.loads(l)
-        except Exception:
-            continue
-        entries.append(e)
-        s = e.get("supersedes")
-        if s:
-            superseded.add(s)
+    entries = model.load(LEDGER)
+    superseded = model.superseded_ids(entries)
     for e in entries:
         # A claim that is already SUPERSEDED (already signed) must not re-trigger the check on
         # every future commit, nor be re-signed — its `unverified` original line stays on the

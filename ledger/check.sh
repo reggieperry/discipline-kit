@@ -21,6 +21,7 @@ python3 harness/ledger/fixtures/chain_install_test.py
 python3 harness/ledger/fixtures/gate_signing_test.py
 python3 harness/ledger/fixtures/gate_forgery_sweep_test.py
 python3 harness/ledger/fixtures/gate_copies_identical_test.py
+python3 harness/ledger/fixtures/model_laws_test.py
 python3 harness/ledger/fixtures/chain_fence_test.py
 python3 harness/ledger/fixtures/chain_acceptance_test.py
 python3 harness/ledger/fixtures/chain_verdict_test.py

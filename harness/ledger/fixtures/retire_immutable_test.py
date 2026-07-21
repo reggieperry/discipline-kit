@@ -38,7 +38,7 @@ def main() -> int:
         root = Path(td)
         ledger = root / "ledger"
         ledger.mkdir()
-        for tool in ("append", "audit.py", "retire"):
+        for tool in ("model.py", "append", "audit.py", "retire"):
             shutil.copy(TOOLS / tool, ledger / tool)
             (ledger / tool).chmod(0o755)
 

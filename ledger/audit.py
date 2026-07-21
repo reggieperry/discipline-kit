@@ -35,9 +35,12 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # ledger/ — for the shared calculus
+import model  # noqa: E402
+
 REQUIRED = ("id", "ts", "claim", "source", "kind", "status")
 KINDS = {"assertion", "testimony", "refutation"}
-STATUSES = {"unverified", "signed", "refuted", "retired"}
+STATUSES = model.STATUSES  # the four-word status vocabulary, shared with the gate
 SOURCES = {"claude-code", "subagent", "human", "hook"}
 # discharged_by.check values that are NOT mechanical; a signed entry naming one is a violation.
 GENERATIVE = {"none", "pr-review", "deep-reason", "testimony", "workflow-verify", "claude-code", "subagent"}
@@ -47,7 +50,7 @@ LEGAL_NEXT = {  # legal status of a successor entry, keyed by predecessor status
     "refuted": set(),     # refuted stays on the record; removal only via retirement
     "retired": set(),
 }
-RUNNABLE = {"repo-check", "scala-check", "scala-suite", "typecheck"}  # a runnable-check successor
+RUNNABLE = model.RUNNABLE  # the signable checks, shared with the gate (a runnable-check successor)
 CODE_EXTS = (".py", ".go", ".scala", ".sc", ".ts", ".tsx", ".js", ".jsx", ".sh",
              ".rs", ".java", ".rb", ".c", ".cc", ".cpp", ".h", ".hpp")
 TEST_HINTS = ("test", "Suite", "spec")

@@ -68,8 +68,11 @@ jobs:
       - name: gate forgery-sweep fixture (an unstaged forged signed line is not laundered by git add)
         run: python3 harness/ledger/fixtures/gate_forgery_sweep_test.py
 
-      - name: gate copies byte-identity (harness/ledger/gate.py == ledger/gate.py)
+      - name: gate copies byte-identity (gate.py/audit.py/model.py master==active)
         run: python3 harness/ledger/fixtures/gate_copies_identical_test.py
+
+      - name: ledger-model laws (calculus invariants over generated ledgers — the Python analog of the Scala laws)
+        run: python3 harness/ledger/fixtures/model_laws_test.py
 
       - name: chain trusted-base fence fixture (a phase touching the gate/hooks/CI/.claude trips exit 2)
         run: python3 harness/ledger/fixtures/chain_fence_test.py

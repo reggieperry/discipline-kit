@@ -18,12 +18,14 @@ import tempfile
 from pathlib import Path
 
 GATE = Path(__file__).resolve().parent.parent / "gate.py"
+MODEL = Path(__file__).resolve().parent.parent / "model.py"
 
 
 def load_gate(root: Path):
     (root / "ledger").mkdir(parents=True, exist_ok=True)
     dst = root / "ledger" / "gate.py"
     shutil.copy(GATE, dst)
+    shutil.copy(MODEL, root / "ledger" / "model.py")  # gate.py imports the shared calculus
     spec = importlib.util.spec_from_file_location("gate_under_test", dst)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
