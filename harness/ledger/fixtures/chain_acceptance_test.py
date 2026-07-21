@@ -100,46 +100,70 @@ def main() -> int:
         assert r.returncode == 0, \
             f"tester-clean must PASS an attestation-only claims.jsonl change, got {r.returncode}:\n{r.stderr}"
 
-        # 3a. an undischarged blocking refutation about the story -> HALT
+        # 2d. an in-place WEAKENING of an existing test assertion (assertEquals(x,5)->assertEquals(x,x))
+        # must HALT — it changes test lines, not purely adds. The attest-only tester has no legitimate
+        # reason to edit an existing grader line; a count-based check misses this, so require additive.
+        base2d = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+        (repo / "tests" / "test_app.py").write_text("def test_v(): assert v == v\n")  # weakened from == 2
+        run(["git", "add", "-A"], repo); run(["git", "commit", "-qm", "tester weakens a test"], repo)
+        r = pc("tester-clean", base2d, cwd=repo)
+        assert r.returncode == 2, \
+            f"tester-clean must HALT on an in-place test weakening (non-additive), got {r.returncode}:\n{r.stderr}"
+
+        # 3a. an open blocking refutation about a story claim -> HALT. The refutation carries the
+        # reviewer's real shape: `about` the refuted claim, story id NOT in its own text (the reviewer
+        # is never told to embed it) — so detection MUST follow the about-edge to the claim, which does
+        # carry the story id. (The old fixture masked the gap by hand-writing "(story:)" here.)
         write_ledger(led, [
             {"id": "clm-10", "subject": story, "claim": "widget behaves (story: %s)" % story,
              "kind": "assertion", "status": "unverified", "check": "widget-selftest"},
-            {"id": "clm-11", "subject": story, "claim": "widget is wrong (story: %s)" % story,
+            {"id": "clm-11", "subject": "review", "claim": "the widget mishandles zero — repro attached",
              "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-10"},
         ])
         r = pc("no-open-refutation", story, ledger=led)
         assert r.returncode == 2 and "clm-11" in r.stderr, \
-            f"no-open-refutation must HALT on an open refutation, got {r.returncode}:\n{r.stderr}"
+            f"an open refutation must HALT even when the story id is only on the refuted claim " \
+            f"(about-edge scoping), got {r.returncode}:\n{r.stderr}"
 
-        # 3b. the REACHABLE disposal: the worker loop-back fixes the refuted claim, and the gate signs
-        # a successor that SUPERSEDES it (gate _sign writes `supersedes`, never `about`). That must
-        # dispose the refutation -> PASS. (The old fixture keyed on a signed entry `about` the
-        # refutation — a state the gate cannot produce and the forgery guard blocks: a permanent
-        # deadlock. This is the state the system actually reaches.)
+        # 3b. an already-SIGNED refuted claim, NO superseding fix -> still HALT. A refutation says the
+        # claim is now known-wrong; the claim's PRE-EXISTING signature does not dispose it — only a
+        # superseding fix that passed the gate does. (This is the second fail-open: keying on "C is
+        # resolved" wrongly disposed a fresh refutation about an old signature.)
         write_ledger(led, [
-            {"id": "clm-10", "subject": story, "claim": "widget behaves (story: %s)" % story,
+            {"id": "clm-30", "subject": story, "claim": "widget behaves (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check"},
+            {"id": "clm-31", "subject": "review", "claim": "the signed widget is actually wrong",
+             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-30"},
+        ])
+        r = pc("no-open-refutation", story, ledger=led)
+        assert r.returncode == 2 and "clm-31" in r.stderr, \
+            f"a refutation about an already-signed claim with NO superseding fix must HALT, got {r.returncode}:\n{r.stderr}"
+
+        # 3c. the REACHABLE disposal: the worker loop-back fixes the refuted claim and the gate signs a
+        # successor that SUPERSEDES it -> disposed -> PASS.
+        write_ledger(led, [
+            {"id": "clm-40", "subject": story, "claim": "widget behaves (story: %s)" % story,
              "kind": "assertion", "status": "unverified", "check": "widget-selftest"},
-            {"id": "clm-11", "subject": story, "claim": "widget is wrong (story: %s)" % story,
-             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-10"},
-            {"id": "clm-12", "subject": story, "claim": "widget behaves, fixed (story: %s)" % story,
-             "kind": "assertion", "status": "signed", "check": "repo-check", "supersedes": "clm-10"},
+            {"id": "clm-41", "subject": "review", "claim": "the widget mishandles zero",
+             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-40"},
+            {"id": "clm-42", "subject": story, "claim": "widget behaves, fixed (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check", "supersedes": "clm-40"},
         ])
         r = pc("no-open-refutation", story, ledger=led)
         assert r.returncode == 0, \
-            f"no-open-refutation must PASS once a signed successor supersedes the refuted claim " \
-            f"(the reachable loop-back disposal), got {r.returncode}:\n{r.stderr}"
+            f"no-open-refutation must PASS once a signed successor SUPERSEDES the refuted claim, got {r.returncode}:\n{r.stderr}"
 
-        # 3c. a signed entry directly about/superseding the refutation also disposes it -> PASS
+        # 3d. a resolved fix-claim directly `about` the refutation also disposes it -> PASS.
         write_ledger(led, [
-            {"id": "clm-20", "subject": story, "claim": "widget behaves (story: %s)" % story,
+            {"id": "clm-50", "subject": story, "claim": "widget behaves (story: %s)" % story,
              "kind": "assertion", "status": "unverified", "check": "widget-selftest"},
-            {"id": "clm-21", "subject": story, "claim": "widget is wrong (story: %s)" % story,
-             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-20"},
-            {"id": "clm-22", "subject": story, "claim": "refutation addressed (story: %s)" % story,
-             "kind": "assertion", "status": "signed", "check": "repo-check", "about": "clm-21"},
+            {"id": "clm-51", "subject": "review", "claim": "the widget mishandles zero",
+             "kind": "refutation", "status": "unverified", "check": "none", "about": "clm-50"},
+            {"id": "clm-52", "subject": story, "claim": "refutation addressed (story: %s)" % story,
+             "kind": "assertion", "status": "signed", "check": "repo-check", "about": "clm-51"},
         ])
         r = pc("no-open-refutation", story, ledger=led)
-        assert r.returncode == 0, f"a signed entry about the refutation must also dispose it, got {r.returncode}:\n{r.stderr}"
+        assert r.returncode == 0, f"a resolved entry about the refutation must dispose it, got {r.returncode}:\n{r.stderr}"
 
     print("chain_acceptance_test: PASS (3 fail-closed refusals halt; clean states advance)")
     return 0

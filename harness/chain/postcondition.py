@@ -84,25 +84,54 @@ def tester_clean(base: str) -> int:
                          "a tester that touched production code cannot hand off:\n  "
                          + "\n  ".join(nontest) + "\n")
         return 2
+    # test-path changes must be purely ADDITIVE — new tests/assertions only, no edit to an existing
+    # line. A count-based check misses an in-place weakening (assertEquals(x,5) -> assertEquals(x,x)),
+    # so require zero removed lines in each test-path diff; the attest-only tester has no legitimate
+    # reason to modify an existing grader.
+    for tp in [p for p in changed if is_test_path(p)]:
+        hd = subprocess.run(["git", "diff", "--unified=0", "-M", base, "HEAD", "--", tp],
+                            capture_output=True, text=True)
+        removed = [l for l in hd.stdout.splitlines()
+                   if l.startswith("-") and not l.startswith("---")]
+        if removed:
+            sys.stderr.write(f"tester postcondition VIOLATED: {tp} was modified in place, not purely "
+                             f"added to — a tester must not weaken or rewrite an existing grader "
+                             f"({len(removed)} removed/changed line(s)). Halt.\n")
+            return 2
     return 0
 
 
 def no_open_refutation(story: str) -> int:
     ents = model.load(ledger_path())
-    # A refutation R about claim C is DISPOSED when the fix that addresses it has been signed — via any
-    # of the reachable shapes: R itself resolved; the refuted claim C resolved (a signed successor
-    # superseded it); or a RESOLVED fix-claim is `about` R (the worker's fix references the refutation
-    # and then passes the gate). Keying only on a signed entry `about==R.id` — which the gate's _sign,
-    # writing `supersedes` not `about`, can never produce and the forgery guard blocks by hand — was a
-    # permanent loop-back deadlock.
+    by_id = {e.get("id"): e for e in ents if e.get("id")}
     resolved = model.resolved_ids(ents)
+
+    # A refutation R about claim C BELONGS to the story if R's own text names it, OR — the reviewer's
+    # real shape — R carries `about: C` and the refuted claim C names the story (the reviewer is never
+    # told to embed the story id in the refutation, so scope must follow the about-edge).
+    def in_story(r: dict) -> bool:
+        if model.mentions(r, story):
+            return True
+        c = by_id.get(r.get("about"))
+        return c is not None and model.mentions(c, story)
+
+    # A refutation R about C is DISPOSED only when a FIX has passed the gate — a resolved successor
+    # SUPERSEDES C (C got fixed and re-signed), or a resolved claim is `about` R (the fix references
+    # the refutation), or R itself was resolved/retired. C's own PRE-EXISTING signature does NOT
+    # dispose R: a refutation says the signed claim is now known-wrong, and only a superseding fix
+    # answers it — keying on "C is resolved" would fail open on a fresh refutation about an old sign.
+    superseded_by_resolved = {e.get("supersedes") for e in ents
+                              if e.get("supersedes") and e.get("id") in resolved}
     about_resolved = {e.get("about") for e in ents if e.get("id") in resolved and e.get("about")}
+
+    def disposed(r: dict) -> bool:
+        rid, c = r.get("id"), r.get("about")
+        return (rid in resolved or rid in about_resolved
+                or (c is not None and c in superseded_by_resolved))
+
     open_refs = [e for e in ents
                  if e.get("kind") == "refutation" and e.get("status") == "unverified"
-                 and model.mentions(e, story)
-                 and e.get("id") not in resolved
-                 and e.get("about") not in resolved
-                 and e.get("id") not in about_resolved]
+                 and in_story(e) and not disposed(e)]
     if open_refs:
         ids = ", ".join(str(e.get("id")) for e in open_refs)
         sys.stderr.write(f"reviewer postcondition VIOLATED: blocking refutation(s) stand open "

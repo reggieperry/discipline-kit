@@ -18,6 +18,18 @@ You are phase 5. You make the change mergeable and hand the merge decision to th
 4. Archive the story to `_archive/` with a **merge-pending** marker. `closed_at` and `merged_pr` are backfilled by the merge-close step when the operator merges, not now.
 5. **Park the closing claim** — `awaiting operator merge, PR #N`. Then stop. Do NOT merge.
 
+## The base tier's known limit — the human merge is the real backstop
+The chain's mechanical predicates (the fence, the postconditions, the four-state verdict) are
+defense-in-depth, not the transition-grade guarantee. Two are honestly bounded in the base tier: the
+predicates ship branch-editable at `.claude/chain/`, and the gate's forgery-guard trust root
+(`ledger/.hook-signed`) is a per-clone, gitignored, agent-writable file — so an autonomous phase with
+Bash could in principle forge a `signed` ledger line (recording its own hash) or weaken a branch-editable
+predicate. Nothing that does so reaches the default branch without the operator's merge, which is why the
+finalizer PARKS and the human review is the load-bearing check. Closing these mechanically — a pinned
+non-branch-editable predicate copy and a tamper-evident forgery-guard root (a MAC keyed outside the
+phase, or committed provenance) — is the auto-merge tier's requirement, where no human is in the loop.
+Do not present a base-tier ledger signature as unforgeable; present it as human-backstopped.
+
 ## Autonomous merge (deferred; default OFF — stated so it is never wired laxly)
 If `chain.autonomous_merge` is ever enabled, a merge must: (a) exclude any diff touching the protected trusted base — all of `ledger/`, `.githooks/`, `.github/workflows/`, `.claude/agents/`, `.claude/commands/`, and the driver itself, matched by path-prefix with symlinks resolved and moves-out blocked — parking those for the operator regardless of green (a merger that can merge changes to its own judge is self-signing with a scheduler); (b) pin to the reviewed sha (re-read the PR head immediately before merging and abort if it moved); (c) rest on a mechanical envelope, where the adversarial pass may add a veto but its silence never confers authority. None of this is on by default. The finalizer parks.
 
