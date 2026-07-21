@@ -78,7 +78,8 @@ if [ "$WITH_CHAIN" = 1 ]; then
   kit_file "$H/chain/trusted-base" ".claude/chain/trusted-base"
   kit_file "$H/chain/trusted-base-touched.sh" ".claude/chain/trusted-base-touched.sh"
   kit_file "$H/chain/postcondition.py" ".claude/chain/postcondition.py"
-  chmod +x .claude/chain/trusted-base-touched.sh .claude/chain/postcondition.py
+  kit_file "$H/chain/verdict.py" ".claude/chain/verdict.py"
+  chmod +x .claude/chain/trusted-base-touched.sh .claude/chain/postcondition.py .claude/chain/verdict.py
   echo "  chain agents + /chain command + trusted-base fence in .claude/ (--with-chain)"
 fi
 

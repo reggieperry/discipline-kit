@@ -64,6 +64,9 @@ def main() -> int:
         postc = repo / ".claude" / "chain" / "postcondition.py"
         assert postc.exists() and postc.read_text().strip(), \
             "--with-chain must install the driver postcondition predicate: .claude/chain/postcondition.py"
+        verd = repo / ".claude" / "chain" / "verdict.py"
+        assert verd.exists() and verd.read_text().strip(), \
+            "--with-chain must install the committee verdict aggregator: .claude/chain/verdict.py"
 
     # 2. A base install (no flag) installs NEITHER — chain is opt-in, base stays CI-neutral.
     with tempfile.TemporaryDirectory() as td:

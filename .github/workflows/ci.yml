@@ -74,6 +74,9 @@ jobs:
       - name: chain acceptance fixture (the 3 fail-closed refusals halt; clean states advance)
         run: python3 harness/ledger/fixtures/chain_acceptance_test.py
 
+      - name: chain verdict fixture (four-state committee; errored/absent role never reads CLEAN)
+        run: python3 harness/ledger/fixtures/chain_verdict_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify
