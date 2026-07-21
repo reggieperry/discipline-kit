@@ -27,3 +27,12 @@ python3 harness/ledger/fixtures/chain_acceptance_test.py
 python3 harness/ledger/fixtures/chain_verdict_test.py
 python3 reference/test_sdlc_gate.py
 python3 harness/algebra/validate_note.py
+# static type check of the typed calculus + chain predicates. Skip-if-absent keeps the kit droppable
+# (stdlib-only by default); the kit's own CI installs mypy so the type gate is enforced here.
+if python3 -c 'import mypy' 2>/dev/null; then
+  python3 -m mypy --ignore-missing-imports \
+    harness/ledger/model.py harness/ledger/gate.py \
+    harness/chain/postcondition.py harness/chain/verdict.py
+else
+  echo "  (mypy not installed — static type check skipped; \`pip install mypy\` to enable the type gate)"
+fi

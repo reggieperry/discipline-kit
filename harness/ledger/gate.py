@@ -170,8 +170,8 @@ def hook_hashes() -> set[str]:
     return set(HOOKSIGNED.read_text().split()) if HOOKSIGNED.exists() else set()
 
 
-def pending_runnable() -> list[dict]:
-    out = []
+def pending_runnable() -> list[model.Claim]:
+    out: list[model.Claim] = []
     entries = model.load(LEDGER)
     superseded = model.superseded_ids(entries)
     for e in entries:

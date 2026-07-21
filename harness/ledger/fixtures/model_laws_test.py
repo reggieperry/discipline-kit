@@ -105,8 +105,31 @@ def main() -> int:
             check(model.mentions(e, e["subject"]) and model.mentions(e, "story-x"),
                   "mentions finds the entry's own subject/claim", ents)
 
-    print(f"model_laws_test: PASS ({CASES} generated ledgers, seed {SEED} — "
-          "determinacy, signed⊆resolved, non-fabrication, closure, monotonicity, superseded, mentions)")
+    # --- the closed operation algebra (static invariants, no generation needed) ---
+    # A1 — the status-transition relation is CLOSED over the status vocabulary: every key and every
+    # target is a valid Status. A transition to a word outside STATUSES would be an unrepresentable
+    # operation leaking in.
+    for pre, nexts in model.LEGAL_NEXT.items():
+        assert pre in model.STATUSES, f"LEGAL_NEXT key {pre!r} is not a valid status"
+        assert set(nexts) <= model.STATUSES, f"LEGAL_NEXT[{pre!r}] escapes the status vocabulary: {nexts}"
+    # A2 — every status HAS a transition rule (the relation is total over the vocabulary).
+    assert set(model.LEGAL_NEXT) == set(model.STATUSES), \
+        "LEGAL_NEXT must cover every status (a status with no rule is an undefined operation)"
+    # A3 — `signed` is TERMINAL: a signed claim is never superseded in place (defeat = refutation about
+    # it + retirement). This is the one place the dev-ledger diverges from a research ledger.
+    assert model.LEGAL_NEXT["signed"] == frozenset(), "signed must be terminal (no in-place successor)"
+    assert model.LEGAL_NEXT["retired"] == frozenset(), "retired must be terminal"
+    # A4 — the vocabularies are non-empty closed sets, and RUNNABLE ∩ GENERATIVE is empty (a check
+    # cannot be both signable and non-mechanical — that overlap would let a generative 'check' sign).
+    for name, s in (("KINDS", model.KINDS), ("STATUSES", model.STATUSES),
+                    ("SOURCES", model.SOURCES), ("RUNNABLE", model.RUNNABLE)):
+        assert isinstance(s, frozenset) and s, f"{name} must be a non-empty frozenset"
+    assert model.RUNNABLE.isdisjoint(model.GENERATIVE), \
+        "a runnable (signable) check must never also be generative (non-mechanical)"
+
+    print(f"model_laws_test: PASS ({CASES} generated ledgers, seed {SEED} — determinacy, signed⊆resolved, "
+          "non-fabrication, closure, monotonicity, superseded, mentions; + the closed transition algebra: "
+          "LEGAL_NEXT total & closed over STATUSES, signed/retired terminal, runnable∩generative=∅)")
     return 0
 
 

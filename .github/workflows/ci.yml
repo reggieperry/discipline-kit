@@ -74,6 +74,12 @@ jobs:
       - name: ledger-model laws (calculus invariants over generated ledgers — the Python analog of the Scala laws)
         run: python3 harness/ledger/fixtures/model_laws_test.py
 
+      - name: install mypy (the static type gate — the kit dogfoods it even though it ships skip-if-absent)
+        run: pip install mypy
+
+      - name: mypy type gate (the typed calculus + chain predicates)
+        run: python3 -m mypy --ignore-missing-imports harness/ledger/model.py harness/ledger/gate.py harness/chain/postcondition.py harness/chain/verdict.py
+
       - name: chain trusted-base fence fixture (a phase touching the gate/hooks/CI/.claude trips exit 2)
         run: python3 harness/ledger/fixtures/chain_fence_test.py
 

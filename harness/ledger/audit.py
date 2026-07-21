@@ -39,18 +39,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # ledger/ — for the 
 import model  # noqa: E402
 
 REQUIRED = ("id", "ts", "claim", "source", "kind", "status")
-KINDS = {"assertion", "testimony", "refutation"}
-STATUSES = model.STATUSES  # the four-word status vocabulary, shared with the gate
-SOURCES = {"claude-code", "subagent", "human", "hook"}
-# discharged_by.check values that are NOT mechanical; a signed entry naming one is a violation.
-GENERATIVE = {"none", "pr-review", "deep-reason", "testimony", "workflow-verify", "claude-code", "subagent"}
-LEGAL_NEXT = {  # legal status of a successor entry, keyed by predecessor status
-    "unverified": {"signed", "refuted", "unverified"},  # unverified successor = revised assertion
-    "signed": set(),      # a signed claim is never superseded in place; defeat = refutation about it + retirement
-    "refuted": set(),     # refuted stays on the record; removal only via retirement
-    "retired": set(),
-}
-RUNNABLE = model.RUNNABLE  # the signable checks, shared with the gate (a runnable-check successor)
+# the closed vocabularies + the status-transition relation all live in model.py now, so the gate and
+# the audit share one algebra (a status word or a transition the audit rejects is the same one the
+# gate reasons over).
+KINDS = model.KINDS
+STATUSES = model.STATUSES
+SOURCES = model.SOURCES
+GENERATIVE = model.GENERATIVE
+LEGAL_NEXT = model.LEGAL_NEXT
+RUNNABLE = model.RUNNABLE
 CODE_EXTS = (".py", ".go", ".scala", ".sc", ".ts", ".tsx", ".js", ".jsx", ".sh",
              ".rs", ".java", ".rb", ".c", ".cc", ".cpp", ".h", ".hpp")
 TEST_HINTS = ("test", "Suite", "spec")
@@ -140,7 +137,7 @@ def check_chains(live: list[dict], trace: list[dict]) -> list[V]:
                 viol.append(V("chains", f"{e.get('id')}: supersedes {sup} which does not exist"))
             elif sup in by_id:
                 prev = by_id[sup].get("status")
-                if e.get("status") not in LEGAL_NEXT.get(prev, set()):
+                if e.get("status") not in LEGAL_NEXT.get(prev, frozenset()):
                     viol.append(V("chains", f"{e.get('id')}: illegal transition {prev} -> {e.get('status')}"))
     return viol
 

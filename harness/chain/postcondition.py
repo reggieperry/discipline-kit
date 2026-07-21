@@ -103,16 +103,17 @@ def tester_clean(base: str) -> int:
 
 def no_open_refutation(story: str) -> int:
     ents = model.load(ledger_path())
-    by_id = {e.get("id"): e for e in ents if e.get("id")}
+    by_id: dict[str, model.Claim] = {e["id"]: e for e in ents if e.get("id")}
     resolved = model.resolved_ids(ents)
 
     # A refutation R about claim C BELONGS to the story if R's own text names it, OR — the reviewer's
     # real shape — R carries `about: C` and the refuted claim C names the story (the reviewer is never
     # told to embed the story id in the refutation, so scope must follow the about-edge).
-    def in_story(r: dict) -> bool:
+    def in_story(r: model.Claim) -> bool:
         if model.mentions(r, story):
             return True
-        c = by_id.get(r.get("about"))
+        about = r.get("about")
+        c = by_id.get(about) if about else None
         return c is not None and model.mentions(c, story)
 
     # A refutation R about C is DISPOSED only when a FIX has passed the gate — a resolved successor
@@ -124,7 +125,7 @@ def no_open_refutation(story: str) -> int:
                               if e.get("supersedes") and e.get("id") in resolved}
     about_resolved = {e.get("about") for e in ents if e.get("id") in resolved and e.get("about")}
 
-    def disposed(r: dict) -> bool:
+    def disposed(r: model.Claim) -> bool:
         rid, c = r.get("id"), r.get("about")
         return (rid in resolved or rid in about_resolved
                 or (c is not None and c in superseded_by_resolved))
