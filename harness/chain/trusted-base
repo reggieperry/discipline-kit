@@ -1,0 +1,29 @@
+# Trusted base — the paths the chain's phase-agents must not modify (the judge that grades them).
+#
+# The /chain driver runs trusted-base-touched.sh after a build phase to re-derive that the phase's
+# commits touched none of these; a touch halts the chain closed. A change that legitimately needs to
+# touch the judge is not chain work — it parks for the operator, who reviews and merges it by hand.
+#
+# One prefix per line (blank lines and #-comments ignored). Match is by path-PREFIX: a directory
+# entry (trailing /) covers its whole subtree. Paths are repo-relative, as `git diff` emits them.
+# This list is itself in the trusted base (.claude/chain/), so a phase-agent cannot widen its own cage.
+#
+# BASE TIER (this file) — the local gate machinery and the chain's own instructions. This is the fence
+# the human-in-the-loop chain needs: it stops a phase-agent from silently disabling the gate that
+# signs it. The AUTO-MERGE tier extends the fence to a computed cover of the effective check
+# (build/lint/test config: build.sbt, project/, package.json scripts, conftest/pyproject, Makefile,
+# gate/, lint/format config) — required only when a green check, not a human, is the merge warrant.
+
+ledger/
+.githooks/
+.github/workflows/
+.github/actions/
+.github/CODEOWNERS
+.claude/agents/
+.claude/commands/
+.claude/rules/
+.claude/skills/
+.claude/chain/
+.claude/settings.json
+.claude/settings.local.json
+CLAUDE.md

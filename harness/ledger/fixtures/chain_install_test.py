@@ -11,6 +11,7 @@ Run: python3 harness/ledger/fixtures/chain_install_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -53,6 +54,13 @@ def main() -> int:
         # the installed driver is the real one (a distinctive marker), not a stub
         assert "parent-session driver" in cmd.read_text(), \
             "the installed chain.md must be the real driver, not a stub"
+        # the trusted-base fence (list + predicate) installs alongside, for the driver to shell out to
+        fence_list = repo / ".claude" / "chain" / "trusted-base"
+        fence_pred = repo / ".claude" / "chain" / "trusted-base-touched.sh"
+        assert fence_list.exists() and fence_list.read_text().strip(), \
+            "--with-chain must install the trusted-base list: .claude/chain/trusted-base missing"
+        assert fence_pred.exists() and os.access(fence_pred, os.X_OK), \
+            "--with-chain must install the executable fence predicate: .claude/chain/trusted-base-touched.sh"
 
     # 2. A base install (no flag) installs NEITHER — chain is opt-in, base stays CI-neutral.
     with tempfile.TemporaryDirectory() as td:

@@ -71,10 +71,14 @@ echo "  ledger-* skills in .claude/skills/"
 # command, into .claude/agents and .claude/commands. CI-neutral — auto-merge is a separate add-on that
 # alone touches .github/ and branch protection. A base install (no flag) installs neither.
 if [ "$WITH_CHAIN" = 1 ]; then
-  mkdir -p .claude/agents .claude/commands
+  mkdir -p .claude/agents .claude/commands .claude/chain
   for a in "$H"/agents/*.md; do kit_file "$a" ".claude/agents/$(basename "$a")"; done
   kit_file "$H/commands/chain.md" ".claude/commands/chain.md"
-  echo "  chain agents + /chain command in .claude/ (--with-chain)"
+  # the trusted-base fence: the path list + the predicate the /chain driver shells out to
+  kit_file "$H/chain/trusted-base" ".claude/chain/trusted-base"
+  kit_file "$H/chain/trusted-base-touched.sh" ".claude/chain/trusted-base-touched.sh"
+  chmod +x .claude/chain/trusted-base-touched.sh
+  echo "  chain agents + /chain command + trusted-base fence in .claude/ (--with-chain)"
 fi
 
 # 2. bootstrap the ledger — only if absent (installer-as-first-customer)
