@@ -25,7 +25,10 @@ def load_gate(root: Path):
     (root / "ledger").mkdir(parents=True, exist_ok=True)
     dst = root / "ledger" / "gate.py"
     shutil.copy(GATE, dst)
-    shutil.copy(MODEL, root / "ledger" / "model.py")  # gate.py imports the shared calculus
+    shutil.copy(MODEL, root / "ledger" / "model.py")  # gate.py imports the shared calculus library
+    # module-LOADING gate.py (vs running it as a script) does not put ledger/ on sys.path, so the
+    # test sets it up — the production script carries no path workaround for this test's loading.
+    sys.path.insert(0, str(root / "ledger"))
     spec = importlib.util.spec_from_file_location("gate_under_test", dst)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

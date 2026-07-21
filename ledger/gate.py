@@ -35,8 +35,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # ledger/ — for the shared calculus
-import model  # noqa: E402  (RUNNABLE, load, superseded_ids)
+import model  # the dev-ledger algebra library (RUNNABLE, load, superseded_ids, Claim); ledger/ is on
+#              sys.path[0] when this runs as a script (a fixture that module-loads it sets the path)
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = ROOT / "ledger" / "claims.jsonl"

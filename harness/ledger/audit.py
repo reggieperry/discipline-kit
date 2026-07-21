@@ -35,8 +35,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # ledger/ — for the shared calculus
-import model  # noqa: E402
+import model  # the dev-ledger algebra library; ledger/ is on sys.path[0] when this runs as a script
 
 REQUIRED = ("id", "ts", "claim", "source", "kind", "status")
 # the closed vocabularies + the status-transition relation all live in model.py now, so the gate and

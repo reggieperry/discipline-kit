@@ -8,6 +8,7 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 
 - `ledger/claims.jsonl` — append-only, one JSON object per line. The live board.
 - `ledger/trace/` — retired entries (one `<id>.jsonl` per retirement: the original claim line verbatim + a retirement-record sidecar). Off the live board, still on the record.
+- `ledger/model.py` — **the dev-ledger algebra library**: the typed vocabulary (`Kind`/`Status`/`Source` literals, the `Claim` shape, the closed `RUNNABLE`/`STATUSES`/`GENERATIVE` sets, the `LEGAL_NEXT` status-transition relation) and the calculus operations (`load`, `is_signed`, `superseded_ids`, `resolved_ids`, `mentions`). It is the ONE importable module the gate, the audit, and the chain predicates all read the ledger through — so they share one belief-state calculus rather than three drifting copies. `mypy`-gated and law-tested (`fixtures/model_laws_test.py`, the Python analog of the Scala `LedgerLawsSuite`).
 - `ledger/audit.py` — the mechanical checks over the ledger (supplied verbatim; do not edit).
 - `ledger/append` — the ONE schema-validating writer. Assigns id + timestamp. `echo '{...}' | ledger/append`.
 - `ledger/retire <id> <reason> <refuting-id>` — the ONE sanctioned removal: move a claim to `trace/`.
@@ -18,6 +19,8 @@ If this repo keeps another ledger for its own domain, this one is **distinct** �
 - `ledger/gate.py` — the commit-path gate (forgery guard, check-discharge, audit), called by the git hooks. Byte-identical across repos; per-repo behavior comes from `ledger/languages` + `ledger/check.sh`, never from editing the gate.
 - `ledger/check.sh` (optional) — the repo's mechanical check. If absent, the gate auto-detects a single toolchain (`sbt check` / `uv run pytest`); if neither, it runs the forgery guard + audit only.
 - `ledger/languages` (optional) — the extensions of the languages that build the system, one per line (`#` comments). A staged file in one of them fires the check. If absent, the gate unions the toolchains it auto-detects from the build markers at the repo root.
+
+**Python shape — a library plus drop-in scripts, deliberately not a pip package.** `model.py` is the library; `gate.py`/`audit.py`/`append`/`retire`/… are scripts that import it. They are **invoked by path** (the git hooks run `python3 ledger/gate.py`; the chain driver runs `.claude/chain/postcondition.py`) and **copied into your repo by the installer**, never `pip install`ed — that no-install, drop-into-any-repo property is the point, and it is why this is not a `src/` package with entry-points. The import convention follows from that: a script run from `ledger/` gets `ledger/` on `sys.path[0]`, so same-dir tools `import model` natively with no path juggling; the only two cross-directory consumers — the chain predicate under `.claude/chain/` and the tests under `ledger/fixtures/` — put `ledger/` on the path in one documented line. Static-typed under `mypy` (skip-if-absent so the kit stays droppable; enforced in the kit's own CI).
 
 ## The ledger-* skills
 

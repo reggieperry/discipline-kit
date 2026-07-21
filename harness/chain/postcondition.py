@@ -27,10 +27,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-# the shared dev-ledger calculus lives in ledger/model.py (base-installed alongside gate.py). This
-# predicate installs to .claude/chain/, so reach the repo's ledger/ dir via the repo root.
+# CROSS-DIR IMPORT of the dev-ledger algebra library. `model.py` lives in the repo's `ledger/`
+# (base-installed); this predicate installs to `.claude/chain/`, so it puts `ledger/` on the path via
+# the repo root. This is the one genuine cross-directory bridge — same-dir tools (gate/audit) import
+# `model` natively; see ledger/README.md "Layout".
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ledger"))
-import model  # noqa: E402  (RUNNABLE, load, resolved_ids, mentions, is_signed)
+import model  # noqa: E402  (RUNNABLE, load, resolved_ids, mentions, is_signed, Claim)
 
 _TEST = re.compile(r"(^|/)[^/]*(test|spec)[^/]*($|/)", re.IGNORECASE)
 

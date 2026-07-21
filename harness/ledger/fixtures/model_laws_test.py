@@ -19,7 +19,9 @@ import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # harness/ledger — the model under test
+# this test lives in ledger/fixtures/; put the parent ledger/ on the path to import the algebra
+# library under test (a test reaching its sibling package — see ledger/README.md "Layout").
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import model  # noqa: E402
 
 SEED = 20260721   # fixed: reproducible, and varies the corpus without wall-clock nondeterminism
