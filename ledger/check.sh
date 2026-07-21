@@ -18,5 +18,6 @@ python3 harness/ledger/fixtures/inbound_guard_test.py
 python3 harness/ledger/fixtures/interchange_test.py
 python3 harness/ledger/fixtures/authoring_artifacts_test.py
 python3 harness/ledger/fixtures/chain_install_test.py
+python3 harness/ledger/fixtures/gate_signing_test.py
 python3 reference/test_sdlc_gate.py
 python3 harness/algebra/validate_note.py

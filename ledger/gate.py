@@ -9,13 +9,16 @@
        `code_exts`) or a pending unverified claim names a runnable check, run the
        mechanical check — which must cover every one of those languages. On FAILURE, append a
        `refuted` entry (parent sha + patch-id, since pre-commit has no commit sha)
-       and BLOCK — approving review testimony never signs. On PASS, queue the claims
-       for the post-commit signer.
+       and BLOCK — approving review testimony never signs. On PASS, SIGN in-commit: append the
+       verification-surface + per-claim `signed` entries (recording each line-hash in
+       ledger/.hook-signed) and `git add` them, so the signature is atomic with the change that
+       earned it and is never left dirty in the working tree.
     3. AUDIT: run ledger/audit.py; block on any hard violation.
 
   --post-commit  (from .githooks/post-commit)
-    Write the queued `signed` entries now that the commit sha exists, and record each
-    one's line-hash in ledger/.hook-signed so the forgery guard admits it next commit.
+    A no-op — signing now happens in-commit (step 2, since the parent sha + patch-id already
+    identify the change). Retained so the installed post-commit hook stays valid; it only drops
+    any stale PENDING left by a pre-upgrade commit.
 
 The mechanical check is auto-detected (see `check_command`): a repo-provided
 `ledger/check.sh`, else an sbt/uv toolchain default, else none (forgery guard + audit
@@ -238,12 +241,16 @@ def pre_commit() -> int:
             sys.stderr.write("✖ dev-ledger: mechanical check FAILED — commit blocked, refuted "
                              "entry recorded. Approving review testimony does not sign.\n")
             return 1
-        PENDING.write_text(json.dumps({
-            "run": ref, "check": CHECK_NAME, "claim": STANDARD_CLAIM,
-            "subject": "verification-surface",
-            "pending": [{"id": e["id"], "claim": e["claim"], "subject": e.get("subject"),
-                         "check": e["check"]} for e in pend],
-        }) + "\n")
+        # in-commit signing: sign the verification-surface + each pending runnable claim NOW and
+        # stage the appended lines into THIS commit, so the signature is atomic with the change that
+        # earned it — no post-commit phase, no signature left dirty in the working tree. Mirrors the
+        # refuted branch above, which already records its verdict in pre-commit with a parent+patch ref.
+        # The forgery guard (step 1) already ran on the pre-signing staged content, so these entries
+        # (written by the gate, their hashes recorded in .hook-signed) are not seen as forged.
+        _sign(STANDARD_CLAIM, "verification-surface", CHECK_NAME, ref, f"{parent}+{patch}")
+        for e in pend:
+            _sign(e["claim"], e.get("subject"), e["check"], ref, f"{parent}+{patch}", supersedes=e["id"])
+        sh(["git", "add", "--", "ledger/claims.jsonl"])
 
     # 3. audit
     a = sh([sys.executable, str(AUDIT), "--root", "."])
@@ -268,18 +275,10 @@ def _sign(claim: str, subject, check: str, ref: str, sha: str, supersedes=None) 
 
 
 def post_commit() -> int:
-    if not PENDING.exists():
-        return 0
-    try:
-        q = json.loads(PENDING.read_text())
-    except Exception:
+    # In-commit signing (pre_commit) replaced the two-phase signer — nothing to sign post-commit.
+    # Defensively drop any PENDING left by a pre-upgrade commit so it can never sign on a later commit.
+    if PENDING.exists():
         PENDING.unlink()
-        return 0
-    sha = sh(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
-    _sign(q["claim"], q["subject"], q["check"], q["run"], sha)
-    for p in q.get("pending", []):
-        _sign(p["claim"], p.get("subject"), q["check"], q["run"], sha, supersedes=p["id"])
-    PENDING.unlink()
     return 0
 
 

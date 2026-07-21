@@ -62,6 +62,9 @@ jobs:
       - name: chain-install fixture (--with-chain installs the 5 agents + /chain; base installs neither)
         run: python3 harness/ledger/fixtures/chain_install_test.py
 
+      - name: gate in-commit signing fixture (claim signs IN its commit; clean tree, no post-commit dirt)
+        run: python3 harness/ledger/fixtures/gate_signing_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify
