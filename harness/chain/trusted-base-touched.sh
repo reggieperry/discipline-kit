@@ -44,6 +44,18 @@ if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
   exit 2
 fi
 
+# Cluster B — an override sentinel present is tamper. The gate honors LEDGER_CHECK_CMD/LEDGER_CODE_EXTS
+# ONLY when ledger/.test-mode exists, so a phase that drops it can sign on a fake check. It is gitignored
+# (invisible to the --porcelain scan below), so check it explicitly and fail CLOSED on its mere presence.
+toplevel="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+for sentinel in "$toplevel/ledger/.test-mode"; do
+  if [ -e "$sentinel" ]; then
+    echo "trusted-base: override sentinel present (ledger/.test-mode) — a chain phase must not enable "\
+"the check-override; failing closed" >&2
+    exit 2
+  fi
+done
+
 # prefixes — drop #-comments and blank lines, trim surrounding whitespace (F5).
 prefixes=()
 while IFS= read -r raw; do

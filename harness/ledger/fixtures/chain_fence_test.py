@@ -118,8 +118,20 @@ def main() -> int:
         assert r.returncode == 2 and ".githooks/" in r.stdout, \
             f"an uncommitted trusted-path edit must be caught (exit 2), got {r.returncode}:\n{r.stdout}"
 
+        # 8. an override sentinel present (ledger/.test-mode) fails CLOSED (Cluster B): a worker could
+        # otherwise `: > ledger/.test-mode` + LEDGER_CHECK_CMD=true to sign on a fake check, and the
+        # sentinel is gitignored so a plain --porcelain scan never sees it. Isolate from case 7's dirt.
+        (repo / ".githooks" / "pre-commit").unlink(missing_ok=True)  # clear case-7 leftover
+        base8 = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+        (repo / "ledger").mkdir(exist_ok=True)
+        (repo / "ledger" / ".test-mode").write_text("")
+        r = run(["bash", pred, base8], repo)
+        assert r.returncode == 2 and "test-mode" in (r.stdout + r.stderr), \
+            f"an override sentinel present must fail closed (exit 2) and name it, got {r.returncode}:\n{r.stdout}{r.stderr}"
+        (repo / "ledger" / ".test-mode").unlink()
+
     print("chain_fence_test: PASS (prefix/rename core + fail-closed on bad-base/empty-list, "
-          "touch-then-revert, and uncommitted tamper)")
+          "touch-then-revert, uncommitted tamper, and override-sentinel bypass)")
     return 0
 
 

@@ -68,6 +68,9 @@ jobs:
       - name: gate forgery-sweep fixture (an unstaged forged signed line is not laundered by git add)
         run: python3 harness/ledger/fixtures/gate_forgery_sweep_test.py
 
+      - name: gate copies byte-identity (harness/ledger/gate.py == ledger/gate.py)
+        run: python3 harness/ledger/fixtures/gate_copies_identical_test.py
+
       - name: chain trusted-base fence fixture (a phase touching the gate/hooks/CI/.claude trips exit 2)
         run: python3 harness/ledger/fixtures/chain_fence_test.py
 

@@ -44,3 +44,11 @@ ledger/fixtures/
 .claude/settings.json
 .claude/settings.local.json
 CLAUDE.md
+
+# The kit's own master tree (inert in an adopter repo, which has no harness/; protective when the kit
+# dogfoods the chain on itself — a chain worker must not edit the gate/chain master copies, only the
+# fenced installed ones, and a judge change is operator work, not chain work).
+harness/ledger/
+harness/chain/
+harness/agents/
+harness/commands/
