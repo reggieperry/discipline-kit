@@ -16,12 +16,14 @@ H="$KIT/harness"
 TARGET="."
 VERIFY=0
 UPGRADE=0
+WITH_CHAIN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) TARGET="$2"; shift 2 ;;
     --verify) VERIFY=1; shift ;;
     --upgrade) UPGRADE=1; shift ;;
-    *) echo "usage: install-harness.sh [--dir <repo>] [--verify] [--upgrade]" >&2; exit 2 ;;
+    --with-chain) WITH_CHAIN=1; shift ;;
+    *) echo "usage: install-harness.sh [--dir <repo>] [--verify] [--upgrade] [--with-chain]" >&2; exit 2 ;;
   esac
 done
 KIT_VERSION="$(grep -m1 -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$KIT/CHANGELOG.md" 2>/dev/null || echo v0.0.0)"
@@ -64,6 +66,16 @@ for s in ledger-board ledger-write ledger-preregister ledger-discharge ledger-re
   kit_dir "$H/skills/$s" ".claude/skills/$s"
 done
 echo "  ledger-* skills in .claude/skills/"
+
+# 1c. the chain (§18) — opt-in via --with-chain, default off: the five phase agents + the /chain
+# command, into .claude/agents and .claude/commands. CI-neutral — auto-merge is a separate add-on that
+# alone touches .github/ and branch protection. A base install (no flag) installs neither.
+if [ "$WITH_CHAIN" = 1 ]; then
+  mkdir -p .claude/agents .claude/commands
+  for a in "$H"/agents/*.md; do kit_file "$a" ".claude/agents/$(basename "$a")"; done
+  kit_file "$H/commands/chain.md" ".claude/commands/chain.md"
+  echo "  chain agents + /chain command in .claude/ (--with-chain)"
+fi
 
 # 2. bootstrap the ledger — only if absent (installer-as-first-customer)
 if [ ! -f ledger/claims.jsonl ]; then

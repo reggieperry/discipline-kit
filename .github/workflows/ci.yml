@@ -59,6 +59,9 @@ jobs:
       - name: authoring-artifacts fixture (the ADR/story templates + four skills keep their structure)
         run: python3 harness/ledger/fixtures/authoring_artifacts_test.py
 
+      - name: chain-install fixture (--with-chain installs the 5 agents + /chain; base installs neither)
+        run: python3 harness/ledger/fixtures/chain_install_test.py
+
       - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
         if: github.event_name == 'pull_request'
         run: python3 harness/ledger/audit.py --certify
