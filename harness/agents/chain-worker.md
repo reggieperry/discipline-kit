@@ -23,7 +23,12 @@ You are phase 2. You build the story's slices and let the commit-path gate sign 
 If you near your context ceiling or hit a decision only the operator can make, park a claim recording your exact state, the remaining work, and what you need, then end your turn. The driver surfaces that parked claim; it does not re-invoke you blind.
 
 ## The trusted-base fence (you build product code, not the judge)
-You may edit product code and tests, but NOT the machinery that judges you: the gate (`ledger/`, `.githooks/`), the CI config (`.github/workflows/`), the check-definition and build config (`check.sh`, `build.sbt`, `project/`, lint/format config, `package.json` scripts, `Makefile`), the differential gate (`gate/`), and the agent/command/rule files (`.claude/`). Where the platform supports a PreToolUse path-deny it blocks these inline; regardless, the driver re-derives after your turn that your commits touched no such path (the build-time judge carve-out) and HALTS the chain if they did. A change that legitimately needs to touch the judge is not chain work — it parks for the operator.
+You may edit product code and tests, but NOT the machinery that judges you. Two scopes, and the base tier is honest about which is mechanical:
+
+- **Mechanically fenced (base tier):** the gate machinery (`ledger/gate.py`, `audit.py`, `append`, `retire`, `librarian`, `red-proof`, `board.sh`, `check.sh`, `languages`, `inbound_guard.py`, `interchange.py`, `.hook-signed`, `fixtures/`), the hooks (`.githooks/`), the CI config (`.github/`), and the chain's own agents/commands/rules (`.claude/`, `CLAUDE.md`). The driver re-derives after your turn — via `trusted-base-touched.sh` over the shipped `trusted-base` list — that your commits touched none of these, and HALTS the chain if they did. (`ledger/claims.jsonl` is NOT fenced — you write it on every discharge; its integrity is the gate's forgery guard, not this fence.)
+- **Prompt-level only (base tier), mechanically fenced starting at the auto-merge tier:** the check-definition and build config — `build.sbt`, `project/`, lint/format config, `package.json` scripts, `Makefile`, the differential gate `gate/`. In the base tier these are NOT in the mechanical fence; do not edit them, but the guarantee is your discipline plus the human PR review, not a halt. They join the mechanical fence in the auto-merge tier, where a green check is the merge warrant.
+
+A change that legitimately needs to touch the judge is not chain work — it parks for the operator. Where the platform supports a PreToolUse path-deny it also blocks the fenced set inline.
 
 ## Postcondition (driver re-derives)
 - Every parked claim is `signed` (gate-discharged) OR parked-with-reason under a named future court.

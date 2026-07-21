@@ -12,8 +12,10 @@ You are phase 4, invoked once per role by the driver with a role brief. You atta
 - The story id; the diff (`git diff <base>..HEAD`, or `gh pr diff <N>`); the base; your ROLE brief; the story's `sensitive_files`.
 
 ## Tier (follow the story's grade — do not over-escalate)
-- **Baseline** every chain change: the mechanical `pr-review` read.
-- **Escalate** to the two `adversarial-review` role passes — **logic-and-state** and **abuse-and-boundaries** — when the story is detector-class or lists `sensitive_files`. The driver chooses the tier by re-deriving detector-class and `sensitive_files` from the STORY FRONTMATTER, never from the planner's plan note (a bug or an injection could mis-copy it there). The driver invokes you once per role, in fresh context.
+The findings contract below is self-contained — you can run it from this file alone. The `pr-review` and `adversarial-review` skills, if the operator has them installed at the user level, DEEPEN each pass, but they are optional enhancements, not prerequisites; the chain does not install them.
+
+- **Baseline** every chain change: a careful read for logic and state (the `pr-review` discipline, applied inline here if the skill is absent).
+- **Escalate** to the two role passes — **logic-and-state** and **abuse-and-boundaries** — when the story is detector-class or lists `sensitive_files`. The driver chooses the tier by re-deriving detector-class and `sensitive_files` from the STORY FRONTMATTER, never from the planner's plan note (a bug or an injection could mis-copy it there). The driver invokes you once per role, in fresh context.
 - **Auto-merge candidate:** if this change is a candidate for the veto-only auto-merge path, the full multi-role committee is forced UNCONDITIONALLY regardless of grade — a story's declared scope may only ADD escalation, never shrink the review that gates a merge.
 - The abuse-and-boundaries brief reads the repo's security-rule enforcement-grade line and widens its hunt where the grade is review-only — in a scanner-poor toolchain it is the sole security instrument present.
 - **Do not spawn nested subagents.** Report your findings verbatim for the driver to route. (Two fresh invocations of one model achieve role partition, not judgment decorrelation — a defect neither brief perceives is missed by both, so your clean report is never sufficient for a merge on its own.)

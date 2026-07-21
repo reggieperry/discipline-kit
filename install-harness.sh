@@ -74,6 +74,13 @@ if [ "$WITH_CHAIN" = 1 ]; then
   mkdir -p .claude/agents .claude/commands .claude/chain
   for a in "$H"/agents/*.md; do kit_file "$a" ".claude/agents/$(basename "$a")"; done
   kit_file "$H/commands/chain.md" ".claude/commands/chain.md"
+  # the authoring skills the chain's entry phase invokes (story-write/tighten/intake to reach a
+  # `ready` story; adr-write for a story that turns on a decision). The reviewer's findings contract
+  # is carried INLINE in chain-reviewer.md, so pr-review/adversarial-review are optional user-level
+  # enhancements, not install-time prerequisites.
+  for s in story-write story-tighten story-intake adr-write; do
+    kit_dir "$H/skills/$s" ".claude/skills/$s"
+  done
   # the trusted-base fence: the path list + the predicate the /chain driver shells out to
   kit_file "$H/chain/trusted-base" ".claude/chain/trusted-base"
   kit_file "$H/chain/trusted-base-touched.sh" ".claude/chain/trusted-base-touched.sh"

@@ -67,6 +67,12 @@ def main() -> int:
         verd = repo / ".claude" / "chain" / "verdict.py"
         assert verd.exists() and verd.read_text().strip(), \
             "--with-chain must install the committee verdict aggregator: .claude/chain/verdict.py"
+        # the authoring skills the driver's entry phase (story-write/tighten/intake) invokes must
+        # install too — else /chain cannot reach a `ready` story on a fresh --with-chain install.
+        for sk in ("story-write", "story-tighten", "story-intake"):
+            s = repo / ".claude" / "skills" / sk / "SKILL.md"
+            assert s.exists() and s.read_text().strip(), \
+                f"--with-chain must install the authoring skill the entry phase needs: .claude/skills/{sk}"
 
     # 2. A base install (no flag) installs NEITHER — chain is opt-in, base stays CI-neutral.
     with tempfile.TemporaryDirectory() as td:
