@@ -58,6 +58,18 @@ def main() -> int:
         assert r.returncode == 0, \
             f"a product-only change must pass the fence (exit 0), got {r.returncode}:\n{r.stdout}{r.stderr}"
 
+        # 1b. a legit ledger/claims.jsonl append (every discharge writes it via in-commit signing)
+        # must PASS — the fence protects the gate MACHINERY, not the claim content (the forgery guard
+        # covers content). A bare `ledger/` prefix wrongly halts every real worker phase (Cluster A).
+        base_c = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+        (repo / "ledger").mkdir(exist_ok=True)
+        (repo / "ledger" / "claims.jsonl").write_text('{"id":"clm-1","claim":"x"}\n')
+        run(["git", "add", "-A"], repo); run(["git", "commit", "-qm", "worker signs a claim"], repo)
+        r = run(["bash", pred, base_c], repo)
+        assert r.returncode == 0, \
+            f"a legit ledger/claims.jsonl write must PASS the fence (exit 0) — else no worker phase " \
+            f"completes, got {r.returncode}:\n{r.stdout}{r.stderr}"
+
         # 2. a change touching a trusted-base path (the gate) => blocked (exit 2), path named
         commit(repo, "ledger/gate.py", "print('tampered')\n")
         r = run(["bash", pred, base], repo)

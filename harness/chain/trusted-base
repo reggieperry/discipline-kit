@@ -14,7 +14,24 @@
 # (build/lint/test config: build.sbt, project/, package.json scripts, conftest/pyproject, Makefile,
 # gate/, lint/format config) — required only when a green check, not a human, is the merge warrant.
 
-ledger/
+# The gate MACHINERY — NOT the whole ledger/ dir. ledger/claims.jsonl and ledger/trace/ are
+# deliberately EXCLUDED: the worker writes claims.jsonl on every discharge (in-commit signing), so a
+# bare `ledger/` prefix would halt every build phase; and claim CONTENT is guarded by the gate's
+# hash-based forgery guard (a stronger check than a path-prefix diff). The fence protects the code
+# that judges; the forgery guard protects what it signs.
+ledger/gate.py
+ledger/audit.py
+ledger/append
+ledger/retire
+ledger/librarian
+ledger/red-proof
+ledger/board.sh
+ledger/check.sh
+ledger/languages
+ledger/inbound_guard.py
+ledger/interchange.py
+ledger/.hook-signed
+ledger/fixtures/
 .githooks/
 .github/workflows/
 .github/actions/

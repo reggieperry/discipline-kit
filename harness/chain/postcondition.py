@@ -58,6 +58,13 @@ def is_test_path(p: str) -> bool:
     return bool(_TEST.search(p)) or p.endswith("Suite.scala") or "/tests/" in f"/{p}"
 
 
+def is_ledger_content(p: str) -> bool:
+    # the ledger's CONTENT (claims + graveyard) is the tester's/worker's legitimate output, not
+    # production code — an attestation or a signature append is not a code touch. Its integrity is the
+    # gate's forgery guard, not this diff. (The gate MACHINERY is fenced separately by trusted-base.)
+    return p == "ledger/claims.jsonl" or p.startswith("ledger/trace/")
+
+
 def planner_parked(story: str) -> int:
     ents = load()
     parked = [e for e in ents
@@ -86,7 +93,7 @@ def tester_clean(base: str) -> int:
         sys.stderr.write(f"tester-clean: git diff failed — failing closed\n{d.stderr}")
         return 2
     changed = [p for p in d.stdout.split("\n") if p.strip()]
-    nontest = [p for p in changed if not is_test_path(p)]
+    nontest = [p for p in changed if not is_test_path(p) and not is_ledger_content(p)]
     if nontest:
         sys.stderr.write("tester postcondition VIOLATED: the tester's diff touched non-test paths — "
                          "a tester that touched production code cannot hand off:\n  "

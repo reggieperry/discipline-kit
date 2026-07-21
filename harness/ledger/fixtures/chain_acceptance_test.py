@@ -90,6 +90,16 @@ def main() -> int:
         r = pc("tester-clean", base2, cwd=repo)
         assert r.returncode == 0, f"tester-clean must PASS when only test paths changed, got {r.returncode}:\n{r.stderr}"
 
+        # 2c. the tester's own attestation append to ledger/claims.jsonl must PASS — it is the tester's
+        # legitimate output, not a production touch (Cluster A sibling; is_test_path rejects it otherwise).
+        base2c = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+        (repo / "ledger").mkdir(exist_ok=True)
+        (repo / "ledger" / "claims.jsonl").write_text('{"id":"clm-att","kind":"testimony"}\n')
+        run(["git", "add", "-A"], repo); run(["git", "commit", "-qm", "tester attestation"], repo)
+        r = pc("tester-clean", base2c, cwd=repo)
+        assert r.returncode == 0, \
+            f"tester-clean must PASS an attestation-only claims.jsonl change, got {r.returncode}:\n{r.stderr}"
+
         # 3a. an undischarged blocking refutation about the story -> HALT
         write_ledger(led, [
             {"id": "clm-10", "subject": story, "claim": "widget behaves (story: %s)" % story,
