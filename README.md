@@ -4,7 +4,7 @@ Portable engineering discipline for Claude Code — the auto-loading rules, prin
 
 ## Quick start — say this to Claude Code
 
-The kit's operator is Claude Code; its interface is the utterance. Paste these prompts. Each is **read-first** (it points the instance at the docs before it acts), ends with a **receipt demand** (show me the output), and is **dual-audience** — the instance reading this README executes the prompt as its own checklist. There is one ceremony: the **Install** prompt. After it, the injected `CLAUDE.md` harness section and the auto-loaded `ledger-*` skills make the discipline ambient — the rest are orientation and recovery, not setup.
+The kit's operator is Claude Code; the interface is the prompt. Use the prompts below to install the kit. Each is **read-first** (it points the instance at the docs before it acts), ends with a **receipt demand** (show me the output), and is **dual-audience** — the instance reading this README executes the prompt as its own checklist. There is one ceremony: the **Install** prompt. After it, the injected `CLAUDE.md` harness section and the auto-loaded `ledger-*` skills make the discipline ambient — the rest are orientation and recovery, not setup.
 
 > **Install (one time):** "The discipline kit is at `<path>` (or: clone `<repo-url>` to a sibling directory). Read its `README.md`, `install.md`, and `SECURITY.md` first. Then install the harness into this repository and run its acceptance in one command — `install-harness.sh --dir . --verify` — the single-user (private) tier is the only shipped mode. Show me the full verify output, including the forgery-probe result and the `VERSION` stamp. After install, most users should run the Tour prompt next."
 >
