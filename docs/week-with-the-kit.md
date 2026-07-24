@@ -2,7 +2,7 @@
 
 A lifecycle walkthrough, day zero through payoff. One operator, one repo — a billing service with a stubborn invoice-reconciler module — adopting the dev-ledger and its commit-path gate.
 
-Nothing here is aspirational. Every command and every mechanic is one the harness already ships; where a step is judgment rather than tooling, it is named as judgment. The operator drives all of it through the kit's README prompts — the kit's interface is the spoken utterance, not a menu — so this walks what those copy-paste prompts set in motion. Read it as the shape of a first week, then keep the parts that fit your cadence.
+Nothing here is aspirational. Every command and every mechanic is one the harness already ships; where a step is judgment rather than tooling, it is named as judgment. The operator drives all of it through the kit's README prompts — the kit's interface is the prompt, not a menu — so this walks what those copy-paste prompts set in motion. Read it as the shape of a first week, then keep the parts that fit your cadence.
 
 ## Day 0 — install and jurisdiction
 
@@ -78,7 +78,7 @@ Sooner or later the gate refuses a commit. This is the machinery working, not fa
 
 A blocking control fails closed: the commit-path gate denies on any doubt, because an unverifiable state is treated as unsafe. The check ran and the claim did not clear — the reconciler's tolerance guard rejected a total the test said it should accept, or coverage dropped past the floor — and the commit does not land. The claim stays on the board as the open obligation it is, unsigned, because no mechanical check discharged it.
 
-The README's **When a commit blocks** prompt is the utterance for exactly this moment: show the refuted claim and the check output verbatim, then walk the honest moves before touching anything. There are exactly three of them, and naming them is most of the discipline.
+The README's **When a commit blocks** prompt is the prompt for exactly this moment: show the refuted claim and the check output verbatim, then walk the honest moves before touching anything. There are exactly three of them, and naming them is most of the discipline.
 
 Fix the code — the common case, where the claim was right and the implementation was not. Fix the test if the expectation itself was wrong, and disclose it — adjusting an assertion after seeing actual output is legitimate, but it is the green-by-weakening disclosure and it is owed a sentence in the process paragraph, so a later reader knows the goalpost moved and why. Or park the claim, if the honest problem is that the check to settle it is not built yet: supersede the claim into a parked state that names its future court, so it is waiting rather than rotting.
 
@@ -108,7 +108,7 @@ One demotion rule sits underneath all of this: generative review testifies, neve
 
 Two phrases put the machinery to work, and you say them early — a board check after design has started is a seatbelt fastened mid-crash.
 
-Open every session with **"check the board first."** Thirty seconds against `ledger/board.sh open` answers two questions: does anything open bear on today's work, and did anything land since you last looked that today's work should *cite* rather than redo. Start every new effort with **"write the claim before the work."** The README's **Orient** and **Work** prompts put both utterances in copy-paste form; everything else is elaboration.
+Open every session with **"check the board first."** Thirty seconds against `ledger/board.sh open` answers two questions: does anything open bear on today's work, and did anything land since you last looked that today's work should *cite* rather than redo. Start every new effort with **"write the claim before the work."** The README's **Orient** and **Work** prompts put both prompts in copy-paste form; everything else is elaboration.
 
 Once a week, calendared, you spend ten minutes as the judgment the machine cannot automate. Run `ledger/board.sh open`, `ledger/board.sh stale 30`, and `ledger/board.sh checks`.
 
