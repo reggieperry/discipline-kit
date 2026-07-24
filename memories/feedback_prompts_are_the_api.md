@@ -1,6 +1,6 @@
 ---
 name: prompts-are-the-api
-description: "The kit's operator is Claude Code and its interface is the utterance, so docs carry verbatim paste-ready prompts (read-first, receipt-demanding, dual-audience); the conversational path is a TESTED front door — a fresh instance given only the prompts must reach green — not folklore."
+description: "The kit's operator is Claude Code and the interface is the prompt, so docs carry verbatim paste-ready prompts (read-first, receipt-demanding, dual-audience); the conversational path is a TESTED front door — a fresh instance given only the prompts must reach green — not folklore."
 metadata:
   node_type: memory
   type: feedback

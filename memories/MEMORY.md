@@ -34,7 +34,7 @@ Portable engineering-discipline memories, scrubbed of all machine, project, and 
 - [memory-ledger-boundary](feedback_memory_ledger_boundary.md) — Checkable assertions are ledger claims with a named check, not memories; register+annotate+never-delete (v1.3.3)
 - [fail-posture-taxonomy](feedback_fail_posture_taxonomy.md) — Three fail postures by role: blocking→CLOSED, advisory→QUIET, safety→STRICT (v1.3.3)
 - [config-is-a-claim](feedback_config_is_a_claim.md) — A repo's configuration choices are recorded as one check:none ledger assertion, defaults included (v1.3.4)
-- [prompts-are-the-api](feedback_prompts_are_the_api.md) — The kit's interface is the utterance; the conversational path is a TESTED front door, not folklore (v1.3.4)
+- [prompts-are-the-api](feedback_prompts_are_the_api.md) — The kit's interface is the prompt; the conversational path is a TESTED front door, not folklore (v1.3.4)
 - [specs-are-claim-parents](feedback_specs_are_claim_parents.md) — ADR falsifiers and story acceptance criteria are the prose parents of registered claims; the record-home rule applies at every grain (v1.4.0)
 - [adversaries-hunt-never-vote](feedback_adversaries_hunt_never_vote.md) — adversarial-review fans N attackers out by ROLE and never votes; agreements weightless, dedupe by lineage, a finding is real when its check goes red (v1.4.1)
 - [inbound-is-claim-traffic](feedback_inbound_is_claim_traffic.md) — inbound is claim traffic: bug = refutation (or the missing claim); reproduce-or-park; credit the reporter; signatures never arrive from outside the gate (v1.5.0)
