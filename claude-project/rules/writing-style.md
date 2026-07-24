@@ -1,6 +1,6 @@
 ---
 paths:
-  - "README.md"
+  - "**/README.md"
   - "docs/**"
   - "plans/**"
   - "reviews/**"
@@ -28,6 +28,17 @@ Avoid these as filler:
 When candor is genuinely needed — flagging a self-correction, naming a position that deviates from a default, or acknowledging a mistake — do the work in the structure of the argument: present the default, name why it doesn't fit, then arrive at the deviation. The reader does not need to be told the answer is honest; they should be able to see that it is by how it is supported.
 
 Hedge only where genuine uncertainty exists. Confidence is shown by taking a position and supporting it, not by adding "I think" before every claim. Uncertainty is named explicitly when it matters: "I don't know," "this needs verification," "the source is silent on X."
+
+## Plain words over fancy ones
+
+Prefer the plain modern word to the erudite or theoretical synonym when they mean the same thing. Reach for specialized vocabulary only for the precision a plain word would lose, never for tone. In a README, a comment, or a PR, the reader's own word wins: write "prompt," not "utterance"; "always on," not "ambient"; "what it says," not "its enunciation."
+
+Two habits catch most of it:
+
+- **The profundity aphorism.** An "X is Y" epigram—"the interface is the utterance," echoing "the medium is the message"—has to earn its place by carrying an argument the plain sentence can't. Otherwise it reads as reaching to sound deep; default to the plain statement.
+- **The coined abstract noun.** Turning a plain idea into a capital-T Thing with a definite article—"the utterance," "the ask," "the why"—is a tell. Use the verb or the ordinary noun.
+
+The test: would a sharp senior engineer say this out loud to a colleague, or is it written to be admired? Noticing that you are pleased with how a phrase rings is the signal to swap in the plain version. Clear beats clever; the point should land without the reader stopping to appreciate the wording.
 
 ## Mechanical conventions
 
