@@ -15,7 +15,7 @@ The discipline of recording what the code cannot say — the designer's intent, 
 
 ## Why document at all
 
-- **A doc comment is load-bearing: without it there is no abstraction.** If a caller must read a function's body to use it, the function has no abstraction — comments are the mechanism that hides complexity. Write every module and public function so a caller can use it correctly from the description alone — effect, inputs, outputs, special cases — without ever opening the body.
+- **A doc comment does real work: without it there is no abstraction.** If a caller must read a function's body to use it, the function has no abstraction — comments are the mechanism that hides complexity. Write every module and public function so a caller can use it correctly from the description alone — effect, inputs, outputs, special cases — without ever opening the body.
 - **Write comments to capture what was in the designer's mind but had no code form** — rationale, units, invariants, the abstraction's informal half. A comment that paraphrases the adjacent code adds no information and a second thing to keep in sync. Before writing one, ask what a competent reader could *not* deduce from the names, types, and structure beside it, and write only that.
 - **Split every comment by audience.** An *interface* (contract) comment serves the caller — what the unit does, its inputs, outputs, side effects, and constraints; *implementation* comments serve the maintainer — the strategy and the why. Put the contract above the declaration and the strategy inside the body; conflating them harms both readers.
 
@@ -52,6 +52,7 @@ The discipline of recording what the code cannot say — the designer's intent, 
 - **Never restate the code.** A comment that paraphrases the adjacent line adds reading cost and a second thing to keep in sync, with no information; delete it — or, if it was masking an unclear name, fix the name.
 - **Delete the bad-comment catalog: noise and mandated boilerplate, commented-out code, position markers, attribution bylines, and changelog/journal entries.** Names carry intent, the type system carries shape, and version control carries history and authorship — a comment that duplicates any of these is cost without information.
 - **Keep comments accurate and adjacent — a drifted comment is worse than none, because it misleads with authority.** Change the comment in the same commit and review as the code; document each fact once (DRY); keep history in version control, never in a comment.
+- **Don't reach for the fancy word or the epigram.** A comment states intent plainly; it is not the place to sound deep. Write "the prompt," not "the utterance," and skip "X is Y" aphorisms — see the writing register's "Plain words over fancy ones."
 
 ## Write the comment first
 
@@ -59,4 +60,4 @@ The discipline of recording what the code cannot say — the designer's intent, 
 
 ## Red flags (stop and fix the cause)
 
-Comment repeats code · implementation detail in an interface comment · a comment compensating for a bad name · commented-out code · a changelog kept in comments · a hard-to-write interface comment (a shallow abstraction). Each names a different fix — rewrite the code, move the detail into the body, rename, delete, or redesign — never an edit to the comment in place.
+Comment repeats code · implementation detail in an interface comment · a comment compensating for a bad name · commented-out code · a changelog kept in comments · a hard-to-write interface comment (a shallow abstraction) · a comment written to sound deep (an epigram or an erudite synonym where the plain word fits). Each names a different fix — rewrite the code, move the detail into the body, rename, delete, or redesign — never an edit to the comment in place.

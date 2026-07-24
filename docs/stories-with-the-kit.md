@@ -24,7 +24,7 @@ from.
 
 ## Path A — write the story with Claude Code
 
-Four moves, each an utterance to Claude Code.
+Four moves, each a prompt to Claude Code.
 
 1. **Draft it.** "Write a story for `<the work>` with `story-write`." The skill fills the
    story template — the portable frontmatter (`id`, `title`, `deps`, `labels`, `sensitive_files`,
