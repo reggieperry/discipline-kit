@@ -64,7 +64,7 @@ The three defects the v1.3.4 front-door acceptance caught, fixed. The acceptance
 
 ## v1.3.4 — 2026-07-15
 
-The conversational front door. The kit's operator is Claude Code and its interface is the utterance, so the entry path is a first-class, tested artifact — not folklore.
+The conversational front door. The kit's operator is Claude Code and the interface is the prompt, so the entry path is a first-class, tested artifact — not folklore.
 
 ### Added
 - **README "Quick start — say this to Claude Code" (item 47)** — six verbatim, paste-ready prompts (Install, Orient, Work, When-a-commit-blocks, Upgrade, Tour), each read-first, receipt-demanding, and dual-audience. The two-stage model is stated plainly: the Install prompt is the only ceremony; after it the injected `CLAUDE.md` section and the auto-loaded `ledger-*` skills make the discipline ambient.
