@@ -15,6 +15,34 @@ KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="${CLAUDE_HOME:-$HOME/.claude}"
 stamp="$(date +%Y%m%d-%H%M%S 2>/dev/null || echo backup)"
 
+# --- args ---
+REFRESH_RULES=0
+TARGET="."
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --refresh-rules) REFRESH_RULES=1; shift ;;
+    --dir) TARGET="$2"; shift 2 ;;
+    *) echo "usage: install.sh [--refresh-rules [--dir <repo>]]" >&2; exit 2 ;;
+  esac
+done
+
+# --- --refresh-rules: re-sync the kit-shipped rules into an ALREADY-installed repo ---
+# Existing installs do not pick up rule updates on their own — the per-project rules copy is a manual
+# step. This re-copies claude-project/rules/*.md into the repo's .claude/rules/, overwriting the
+# kit-shipped rules (a rule the repo authored under another name is untouched, and CLAUDE.md is never
+# touched). Run it inside the repo, or point at one with --dir.
+if [ "$REFRESH_RULES" = 1 ]; then
+  cd "$TARGET"
+  if [ ! -d .claude/rules ]; then
+    echo "✖ no .claude/rules in $(pwd) — run the per-project rules install first (see install.sh with no args)." >&2
+    exit 1
+  fi
+  cp "$KIT"/claude-project/rules/*.md .claude/rules/
+  ver="$(grep -m1 -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$KIT/CHANGELOG.md" 2>/dev/null || echo v0.0.0)"
+  echo "refreshed .claude/rules/ in $(pwd) from discipline-kit $ver"
+  exit 0
+fi
+
 echo "Installing user-level discipline into $DEST"
 mkdir -p "$DEST/skills" "$DEST/discipline"
 
@@ -61,6 +89,10 @@ Per-project step (run inside each repo you want the discipline to govern):
   cp $KIT/claude-project/sdlc-discipline/guides/*.md    .claude/sdlc-discipline/guides/
 
 The rules auto-load by path glob (e.g. **/*.py) when you edit matching files.
+
+To refresh the rules in an already-installed repo after updating the kit:
+
+  $KIT/install.sh --refresh-rules            # run inside the repo (or add --dir <repo>)
 
 Methodology memories (optional, per project): copy into the project's memory dir
 so they load each session, keeping one-line-per-memory in MEMORY.md:
