@@ -66,13 +66,13 @@ For an LLM-powered field-extraction system, existing memory covers the OWASP-sha
 
 ## 5. Sample-size your accuracy claim before stating it
 
-**Rule.** Detecting a 10% accuracy difference at 95% confidence needs ~100 examples; 3% needs ~1,000. An "≥90% accuracy" requirement needs ≥100 examples in the evaluation corpus to be load-bearing. Below that, the claim is directional.
+**Rule.** Detecting a 10% accuracy difference at 95% confidence needs ~100 examples; 3% needs ~1,000. An "≥90% accuracy" requirement needs ≥100 examples in the evaluation corpus to hold up. Below that, the claim is directional.
 
 **Why.** Ch 4, Table 4-7 (OpenAI rule of thumb). Without sufficient samples, a measured 89% vs 91% is noise.
 
 **Trigger.** Any headline accuracy requirement and the deferred sample-corpus work blocking validation.
 
-**How to apply.** When the field-registry seed and labeled sample corpus arrive, target ≥100 examples for the headline accuracy claim. Bootstrap the evaluation set per Huyen's recipe (resample with replacement, check bootstraps agree within a few percentage points). Treat anything below ≥100 as directional, not load-bearing. Reinforces [[feedback-claims-need-tests]] — accuracy claims need evidence at a quantifiable confidence level, not just one test example.
+**How to apply.** When the field-registry seed and labeled sample corpus arrive, target ≥100 examples for the headline accuracy claim. Bootstrap the evaluation set per Huyen's recipe (resample with replacement, check bootstraps agree within a few percentage points). Treat anything below ≥100 as directional, not conclusive. Reinforces [[feedback-claims-need-tests]] — accuracy claims need evidence at a quantifiable confidence level, not just one test example.
 
 ---
 

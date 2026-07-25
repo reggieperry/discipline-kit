@@ -4,7 +4,7 @@ description: A project may be framed as a demo, but the business can push it to 
 type: feedback
 volatility: durable
 ---
-The current target is a demo. The work is being built with the explicit fear that the business will turn around and push the demo to production. So engineering decisions should target "robust and complete demo" — performs decently, not optimally — with no decisions that would be embarrassing or load-bearing to undo if the demo gets promoted.
+The current target is a demo. The work is being built with the explicit fear that the business will turn around and push the demo to production. So engineering decisions should target "robust and complete demo" — performs decently, not optimally — with no decisions that would be embarrassing or costly to undo if the demo gets promoted.
 
 **Why:** Pure demo-grade ("happy path only, throw it out after") risks a fire drill if leadership decides to ship what they saw. Pure production-grade burns the deadline on infrastructure no one asked for.
 

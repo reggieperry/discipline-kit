@@ -4,7 +4,7 @@ A principal-engineer reference for the vocabulary and design language of test co
 
 The terse rule that loads on test paths is `rules/xunit-patterns.md`. This guide is the reasoning, the citations, and the worked examples.
 
-A vocabulary note. **Test Double** is the umbrella; **mock** is one of five distinct subtypes. Saying "I added a mock" when what was added is a Stub or a Spy is one of the most common sources of confusion in test-code review. The taxonomy in §3 below is the load-bearing piece of this guide; everything else extends or interprets it.
+A vocabulary note. **Test Double** is the umbrella; **mock** is one of five distinct subtypes. Saying "I added a mock" when what was added is a Stub or a Spy is one of the most common sources of confusion in test-code review. The taxonomy in §3 below is the central piece of this guide; everything else extends or interprets it.
 
 ---
 

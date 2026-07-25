@@ -5,7 +5,7 @@ auto_invoke: false
 
 # /deep-reason — fresh-context Opus subagent invocation
 
-Walks the 6-section prompt template from `~/.claude/deep-reasoning-agent.md`. Does NOT auto-generate the prompt — that's the failure mode the pattern doc explicitly names ("the prompt is the load-bearing artifact"). The skill is the structured fill-in checklist that ends with the Agent tool call.
+Walks the 6-section prompt template from `~/.claude/deep-reasoning-agent.md`. Does NOT auto-generate the prompt — that's the failure mode the pattern doc explicitly names ("the prompt is the decisive artifact"). The skill is the structured fill-in checklist that ends with the Agent tool call.
 
 If the operator typed `/deep-reason <subject>` they want this skill RIGHT NOW. If a self-trigger from `~/.claude/CLAUDE.md` fired, briefly name the trigger ("Self-trigger 3: defending a position across multiple messages") before walking the steps.
 

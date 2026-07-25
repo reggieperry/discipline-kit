@@ -18,6 +18,7 @@ Avoid these as filler:
 - Phrases that gesture at confidence rather than demonstrating it: "trust me," "the real answer is," "I want to flag that..."  
 - Marketing intensifiers: "substantially," "seamlessly," "robust," "powerful," "best-in-class," "cutting-edge," "industry-leading"  
 - Throat-clearing: "It's worth noting that," "A few things to call out," "I want to point out"  
+- Overused metaphors that read as an AI tell — chiefly "load-bearing" ("the load-bearing point," "X is load-bearing"). Fine once in a literal structural sense (as decoupling.md defines the term), but as a recurring marker of "this is the important one" it is a giveaway. Say what matters plainly: "the central point," "what the argument rests on," or "the part that has to hold."  
   
 When candor is genuinely needed — flagging a self-correction, naming a position that deviates from a default, or acknowledging a mistake — do the work in the structure of the argument: present the default, name why it doesn't fit, then arrive at the deviation. The reader does not need to be told the answer is honest; they should be able to see that it is by how it is supported.  
   
@@ -29,8 +30,8 @@ Prefer the plain modern word to the erudite or theoretical synonym when they mea
 
 Two habits catch most of it:
 
-- **The profundity aphorism.** An "X is Y" epigram—"the interface is the utterance," echoing "the medium is the message"—has to earn its place by carrying an argument the plain sentence can't. Otherwise it reads as reaching to sound deep; default to the plain statement.
-- **The coined abstract noun.** Turning a plain idea into a capital-T Thing with a definite article—"the utterance," "the ask," "the why"—is a tell. Use the verb or the ordinary noun.
+- **The profundity aphorism.** An "X is Y" epigram — "the interface is the utterance," echoing "the medium is the message" — has to earn its place by carrying an argument the plain sentence can't. Otherwise it reads as reaching to sound deep; default to the plain statement.
+- **The coined abstract noun.** Turning a plain idea into a capital-T Thing with a definite article — "the utterance," "the ask," "the why" — is a tell. Use the verb or the ordinary noun.
 
 The test: would a sharp senior engineer say this out loud to a colleague, or is it written to be admired? Noticing that you are pleased with how a phrase rings is the signal to swap in the plain version. Clear beats clever; the point should land without the reader stopping to appreciate the wording.
 

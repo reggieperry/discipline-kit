@@ -59,7 +59,7 @@ Two more worth naming but lower-frequency:
 In priority order (the order Meszaros uses, which is also the order I'd suggest when prioritizing fixes):
 
 1. **Write the Tests First.** TDD; production code falls out of tests, not the other way around. Already in [[tdd_listening]].
-2. **Design for Testability.** When TDD is skipped, this becomes load-bearing. Already in [[oo_style]] via the dependencies-in-constructor rule.
+2. **Design for Testability.** When TDD is skipped, this becomes essential. Already in [[oo_style]] via the dependencies-in-constructor rule.
 3. **Use the Front Door First.** Test through the public interface with State Verification. Use Behavior Verification (Spy / Mock) only when State Verification cannot express the invariant. Back Door Manipulation (peeking at internals) is a last resort and tightly couples the test to implementation.
 4. **Communicate Intent.** Tests are also documentation. "Single-Glance Readable" — the test should read in one screen and the intent should be obvious. Extract Test Utility Methods with Intent-Revealing Names. Tests longer than ~10 lines are a smell.
 5. **Don't Modify the SUT.** No `if testing then ...` branches in production code. If the SUT needs Test Hooks, the design is wrong — fix the design.

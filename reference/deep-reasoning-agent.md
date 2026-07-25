@@ -36,7 +36,7 @@ Call the Agent tool with these parameters:
 | Parameter | Value | Why |
 |---|---|---|
 | `subagent_type` | `"claude"` (catch-all) or specific type if available | Generic reasoning work fits the default |
-| `model` | `"opus"` | Max-effort reasoning is the load-bearing capability |
+| `model` | `"opus"` | Max-effort reasoning is the central capability |
 | `run_in_background` | `false` (default) | You need the result before responding |
 | `description` | 3-5 word verb phrase | For telemetry / display |
 | `prompt` | Self-contained, multi-paragraph | Agent has zero context from your session |
@@ -47,7 +47,7 @@ its result back into your reasoning.
 
 ## Prompt template
 
-The prompt is the load-bearing artifact. The agent has no context from
+The prompt is the decisive artifact. The agent has no context from
 your conversation — what you write is what it has. A good prompt has six
 sections:
 
@@ -109,19 +109,19 @@ You are evaluating whether the team's design-doc thesis at
 
 **Context**:
 - The thesis was written 6 months ago; the team has shipped 40+ features since
-- Three production incidents in the past month touched the load-bearing claims
+- Three production incidents in the past month touched the core claims
 - Question: which thesis claims are reinforced, which are weakened, which
   gaps need filling
 
 **Steps**:
-1. Read docs/architecture.md in full; extract the load-bearing claims
+1. Read docs/architecture.md in full; extract the key claims
 2. Read each postmortem in docs/postmortems/2026-*.md
 3. Cross-reference each claim against the operational data
 4. Classify each claim: REINFORCED / WEAKENED / GAP / REINFORCED-WITH-CAVEAT
 5. Propose concrete diff updates for the top 3-7 most impactful claims
 
 **Output**: a markdown report, 1000-1500 words, with these sections:
-- Current thesis: 200-300 word summary of the load-bearing claims
+- Current thesis: 200-300 word summary of the central claims
 - What changed since the thesis was anchored: 200-300 words on the operational data
 - Per-claim assessment: numbered list with classifications
 - Proposed updates: 3-7 concrete diffs (quote current text, show
@@ -219,7 +219,7 @@ Apply these in every prompt:
 
 8. **Absence claims are re-runnable, and double-searched.** An absence
    finding ("grep returned nothing", "no producer for this type") quotes
-   the exact command and its raw output, and a load-bearing absence gets
+   the exact command and its raw output, and a critical absence gets
    two differently-phrased searches, both reported and labeled "verify
    before acting" — absence is the most failure-prone claim for an LLM
    (`feedback_deep_reason_command_output_confabulation`).
