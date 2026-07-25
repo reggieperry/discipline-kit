@@ -14,6 +14,7 @@ python3 harness/ledger/fixtures/java_plumbing_test.py
 python3 harness/ledger/fixtures/squash_precedence_test.py
 python3 harness/ledger/fixtures/memory_index_test.py
 python3 harness/ledger/fixtures/install_completeness_test.py
+python3 harness/ledger/fixtures/refresh_rules_test.py
 python3 harness/ledger/fixtures/inbound_guard_test.py
 python3 harness/ledger/fixtures/interchange_test.py
 python3 harness/ledger/fixtures/authoring_artifacts_test.py
