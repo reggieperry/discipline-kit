@@ -86,7 +86,7 @@ Setup styles, in order of clarity:
 The TDD rule names the first two via different terminology. The rest are vocabulary the long-form guide expands. In review situations, cite the principle by number or name:
 
 1. **Write the Tests First** — TDD; production code falls out of tests.
-2. **Design for Testability** — load-bearing when TDD is skipped.
+2. **Design for Testability** — essential when TDD is skipped.
 3. **Use the Front Door First** — public interface + State Verification; Back Door Manipulation is last resort.
 4. **Communicate Intent** — Single-Glance Readable; tests > ~10 lines are a smell.
 5. **Don't Modify the SUT** — no `if testing then ...` branches; no Test Hooks in production.

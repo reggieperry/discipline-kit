@@ -14,6 +14,6 @@ The operator works by **propose → work out → defer → revisit**. He propose
 **How to apply:**
 1. When we work out a non-trivial idea that he then defers, **capture the worked-out thinking durably** — a design doc under `docs/`, an ADR, or an archived-deferred-work directory — not just in the conversation. The detail and the rationale are what he comes back for.
 2. When he **revisits** a topic ("I'm ready to hear X", "didn't we discuss Y", "do we have a record of Z"), **search for a prior record first** (`docs/`, the ADR directory, the archive, the memory dir) before regenerating — there is often one. Build on it; don't reinvent.
-3. A prior record anchored at an old HEAD is a starting point, not gospel — re-verify its load-bearing claims against current state on revisit.
+3. A prior record anchored at an old HEAD is a starting point, not gospel — re-verify its key claims against current state on revisit.
 
 This is the reason a coverage/reconciliation audit and a clean separation between the long-lived plan and the broader backlog matter: they are the machinery that keeps the deferred-thinking record findable.

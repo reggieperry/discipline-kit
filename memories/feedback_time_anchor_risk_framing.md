@@ -22,7 +22,7 @@ The error is overstating risk for emphasis. Three problems with it:
 - For any gap in a not-yet-consumed module, phrase the risk with an explicit time anchor: "when the real event source is wired, a raised exception kills the loop" — not "the loop dies on a raised exception"
 - Reach for emphasis-words only when the gap is live in production-risk territory now, not when reaching for them would convey urgency you can't substantiate with a current consumer
 - If unsure whether a gap is current or dormant, grep for callers / imports / production wiring before framing the risk
-- Acceptable framings for dormant risks: "this becomes a problem when X" / "today inert; risk surfaces at consumer wiring" / "follow-on where the risk-shape becomes load-bearing"
+- Acceptable framings for dormant risks: "this becomes a problem when X" / "today inert; risk surfaces at consumer wiring" / "follow-on where the risk-shape becomes central"
 - Unacceptable framings for dormant risks: superlatives ("worst-case," "catastrophic," "silently corrupts"), absolutes ("any caller will," "every active position"), urgency-words ("immediately blocks," "must be fixed")
 
 Related: [[feedback_credibility_gestures]] — same shape (reaching for emphasis to compensate for weaker evidence). Related: [[feedback_analysis_discipline]] — hold positions with evidence; if the evidence requires a time-anchor, name it.

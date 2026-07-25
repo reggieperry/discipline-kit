@@ -379,7 +379,7 @@ Run this against any refactoring change before declaring it done. Each item is b
 9. **The catalog name matches the actual move.** "Extract Function" should be an actual extraction, not a rewrite. Each named move follows Fowler's mechanics.
 10. **No speculative generality.** Every abstraction added has a current consumer. No "this might be useful later" code.
 11. **The codebase is at least as understandable as before.** A cleanup that makes the code less clear is not a refactoring; it's a rewrite under a refactoring hat.
-12. **Comments tell the story or are removed.** If the refactoring made comments redundant (because functions now have clear names), delete them. If a comment is still load-bearing, the function name probably needs more work.
+12. **Comments tell the story or are removed.** If the refactoring made comments redundant (because functions now have clear names), delete them. If a comment is still doing real work, the function name probably needs more work.
 
 A change failing any item is not finished, no matter how green its tests are.
 

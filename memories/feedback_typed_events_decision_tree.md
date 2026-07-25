@@ -7,7 +7,7 @@ metadata:
   volatility: durable
 ---
 
-Typed events are right when an **asynchronous handoff** happens between stages that must be independently restartable, auditable, and substitutable behind a uniform dispatch surface — pipeline boundaries where producer and consumer share no lifetime, no scope, and no caller context. They are wrong when the work is a synchronous computation against an aggregate's own invariants, when the output value itself carries the invariant (the type system enforces what events can only observe), or when one entity drives a polymorphic command against an external resource. A system can have both patterns deliberately; the principle below is the load-bearing distinction.
+Typed events are right when an **asynchronous handoff** happens between stages that must be independently restartable, auditable, and substitutable behind a uniform dispatch surface — pipeline boundaries where producer and consumer share no lifetime, no scope, and no caller context. They are wrong when the work is a synchronous computation against an aggregate's own invariants, when the output value itself carries the invariant (the type system enforces what events can only observe), or when one entity drives a polymorphic command against an external resource. A system can have both patterns deliberately; the principle below is the central distinction.
 
 **Why:** typed events look elegant and have a clear discipline; it's tempting to extend the pattern everywhere a pipeline first establishes it. Selective adoption isn't accidental — each alternative pattern preserves something specific that typed events would cost. Naming the principle prevents future "let's make this an event too" drift.
 

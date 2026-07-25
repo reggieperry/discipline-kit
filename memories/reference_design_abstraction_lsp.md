@@ -22,7 +22,7 @@ When designing:
 
 Abstraction plus specification plus encapsulation gives **local reasoning**: each module can be implemented, understood, and modified one at a time. The implementer needs the spec, not other implementers' code. A using module needs the spec of what it calls, not the called code. Modification stays within one module unless the spec itself changes.
 
-This is the load-bearing reason for the rule that the rep is private. Once any other module reads the rep directly, you've lost locality — that module now has to be consulted (and possibly rewritten) when the rep changes.
+This is the central reason for the rule that the rep is private. Once any other module reads the rep directly, you've lost locality — that module now has to be consulted (and possibly rewritten) when the rep changes.
 
 ## Liskov Substitution Principle — behavioral, not shaped
 

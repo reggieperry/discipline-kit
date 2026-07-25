@@ -104,7 +104,7 @@ Use `NotRequired[X]` for optional keys; `Required[X]` is the default in 3.11+.
 
 **Rule.** Return `Optional[list[X]]` when the absence is a distinct state from the empty result. `None` = errored / degraded / not-applicable; `[]` = ran successfully, produced nothing.
 
-**Why.** Ch 4 "Optional Type" — collapsing two states into one (empty list) makes the caller guess. Optional makes the distinction load-bearing in the type signature; the typechecker forces an explicit None check at the call site, and the codebase reads more honestly.
+**Why.** Ch 4 "Optional Type" — collapsing two states into one (empty list) makes the caller guess. Optional makes the distinction carry weight in the type signature; the typechecker forces an explicit None check at the call site, and the codebase reads more honestly.
 
 **Trigger.** Handlers that today return `list[Entity]` and use `[]` for both "the model returned zero entities" and "the retrieval connection dropped"; a vector retriever that returns `[]` on low-similarity miss vs on connection drop. These are different stories for a downstream consumer.
 

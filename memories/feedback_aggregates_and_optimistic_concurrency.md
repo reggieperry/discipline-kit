@@ -9,7 +9,7 @@ metadata:
 
 Percival & Gregory's *Architecture Patterns with Python* gives Python-specific vocabulary for the consistency-boundary discipline in [[feedback-concurrency-invariant-design]]. The rules below are what survives a HARSH filter — keep the operational discipline (aggregates, version numbers, command/event split), drop the architectural ceremony (Repository, UoW, MessageBus, full hexagonal) until tests or transaction sprawl actually demand it.
 
-**Why:** the book proposes many abstraction layers. Most are *wrong* for a small or early-stage system per [[feedback-simplicity-principle]] and [[feedback-demo-with-prod-risk]]. The rules below are the load-bearing ideas; the dropped rules at the bottom are the ceremony.
+**Why:** the book proposes many abstraction layers. Most are *wrong* for a small or early-stage system per [[feedback-simplicity-principle]] and [[feedback-demo-with-prod-risk]]. The rules below are the essential ideas; the dropped rules at the bottom are the ceremony.
 
 **How to apply:** at design time for new persistence functions or stage handlers, name the aggregate and pick optimistic vs pessimistic concurrency. At review time, push back on Repository / MessageBus / CQRS proposals unless the proposer can name a concrete pain point the current shape causes.
 
@@ -94,7 +94,7 @@ The book proposes many layers; a small or early-stage system does not need most 
 
 - **Repository pattern as a default abstraction.** SQLAlchemy `Session` is already an adapter; further wrapping is ceremony. Adopt only if test friction or transaction sprawl warrants ([[feedback-mock-discipline]] covers the test-double need).
 - **Full Unit of Work context manager.** Adopt only where a use case genuinely spans multiple aggregates that must commit atomically.
-- **In-process Message Bus.** The *command-vs-event error semantics* (rule 1) is the load-bearing idea; we can adopt that without the bus.
+- **In-process Message Bus.** The *command-vs-event error semantics* (rule 1) is the core idea; we can adopt that without the bus.
 - **Hexagonal / ports-and-adapters as top-level project shape.** Covered by [[reference-coding-methodology]] Pillar 1.
 - **Read-model views via raw SQL in a `views/` layer.** Worth adopting *if* the read-side queries grow clunky. Don't pre-build. (Architecture Patterns Ch 12.)
 - **External Redis/RabbitMQ message bus.** Explicitly deferred per [[feedback-demo-with-prod-risk]].
