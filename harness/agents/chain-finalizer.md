@@ -25,7 +25,7 @@ predicates ship branch-editable at `.claude/chain/`, and the gate's forgery-guar
 (`ledger/.hook-signed`) is a per-clone, gitignored, agent-writable file — so an autonomous phase with
 Bash could in principle forge a `signed` ledger line (recording its own hash) or weaken a branch-editable
 predicate. Nothing that does so reaches the default branch without the operator's merge, which is why the
-finalizer PARKS and the human review is the load-bearing check. Closing these mechanically — a pinned
+finalizer PARKS and the human review is the check that has to hold. Closing these mechanically — a pinned
 non-branch-editable predicate copy and a tamper-evident forgery-guard root (a MAC keyed outside the
 phase, or committed provenance) — is the auto-merge tier's requirement, where no human is in the loop.
 Do not present a base-tier ledger signature as unforgeable; present it as human-backstopped.
