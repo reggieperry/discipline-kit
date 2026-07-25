@@ -50,6 +50,9 @@ jobs:
       - name: install-completeness fixture (referenced docs vendored into the target on install)
         run: python3 harness/ledger/fixtures/install_completeness_test.py
 
+      - name: refresh-rules fixture (install.sh --refresh-rules re-syncs rules into an existing install)
+        run: python3 harness/ledger/fixtures/refresh_rules_test.py
+
       - name: inbound-guard fixture (an added signed ledger line is rejected on the inbound path)
         run: python3 harness/ledger/fixtures/inbound_guard_test.py
 
