@@ -2,7 +2,3 @@ __pycache__/
 *.pyc
 .DS_Store
 *.swp
-# dev-ledger gate: hook-private state (per-clone, never committed)
-ledger/.hook-signed
-ledger/.pending-sign
-ledger/.test-mode

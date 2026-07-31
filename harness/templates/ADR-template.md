@@ -13,14 +13,13 @@
 -->
 
 **Status:** Proposed | Accepted | Superseded-in-part | Superseded | Deprecated — <date>.
-Acceptance gate: <deep-reason | committee> pass, testimony <clm-NNNN>.
+Acceptance gate: <deep-reason | committee> pass — <link to the review>.
 
 <!--
   The Status line records the ADR's state and cites the verdict that admitted it. An
-  acceptance-gate pass — a deep-reason adversary or a committee review — lands in the
-  ledger as *testimony*, and testimony attests but never signs, so the Status line
-  cites the testimony's clm id rather than reporting the pass in prose. A verdict cited
-  by id is receipted and checkable; a verdict asserted in prose is neither.
+  acceptance-gate pass — a deep-reason adversary or a committee review — is *testimony*:
+  a reader looked and found nothing, which is not the same as a check having run. Link
+  the review so the claim is followable; a verdict asserted in prose is not.
 
   On a per-Decision supersession, set the state to "Superseded-in-part" and keep the
   citation to this ADR's original acceptance verdict; the superseding ADR carries its own.
@@ -101,25 +100,23 @@ _<For each option not taken: what it was, and the specific reason it lost.>_
   the observation, measurement, or event that would defeat it. A decision you cannot
   imagine being wrong is a preference, not a decision.
 
-  Wherever the condition is mechanically checkable, register it in the ledger as a claim
-  — an `unverified` assertion parked under the check that would fire it — and cite the
-  clm id here, so the falsifier has a court that can actually convene. Where no
-  mechanical check is possible, say so plainly and name the standing human observation
-  that stands in — but a check is preferred.
+  Wherever the condition is mechanically checkable, name the check that would fire it —
+  so the falsifier has something that can actually convene, rather than resting on
+  someone remembering to look. Where no mechanical check is possible, say so plainly and
+  name the standing human observation that stands in; a check is preferred, and an
+  unwatched falsification condition should read as unwatched.
 -->
 
-_<The condition that would defeat this ADR.>_ Registered as <clm-NNNN> under check
-`<check-name>`; <or: not mechanically checkable — the standing observation is …>.
+_<The condition that would defeat this ADR.>_ Watched by `<check-name>`; <or: not
+mechanically checkable — the standing observation is …>.
 
 ## Cross-references
 
 <!--
-  Pointers out: superseding and superseded ADRs, related ADRs, the design docs or guides
-  this builds on, and the ledger claims it registers or cites. Use ids and relative paths
-  only.
+  Pointers out: superseding and superseded ADRs, related ADRs, and the design docs or
+  guides this builds on. Use ids and relative paths only.
 -->
 
 - Supersedes: _<ADR-NNNN, or None>_
 - Superseded by: _<ADR-NNNN, or None>_
 - Related: _<ADR-NNNN, docs/…, or None>_
-- Ledger: _<clm-NNNN (falsifier), clm-NNNN (acceptance testimony)>_

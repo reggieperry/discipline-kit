@@ -30,7 +30,7 @@ scanner-wiring commit deletes that rule's stale grade in the same diff, so the l
 gate move together or not at all.
 
 Usage:
-    python3 harness/ledger/rule_grades.py [RULES_DIR]
+    python3 harness/rule_grades.py [RULES_DIR]
 
 With no argument it takes the first of `.claude/rules` or `claude-project/rules` that exists,
 relative to the repo root, so it works both in the kit and in an installed repo.
@@ -53,10 +53,11 @@ def resolve_dir(start: Path, argv: list[str]) -> Path | None:
     """Locate the rules directory.
 
     An explicit argument wins. Otherwise walk UP from this script looking for the first
-    ancestor that holds a candidate directory. The walk matters: in the kit this file sits at
-    `harness/ledger/`, but an installed repo gets it at `ledger/`, one level shallower — a
-    fixed `parents[N]` is correct for exactly one of those and silently points outside the
-    repo for the other.
+    ancestor that holds a candidate directory. The walk matters because the script's depth
+    below the repo root is not fixed: it sits at `harness/` in the kit and a consuming repo
+    may vendor it anywhere. A fixed `parents[N]` is correct for exactly one depth and
+    silently points OUTSIDE the repo for every other — where it finds no rules at all, which
+    is the reading this tool is built to refuse to call a pass.
     """
     if argv:
         d = Path(argv[0])
