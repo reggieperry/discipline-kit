@@ -9,6 +9,8 @@ paths:
 
 # Documentation and comments
 
+**Enforcement grade:** review and convention — nothing checks that a doc comment is accurate, avoids leaking its implementation, or stayed in sync with its code. A drifted comment compiles exactly as well as a correct one.
+
 The discipline of recording what the code cannot say — the designer's intent, the contract, and the design. Sources: John Ousterhout, *A Philosophy of Software Design* (2nd ed), the comments chapters; Steve McConnell, *Code Complete* (2nd ed), ch. 32 (self-documenting code); Robert C. Martin, *Clean Code*, ch. 4 (comments); the language doc conventions (Go Doc Comments, PEP 257, Javadoc, rustdoc); and *Software Engineering at Google*, ch. 10 (documentation). Code expresses the *what*; a comment exists for what code structurally cannot.
 
 > See `craft-complexity.md` for the obviousness-and-naming side of this discipline and the design budget that funds it (this rule is the canonical home for comments), `craft-abstraction.md` for the specification-vs-implementation split a contract comment captures, `craft-tdd.md` for the comment-first/test-first parallel, and the active language overlay (`go-style.md`, the `python-*` and `scala-*` sets) for the comment and docstring mechanics — syntax, summary mood, and the Args/Returns/Raises/Errors/Panics/Safety sections this rule deliberately leaves to them.

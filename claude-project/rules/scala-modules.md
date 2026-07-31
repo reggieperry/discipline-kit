@@ -7,6 +7,8 @@ paths:
 
 # Scala project and dependency structure
 
+**Enforcement grade:** review and convention — sbt itself rejects a `dependsOn` cycle, but nothing in the gate enforces one-runtime-per-module, given placement, or the ban on orphan instances. A repo can mechanize the pure-versus-effectful seam with a dependency check on its core module.
+
 How to organize packages, modules, and dependencies, and where to put the things the compiler resolves implicitly. Sources of record: the sbt Reference Manual on multi-project builds (scala-sbt.org/1.x/docs/Multi-Project.html); the Scala 3 reference on implicit resolution and implicit scope (docs.scala-lang.org/scala3/reference/changed-features/implicit-resolution.html); Gabriel Volpe, *Practical FP in Scala* (2nd ed), chapters 2 (tagless-final, modules, capability traits) and 6 (orphan instances); and the Typelevel community's settled position on concrete `IO` versus tagless final (typelevel/cats-effect#3133, "A little more `IO` and a little less `F[_]`"). One house rule governs the rest: **cats-effect is the one effect system here.**
 
 > See `scala-types.md` for opaque types and ADT modeling of the values these modules pass, `scala-llm.md` for wrapping a model SDK at the seam, `scala-style.md` for naming and the braces default, `craft-complexity.md` for deep cohesive modules and the dependency-versus-obscurity frame, and `craft-domain-modeling.md` for drawing module boundaries along bounded-context seams.

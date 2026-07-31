@@ -5,6 +5,8 @@ paths:
 
 # Go types and interfaces
 
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. `go vet` would be the natural Check A source.
+
 Encode invariants in the type system so the compiler catches wrong calls before the code runs, and keep interfaces small and consumer-defined. Sources: Go Code Review Comments, the Google and Uber style guides, *100 Go Mistakes*; the substitutability discipline is from Liskov (`craft-abstraction.md`).
 
 > See `craft-abstraction.md` for abstract data types and the substitution principle, `go-style.md` for zero values and the typed-nil trap, and `go-llm.md` for the structured-output struct as the typed model boundary.

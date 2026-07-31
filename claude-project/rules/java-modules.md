@@ -5,6 +5,8 @@ paths:
 
 # Java modules
 
+**Enforcement grade:** review and convention — nothing enforces package boundaries, module-info hygiene, or dependency direction.
+
 How to organize packages, draw the module boundary, and decide what is public. Sources of record: Joshua Bloch, *Effective Java* (3rd ed) — Item 15 (minimize the accessibility of classes and members), Item 16 (in public classes, use accessor methods, not public fields), and Chapter 4 on classes and interfaces; and the Java Platform Module System (JPMS, JEP 261) documentation. Floor: Java 21. One house rule governs the rest: **a package owns one feature and exposes as little as it can get away with.**
 
 > See `java-types.md` for the value types and sealed hierarchies these packages pass, `java-concurrency.md` for the effect and threading seam at the boundary, `java-style.md` for naming and layout, `craft-abstraction.md` for the specification-and-encapsulation theory underneath a narrow public surface, and `craft-complexity.md` for deep modules and the dependency-versus-obscurity frame.

@@ -6,6 +6,8 @@ paths:
 
 # Scala concurrency
 
+**Enforcement grade:** partly mechanical, at the margins — a repo that enables the typelevel scalafix rules gets non-fused monadic chains flagged through Check A. Nothing scans for `IO.blocking` versus `IO.delay`, `Resource` lifetimes, `Ref` over `var`, or bounded fan-out.
+
 Effect lifecycle, shared state, and parallelism for a pipeline whose nodes do real I/O — model calls, file reads, metric sinks — while the domain core stays pure. cats-effect is the one effect system here; ZIO and raw `scala.concurrent.Future` are out, and mixing them in is banned (see "No raw Future" below). Sources: Gabriel Volpe, *Practical FP in Scala: A hands-on approach* (the "Sequential vs concurrent state" / "Atomic Ref" best-practices chapter, the regions-of-sharing discussion, and the bonus chapter on Concurrency, (Un)Cancelable regions, and Resource safety); Volpe, *Functional Event-Driven Architecture* (Ref-on-`AtomicReference`, the distributed-lock-as-`Resource`, and Supervisor-as-dependency); and the cats-effect documentation on the thread model and schedulers, plus Tim Spence's "Threading best practices in Cats Effect."
 
 > See `scala-modules.md` for the concrete-`IO`-versus-tagless-final house call and the one-effect-system rule, `scala-types.md` for the opaque-type / ADT / `Validated` modeling that stays pure, `scala-testing.md` for `ScalaCheck` property tests and how to test effectful code deterministically, `scala-llm.md` for the timeout and retry budget on model calls, and `craft-tdd.md` for keeping concurrency policy out of the logic so the logic stays unit-testable.

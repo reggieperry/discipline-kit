@@ -5,6 +5,8 @@ paths:
 
 # Python style and idioms
 
+**Enforcement grade:** mechanically enforced — `ruff` rides the gate's Check A, so a new style finding fails the diff against the merge-base and a new `#noqa` is caught by Check B. What ruff does not have a rule for is review and convention.
+
 The base layer of Python discipline: naming, idioms, and the data-structure choices. Sources: PEP 8, PEP 20 (the Zen of Python), the Google Python Style Guide, The Hitchhiker's Guide to Python, Brett Slatkin's *Effective Python*, and Patrick Viafore's *Robust Python*. Where the major guides disagree, the disagreement is named with a default.
 
 > See `craft-complexity.md` for why precise names and obvious code matter, `craft-documentation.md` for the comment-and-docstring discipline, `python-errors.md` and `python-types.md` for the exception and typing idioms referenced here, and `python-modules.md` for package layout.

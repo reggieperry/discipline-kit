@@ -8,6 +8,8 @@ paths:
 
 # Python LLM boundary (structured output)
 
+**Enforcement grade:** review and convention — nothing scans a model boundary for a bounded call, a re-validated schema, a pinned model id, or a timeout.
+
 The typed contract between Python code and the model — where reliability is bought. Sources: Pydantic v2 (fields, strict mode) and your model SDK's structured-outputs docs. The model is reached through its official Python SDK; the model id is configured per call.
 
 > See `python-types.md` for the typed contract, `python-concurrency.md` for the timeout on every model call, `python-errors.md` for surfacing validation failures, and `craft-abstraction.md` for the schema as a specification.

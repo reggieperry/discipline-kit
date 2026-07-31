@@ -6,6 +6,8 @@ paths:
 
 # TypeScript domain modeling with the type system
 
+**Enforcement grade:** review and convention in the gate — the gate registers no TypeScript toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. `tsc --noEmit` under a strict config is the natural enforcer and is usually wired by the consuming repo, not here.
+
 Encode a value's invariants in the type system so `tsc` rejects the illegal state before it reaches a caller — a discriminated union for a closed set of cases, a branded scalar behind a validating constructor, `readonly` for a value that must not mutate, and a runtime schema at the boundary the compiler cannot see. Sources: the TypeScript Handbook (Narrowing, Unions and Intersection Types, Generics, and the TSConfig reference), *Effective TypeScript* (Vanderkam), *Programming TypeScript* (Cherny), the release notes for `satisfies` (4.9) and `const` type parameters (5.0), and the zod documentation for the runtime-schema boundary. The substitutability discipline is from Liskov (`craft-abstraction.md`); the value-object and ubiquitous-language discipline is from Evans (`craft-domain-modeling.md`).
 
 > See `craft-domain-modeling.md` for value objects, entities, and naming in the ubiquitous language; `craft-abstraction.md` for abstract data types and the substitution principle; `ts-errors.md` for the `Result`/discriminated-error convention and why thrown errors stay `unknown`; `ts-testing.md` for testing the residue the type can't state; and `ts-security.md` and `ts-llm.md` for the zod schema as the typed boundary at an untrusted input or a model response.

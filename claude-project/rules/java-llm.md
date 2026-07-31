@@ -5,6 +5,8 @@ paths:
 
 # Java LLM integration
 
+**Enforcement grade:** review and convention — nothing scans a model boundary for a bounded call, a re-validated schema, a pinned model id, or a timeout.
+
 The boundary where a model's response enters a Java service — the one place this boundary's reliability is earned, and the seam an otherwise well-typed domain shares with an untrusted outside world. Sources: general LLM-integration engineering practice, and the official Java SDK documentation of the relevant providers (the Anthropic and OpenAI Java SDKs) — their structured-output features, client construction, and auth patterns. The floor is Java 21 (records, sealed types, and pattern matching for `switch`). This file is a skeleton: it states each stance at the section level, and its body is marked for fleshing when a real Java LLM project exists to ground the specifics against a resolved SDK version.
 
 > See `java-security.md` for the response as untrusted, network-class input, `java-types.md` for the parsed record as the typed contract, `java-errors.md` for surfacing a parse or validation failure as a value rather than a swallowed exception, and `java-testing.md` for exercising the boundary against malformed and adversarial outputs.

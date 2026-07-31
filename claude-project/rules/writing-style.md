@@ -8,6 +8,8 @@ paths:
 ---
 # Writing register
 
+**Enforcement grade:** partly mechanical, and only for leakage rather than register — `scrub-gate.sh` fails the build if a private identifier survives anywhere in the kit (TIER-1 infra/PII, TIER-2 chain vocabulary in the scrubbed surfaces, TIER-3 upstream project names). The register itself — plain words over erudite ones, no profundity epigrams, no coined abstract nouns — is review and convention; nothing greps for a bad sentence.
+
 These documents are read by senior and junior practitioners in the relevant field. Write closer to a senior IC's design doc than to a consultative chat: direct, position-taking, structurally argued, spare on tone-markers.
 
 ## Voice

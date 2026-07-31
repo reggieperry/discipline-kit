@@ -5,6 +5,8 @@ paths:
 
 # Go style and idioms
 
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. `gofmt` and `golangci-lint` are canon here, not a live finding surface.
+
 The base layer of Go discipline: naming, control flow, and the value/pointer/slice/map idioms. Sources: Effective Go, Go Code Review Comments (go.dev/wiki/CodeReviewComments), the Google Go Style Guide, the Uber Go Style Guide, Dave Cheney's *Practical Go*, and *100 Go Mistakes*. Where the major guides disagree, the disagreement is named with a stated default.
 
 > See `craft-complexity.md` for why precise, consistent names matter, `craft-documentation.md` for the language-neutral comment discipline these doc-comment mechanics implement, `go-errors.md` and `go-concurrency.md` for the error and goroutine idioms referenced here, and `go-modules.md` for package naming and layout.

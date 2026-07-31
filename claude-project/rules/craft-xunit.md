@@ -11,6 +11,8 @@ paths:
 
 # xUnit test patterns
 
+**Enforcement grade:** review and convention — the gate's Check D counts assertion sites and skip markers, which catches a suite being weakened, but nothing checks that a test is well-shaped: one behavior per test, arrange-act-assert order, a name that reads as a sentence.
+
 ## Why this rule exists
 
 The other testing rules (`tdd.md`, `testing.md`) say what to do; Meszaros's vocabulary lets reviewers and authors name *why* something is wrong precisely. "Fragile Test from Context Sensitivity," "Assertion Roulette from missing assertion messages," "Eager Test verifying two concerns" — each maps to a named fix in the catalog. Without the vocabulary, the same conversations recur as ad-hoc "this feels off" exchanges.

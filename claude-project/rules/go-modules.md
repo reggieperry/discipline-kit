@@ -7,6 +7,8 @@ paths:
 
 # Go module and package layout
 
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. `go mod tidy` drift and `govulncheck` findings are unpoliced.
+
 How to organize packages and the module tree. Source of record: the official Go layout guide (go.dev/doc/modules/layout). The popular `golang-standards/project-layout` repo is **not** a Go standard and is explicitly contested — prefer the official shape.
 
 > See `craft-complexity.md` for deep, cohesive modules, `craft-domain-modeling.md` for naming packages in domain terms, and `go-style.md` for package-name conventions.

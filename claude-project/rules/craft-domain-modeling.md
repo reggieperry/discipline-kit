@@ -9,6 +9,8 @@ paths:
 
 # Domain modeling
 
+**Enforcement grade:** review and convention — ubiquitous language, entity-versus-value, aggregate boundaries, and where a bounded-context seam falls are all judgment. A repo can mechanize one seam with a vocabulary check over a package it wants kept domain-neutral.
+
 Building code around a rigorous model of the problem domain. Source: Eric Evans, *Domain-Driven Design*. Calibrated for a modest domain (a handful of entities and value objects, a lifecycle or two, the rules that govern them, and the boundaries where work is handed off) — favor the tactical and supple-design rules, and use bounded contexts as a primary guide to module boundaries (below), not as enterprise-only machinery.
 
 > See `craft-abstraction.md` for value objects as abstract data types, and the language overlay (`go-types.md` / `go-modules.md`, the `python-*` and `scala-*` sets) for encoding them and for packages as domain modules.

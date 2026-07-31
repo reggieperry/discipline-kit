@@ -5,6 +5,8 @@ paths:
 
 # Python async concurrency
 
+**Enforcement grade:** partly mechanical — `ruff` and `mypy` catch a few async slips (an un-awaited coroutine, a sync call typed async) through Check A. Cancellation, task lifetime, and blocking-the-loop are review and convention.
+
 Structured concurrency with `asyncio` for code that does I/O and calls external services. Sources: the asyncio docs (tasks, the event loop), Python 3.11+ `TaskGroup`/`timeout`, and the GIL.
 
 > See `craft-tdd.md` for separating functionality from concurrency policy so logic stays unit-testable, `python-llm.md` for timeouts on model calls, and `python-style.md` for the surrounding idioms.

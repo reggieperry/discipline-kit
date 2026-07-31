@@ -9,6 +9,8 @@ paths:
 
 # Complexity and module design
 
+**Enforcement grade:** review and convention — no scanner measures module depth, information leakage, temporal decomposition, or a pass-through method, and a line-count or cyclomatic threshold would police roughly the opposite of what this file asks for.
+
 The discipline of keeping a system understandable and cheap to change. Source: John Ousterhout, *A Philosophy of Software Design* (2nd ed). Complexity is the one thing to fight; every rule below is a move against it.
 
 > See `craft-abstraction.md` for the specification-and-encapsulation theory underneath deep modules, `craft-refactoring.md` for removing complexity from existing code, `craft-documentation.md` for the comment and doc-comment discipline, and the active language overlay (`go-*.md`, the `python-*` and `scala-*` sets) for the language-specific expression of these rules.

@@ -5,6 +5,8 @@ paths:
 
 # Python type system
 
+**Enforcement grade:** mechanically enforced — `mypy` rides Check A, so a new type error fails the diff and a new `# type: ignore` or `# pyright: ignore` is caught by Check B. Modeling choices (where a protocol belongs, when to reach for a newtype) are review.
+
 Encode invariants in the type system so a checker catches wrong calls before runtime. Sources: the `typing` module docs, the mypy docs (`--strict`), the typing PEPs (484, 526, 585, 604, 612, 646, 695, 655), and Viafore's *Robust Python*. The substitutability discipline is from Liskov (`craft-abstraction.md`).
 
 > See `craft-abstraction.md` for abstract data types and the substitution principle, `python-style.md` for dataclass-vs-Pydantic choices, and `python-llm.md` for the Pydantic model as the typed model boundary.

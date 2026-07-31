@@ -6,6 +6,8 @@ paths:
 
 # Go LLM boundary (structured output)
 
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned, and no scanner anywhere in the kit reads a model boundary.
+
 The typed contract between your code and the model — the single place this boundary's reliability is bought. Sources: the model provider's Go SDK, `invopop/jsonschema`, `go-playground/validator`, and `encoding/json`. The model is called through its official Go SDK; the model id is configured per call site.
 
 > See `go-types.md` for the output struct as a typed contract, `go-concurrency.md` for the context timeout on every model call, `go-errors.md` for surfacing validation failures, and `craft-abstraction.md` for the schema as a specification.

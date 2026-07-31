@@ -5,6 +5,8 @@ paths:
 
 # Python exceptions and error handling
 
+**Enforcement grade:** partly mechanical — `ruff` catches part of this (a bare `except`, an unused exception variable) and `mypy` catches an unhandled `None`, both via Check A. The discipline proper — typed error hierarchies, never swallowing, translating at the boundary — is review.
+
 Python signals errors with exceptions; handling them precisely is core to reliability. Sources: PEP 8, PEP 20 ("errors should never pass silently"), the Google Python Style Guide. The design principle behind several of these rules — define errors out of existence — is from `craft-complexity.md`.
 
 > See `craft-complexity.md` for defining errors away, `python-style.md` for EAFP control flow, and `python-llm.md` for surfacing validation errors back to the model.

@@ -19,6 +19,12 @@ jobs:
 
 
 
+      - name: rule enforcement grades declared and in-vocabulary
+        run: python3 harness/rule_grades.py
+
+      - name: rule-grade checker discriminates (fixture)
+        run: python3 harness/fixtures/rule_grades_test.py
+
       - name: scrub-gate (no private identifiers anywhere)
         run: bash scrub-gate.sh
 

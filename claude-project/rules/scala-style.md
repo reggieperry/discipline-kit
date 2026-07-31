@@ -6,6 +6,8 @@ paths:
 
 # Scala style and idioms
 
+**Enforcement grade:** partly mechanical — `scalafix` rides Check A, so a rule the repo enables (`OrganizeImports`, `RedundantSyntax`) fails the diff, and a new `// scalafix:off` is caught by Check B. Formatting is `scalafmt`'s job and is usually a separate build step, not a gate check. Naming, the braces default, and the `infix`/operator discipline are review.
+
 The base layer of Scala 3 discipline: naming, control flow, the braces-versus-indentation default, the `given`/`using` and `extension` basics, and the collection and `Option` idioms everything else builds on. Sources: the Scala 3 reference (docs.scala-lang.org/scala3/reference — Optional Braces, the `infix` modifier under Changed Features / Operators), the official Scala Style Guide (docs.scala-lang.org/style), *Programming in Scala* 5th ed (Odersky, Spoon, Venners, Sommers — Chapters 21 Givens and 22 Extension Methods), Li Haoyi's *Strategic Scala Style: Conciseness & Names*, and Wampler's *Seductions of Scala* for the central thesis that Scala's flexibility is its sharpest risk — the reason this rule exists is to spend that flexibility once, here, on one house standard rather than re-litigating it per file. Where the canon leaves a choice open, the choice is named with a house default and a reason.
 
 > See `craft-complexity.md` for why one consistent vocabulary lowers cognitive load, `craft-documentation.md` for the language-neutral comment discipline the doc-comment mechanics here implement, `scala-types.md` for `enum`/opaque-type ADT modeling and `scala-concurrency.md` for the cats-effect `IO` boundary the pure core sits behind, and `scala-modules.md` for package layout and the one-effect-system rule.

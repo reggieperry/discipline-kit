@@ -9,6 +9,8 @@ paths:
 
 # Refactoring existing code
 
+**Enforcement grade:** review and convention, with a mechanical prerequisite — the fast self-checking suite this file requires is real wherever the gate runs tests, so the safety net exists even though the discipline is not scanned. Nothing enforces one-hat-at-a-time, and no check detects a smell.
+
 The disciplined way to change the structure of working code without changing what it does. Source: Martin Fowler, *Refactoring: Improving the Design of Existing Code* (2nd ed).
 
 > See `craft-complexity.md` for what you are refactoring *toward* (deep modules, less leakage), `craft-tdd.md` for the test suite that makes refactoring safe, and the active language overlay (`go-*.md`, the `python-*` and `scala-*` sets) for the idioms several catalog entries map to.

@@ -9,6 +9,8 @@ paths:
 
 # Abstraction, specification, and substitutability
 
+**Enforcement grade:** review and convention — substitutability and the specification-versus-implementation split are semantic; a compiler checks that a subtype's signatures match, never that its behavior does, and that gap is what this file turns on.
+
 The theory of data abstraction that makes modules safe to build and change independently. Sources: Barbara Liskov & Stephen Zilles, *Programming with Abstract Data Types* (1974); Barbara Liskov, *Data Abstraction and Hierarchy* (1987, the origin of the substitution principle).
 
 > See `craft-complexity.md` for deep modules and information hiding (the same idea from the design side), the language overlay (`go-types.md`, the `python-*` and `scala-*` sets) for encoding these abstractions in the type system, and `craft-domain-modeling.md` for value objects and intention-revealing interfaces.
