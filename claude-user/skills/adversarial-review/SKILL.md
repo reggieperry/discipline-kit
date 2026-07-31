@@ -7,13 +7,13 @@ auto_invoke: false
 
 # /adversarial-review — N fresh-context adversaries against one diff
 
-The `ledger-verify` doctrine — *escalation is an adversary, not a committee* — generalized from one attacker to N. Where `deep-reason` is a single fresh-context Opus adversary against a claim, this skill fans several out against a diff, each on the deep-reason pattern and under its findings contract, decorrelated **by role**. It sits one tier above `pr-review`: `pr-review` is the mechanical, every-PR read; this is the deliberate red-team reserved for the changes that earn it.
+The doctrine *escalation is an adversary, not a committee*, generalized from one attacker to N. Where `deep-reason` is a single fresh-context Opus adversary against a claim, this skill fans several out against a diff, each on the deep-reason pattern and under its findings contract, decorrelated **by role**. It sits one tier above `pr-review`: `pr-review` is the mechanical, every-PR read; this is the deliberate red-team reserved for the changes that earn it.
 
 Three modes, named at invocation:
 
 - **`pre-pr`** — attack `merge-base..working-tree` before any PR exists. Findings land in the tree, not on a record.
 - **`own-pr`** — attack a PR you authored, after it is open.
-- **`foreign-pr`** — attack a teammate's PR hard, producing a review artifact, not a ledger write.
+- **`foreign-pr`** — attack a teammate's PR hard, producing a review artifact, not a verdict.
 
 ## How it runs
 
@@ -37,7 +37,7 @@ Each adversary runs the **findings contract** verbatim from `deep-reason`: every
 
 ## Agreement carries no weight (the E3 rules, encoded)
 
-- **A clean pass is two absence reports, never an approval.** Each adversary that finds nothing reports the **attack surface it searched, with its queries quoted** — not "looks good." An absence report is one lineage under the agreement discount; two of them are not a second signature (`ledger-verify`, Axiom E3).
+- **A clean pass is two absence reports, never an approval.** Each adversary that finds nothing reports the **attack surface it searched, with its queries quoted** — not "looks good." An absence report is one lineage under the agreement discount; two of them are not a second confirmation.
 - **Dedupe by lineage.** Both adversaries catching the same bug is **one** finding, not two — merge them and count the lineage once. Corroboration is not confirmation.
 - **A dead adversary is a loud could-not-run.** The launcher reconciles launches against completions: N launched, N verdicts or N explicit failures, no third state. A schema refusal, a crash, or a timeout marks the **run** failed and blocks the verdict until rerun or explicitly waived with the gap named — never a silently thinner review that reads as complete (`feedback_reviewer_harness_fail_closed`).
 - **The harness fans out attacks and never votes.** Adversaries propose; mechanisms dispose. No adversary's verdict — and no headcount of them — signs anything. A finding is real when its disposing check goes red, not when two agents agree it is.
@@ -71,10 +71,13 @@ The disposing-check line is what separates a finding from a note: a finding name
 - **Platform review comments** — inline threads via the platform review API (a GitHub PR API, the tracker's thread API) — where credentials and a background workflow exist. This is a documented capability tier, not a hidden fragility.
 - **A paste-ready markdown review artifact** — everywhere else. A degraded environment gets the *same* review with manual placement, never silently less. The tier is stated in the report header so the reader knows which surface produced it.
 
-**Ledger routing follows the mode:**
+**Where a finding lands follows the mode:**
 
-- `pre-pr` and `own-pr` — findings append as `kind: refutation` entries `about` the slice's claim id (`ledger-write`; refutations never sign, so the schema fits). An absence report lands as testimony, explicitly not an approval.
-- `foreign-pr` — **no foreign ledger write.** You do not hold the record for a teammate's slice. The **artifact is the record**, and it is receipts-per-finding — the quoted evidence, repro, and disposing check on every line — that makes an AI review of someone else's code land as **evidence, not opinion**.
+- `pre-pr` and `own-pr` — findings land in the review artifact and, where the repo keeps one, its
+  own record. An absence report lands as testimony, explicitly not an approval.
+- `foreign-pr` — you do not hold the record for a teammate's slice. The **artifact is the record**,
+  and it is receipts-per-finding — the quoted evidence, repro, and disposing check on every line —
+  that makes an AI review of someone else's code land as **evidence, not opinion**.
 
 ## The pre-PR mode's two properties (doctrine)
 
@@ -100,8 +103,8 @@ That last court has a rule: **a finding whose disposing check does not exist is 
 - Decorrelating by temperature or seed instead of by role — same blind spot, twice, counted as two.
 - Reporting a clean pass as an approval or a "LGTM" — it is an absence report with quoted queries or it is nothing.
 - Proceeding to a verdict with an adversary that did not complete — reconcile launches against completions first (`feedback_reviewer_harness_fail_closed`).
-- Writing a `foreign-pr` finding into a ledger you do not own — the artifact is the record.
+- Writing a `foreign-pr` finding into a record you do not own — the artifact is the record.
 - Closing a `pre-pr` finding without its red-first test — the attack that found it writes the check that keeps it found.
 - Firing the skill on a routine diff `pr-review` already covers — spend the tier where the stakes are.
 
-Cross-references: `deep-reason` (the single-adversary pattern and the findings contract this inherits), `pr-review` (the mechanical tier below), `ledger-verify` (escalation-is-an-adversary and the agreement discount), `ledger-write` (the refutation-append discipline), and the `feedback_reviewer_harness_fail_closed` memory (a dead lens is a dropped finding, not a quiet pass).
+Cross-references: `deep-reason` (the single-adversary pattern and the findings contract this inherits), `pr-review` (the mechanical tier below), and the `feedback_reviewer_harness_fail_closed` memory (a dead lens is a dropped finding, not a quiet pass).

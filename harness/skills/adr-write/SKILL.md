@@ -1,7 +1,7 @@
 ---
 name: adr-write
 description: >-
-  Record an architecture decision so it can be attacked, superseded, and audited. Load when writing or revising an architecture decision record: "write an ADR", "record this decision", "let's decide X architecturally", "should we do X or Y (architecturally)", "supersede that decision", or before drafting or redrafting any ADR. Covers the template structure and stable ids, the pre-draft deep-reason gate whose verdict lands on the Status line, gating status flips on named artifacts, registering the falsifier as a ledger claim, and superseding a single Decision without deleting it.
+  Record an architecture decision so it can be attacked, superseded, and audited. Load when writing or revising an architecture decision record: "write an ADR", "record this decision", "let's decide X architecturally", "should we do X or Y (architecturally)", "supersede that decision", or before drafting or redrafting any ADR. Covers the template structure and stable ids, the pre-draft deep-reason gate whose verdict lands on the Status line, gating status flips on named artifacts, naming the falsifier, and superseding a single Decision without deleting it.
 ---
 
 # adr-write: record a decision so it can lose
@@ -44,7 +44,7 @@ D2. Route inter-service claims through the typed schema, not free prose.
 
 Before an ADR is drafted — and again before its second draft — a fresh-context `deep-reason` attack pressure-tests the decision. This is the standing trigger, not an optional courtesy: a verdict-shaped, hard-to-reverse call earns an adversary that did not help you reach it and does not share your session's blind spots. The attack hunts the case where the chosen Decision fails and a rejected Alternative would have held.
 
-Its verdict is **receipted testimony recorded on the ADR's Status line**, never a self-reported "reviewed." The `deep-reason` pass lands as a `testimony` or `refutation` entry on the ledger (`ledger-write`), and the Status line cites that entry in the template's two-line form — the state on the first line, the gate citation on the second:
+Its verdict is **receipted testimony recorded on the ADR's Status line**, never a self-reported "reviewed." The `deep-reason` pass is testimony, and the Status line cites it in the template's two-line form — the state on the first line, the gate citation on the second:
 
 ```
 **Status:** Accepted — <date>.
@@ -53,7 +53,7 @@ Acceptance gate: deep-reason pass, testimony clm-0212 (no reachable refutation).
 
 A pass that finds a defect appends a `refutation`; a clean pass appends `testimony` and signs nothing. A deep-reason verdict is not a signature — it is an adversary's absence report, bounded as such, and the ADR says so rather than dressing it as approval.
 
-The testimony entry needs an `about` target, and there is no `clm-` id for the ADR itself, so point it at the **falsifier claim** the Falsification section registers — which means **append the falsifier claim first**, then the acceptance testimony `about` it. The one ledger id the ADR already owns is its falsifier; the acceptance verdict attaches to the same court the decision will be judged in.
+The verdict attaches to the same thing the decision will be judged by: the FALSIFIER the Falsification section names. State the falsifier first, then record the acceptance verdict against it.
 
 ## Status flips are gated on named artifacts
 
@@ -61,9 +61,9 @@ An ADR advances status only when a named artifact justifies the move — never o
 
 ## Register the falsifier as a claim
 
-A falsifier that lives only in ADR prose is a court nobody convenes: nothing runs it, nothing watches it, and the day it fires there is no bell. Wherever the falsification condition is mechanically checkable, register it as a ledger claim and cite its `clm-` id in the ADR's Falsification section.
+A falsifier that lives only in ADR prose is a court nobody convenes: nothing runs it, nothing watches it, and the day it fires there is no bell. Wherever the falsification condition is mechanically checkable, build the check and cite it in the ADR's Falsification section.
 
-Use `ledger-preregister` to write the falsifier verbatim and park it under a check name the gate cannot yet run, so nothing auto-signs before the court is built; supersede it to the real check once that check exists. The ADR then cites the parked id, and the falsifier is a standing obligation on the board instead of a line in a document. Where a falsifier is genuinely not mechanical — a judgment call, an outcome that only time settles — say so in one line and name what would decide it; an honest unmechanizable falsifier beats a checkable one abandoned in prose.
+Write the falsifier verbatim and name the check that would fire it, even if that check does not exist yet — then build it. The ADR cites the check, so the falsifier is a standing obligation instead of a line in a document. Where a falsifier is genuinely not mechanical — a judgment call, an outcome that only time settles — say so in one line and name what would decide it; an honest unmechanizable falsifier beats a checkable one abandoned in prose.
 
 The scar: an early ADR recorded its falsification condition as "revisit if throughput regresses" and cited no check. Throughput regressed and stayed regressed across two release cycles before anyone reread the record, because no court had been built to convene — the sentence sat inert while the system it condemned kept shipping. The one-line fix is a parked claim naming the regression check, cited by `clm-` id in the Falsification section, so the day the observable fires the board raises it.
 
@@ -71,11 +71,9 @@ The scar: an early ADR recorded its falsification condition as "revisit if throu
 
 A Decision is superseded individually, not the whole ADR. When one call in a multi-Decision record is overturned, the ADR carries a **superseded-in-part banner** at the top naming what changed and, explicitly, what still holds — for example, `Superseded in part: D2 by ADR-0011/D1; D1, D3, and D4 stand.` The overturned Decision stays in place, its text intact, marked inline `[Superseded by ADR-0011/D1]`.
 
-**Never delete a Decision.** The record of what changed is the point of the document. A reader who cannot see the abandoned call cannot tell a considered reversal from an oversight, and the next person to propose `D2` again has no graveyard to check. Deletion also strands every citation of `D2` that lives in stories, claims, and later ADRs. Supersession here is append-only for the same reason the ledger is (`ledger-retire`): the beaten call leaves the live decision by a pointer, not by an erasure.
+**Never delete a Decision.** The record of what changed is the point of the document. A reader who cannot see the abandoned call cannot tell a considered reversal from an oversight, and the next person to propose `D2` again has no graveyard to check. Deletion also strands every citation of `D2` that lives in stories, claims, and later ADRs. Supersession here is append-only: the beaten call leaves the live decision by a pointer, not by an erasure.
 
 ## Cross-references
 
 - `deep-reason` — the fresh-context adversary whose verdict gates `Proposed → Accepted`.
-- `ledger-preregister` — parks the falsifier claim the Falsification section cites.
-- `ledger-write` and `ledger-retire` — the entry discipline for the testimony line and the supersession pointer.
 - `story-write` — the implementing story whose id gates `Accepted → Implemented`.

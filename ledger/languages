@@ -1,3 +1,0 @@
-# The kit builds from Python (the gate, sdlc-gate, ledger tooling) and Bash (the harness scripts).
-.py
-.sh

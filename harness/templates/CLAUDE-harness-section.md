@@ -1,7 +1,12 @@
-## Dev-ledger and gate harness
+## Commit-path check
 
-A claim ledger over this repo's own development, gated at commit (`ledger/`, docs in `ledger/README.md`). If this repo keeps another ledger for its own domain, this one is distinct — same idea, disjoint subject, separate store.
+A mechanical check runs on the commit path, so a green commit means a machine ran the suite rather
+than that the author said so.
 
-- **A "done" report is an unverified claim, never a signed one.** Nothing acquires a signature except through a mechanical check run by the commit-path gate; the gate is the sole writer of `signed`. Append assertions via `ledger/append` (`check: "none"` when no check exists) — assertions only, never a signature.
-- **Review output — pr-review, deep-reason, and dynamic-workflow verification passes — is testimony in the dev-ledger; only mechanical checks sign.** A reviewer that finds a defect appends a `refutation`.
-- **Retired claims leave the live board** (`ledger/librarian`): a defeated or superseded claim moves to `ledger/trace/` with a pointer, verbatim-move plus a sidecar record — immutability-safe to retire in any later commit.
+- **A "done" report is not evidence.** Nothing is settled by an assertion that it works; it is
+  settled by a check that would have failed if it did not. When you report something done, name the
+  check that establishes it — and if none exists, say so plainly rather than implying one does.
+- **Review output is evidence, not a verdict.** A reviewer finding nothing means a reader looked and
+  found nothing. It never substitutes for a check, and correlated approval is worth little.
+- **The check covers every language that builds the system.** A check that fires for one language
+  while another goes unexamined lets that language weaken unseen.

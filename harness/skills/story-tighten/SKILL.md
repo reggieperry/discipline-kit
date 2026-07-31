@@ -58,4 +58,4 @@ The most common miss is dimension 3 dressed up: acceptance criteria that read as
 
 - `story-write` — authoring the story the rubric then scores.
 - `story-intake` — where a filed story is triaged; a sub-10 story is bounced back here to tighten.
-- `ledger-preregister` — dimension 3's acceptance criteria are the same dischargeable-by-a-named-check clauses a pre-registered claim commits to; write them once.
+- dimension 3's acceptance criteria must each be dischargeable by a NAMED check; write them once, and name the check.

@@ -23,7 +23,6 @@ the outcome, not an implementation — the "what" and the "why"; leave the "how"
 
 The observable that would settle it — the seed of an acceptance criterion. Name the check, command,
 or visible behavior you would point at to agree the outcome holds — for instance a new fixture under
-`harness/ledger/fixtures/` that `bash ledger/check.sh` runs, or an assertion `./harness-verify.sh`
 makes. A done-condition a machine can recompute is worth ten that read "it should work."
 
 - <the observable — a command that passes, an output that changes, a state you could point at>

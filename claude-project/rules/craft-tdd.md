@@ -59,12 +59,14 @@ Reconcile them: **design the deep abstraction first, then build it and pin its e
 
 An agent can *say* it did TDD; the loop below arranges the world so the claim is checkable instead of trusted. Five beats per slice:
 
-1. **Claim.** Write the acceptance claim first, as its own ledger-only commit — the precedence timestamp, not ceremony (`ledger-preregister`).
-2. **Red receipt.** Write the test and observe it fail against the code-to-be — either a natural TDD red or a `ledger/red-proof` run that files a receipt; the red is evidence, not a sentence.
-3. **Green under the gate.** Make it pass; the commit-path gate runs the checks, so green is a machine's verdict, not the author's.
-4. **Refactor with the global pass.** Clean up under green, as a separate `refactor:` commit that changes no test.
-5. **Disclose.** The process paragraph (`report-conventions.md`) records, per slice, what was written before/alongside/after, what was observed red and by what route, any adjusted golden, and the refactor.
+1. **Red.** Write the test and observe it fail against the code-to-be. The red is evidence, not a
+   sentence — read the failure message and check it fails for the reason you intended.
+2. **Green.** Make it pass, under whatever mechanical check the repo runs on the commit path, so
+   green is the machine's verdict rather than the author's.
+3. **Refactor.** Clean up under green, as a separate commit that changes no test.
+4. **Disclose.** The commit message records what was written before/alongside/after, what was
+   observed red and by what route, any adjusted golden, and the refactor.
 
-**The red bar decomposes into two claims, graded differently.** *Order* — that the test was written before the code — is **testimony forever**: git shows a commit sequence, but nothing proves the author didn't write the code first and reorder. *Detection power* — that the test actually fails when the behavior is absent — is **mechanically provable**: `ledger/red-proof` builds the implementation at the merge-base against the tests from HEAD and confirms the new tests go red, killing tautologies and green-by-weakening. Trust the second, not the first; that is why the loop files a red receipt rather than asking whether TDD was followed. The shadowed-mechanism and dead-lens incidents (`feedback_claims_need_tests`, `feedback_reviewer_harness_fail_closed`) are why detection, not order, is the thing to prove.
+**The red bar decomposes into two claims, graded differently.** *Order* — that the test was written before the code — is **testimony forever**: git shows a commit sequence, but nothing proves the author didn't write the code first and reorder. *Detection power* — that the test actually fails when the behavior is absent — is **provable in principle**: build the implementation at the merge-base against the tests from HEAD and confirm the new tests go red, which kills tautologies and green-by-weakening. Trust the second, not the first; ask whether the test can fail, never whether TDD was followed. The shadowed-mechanism and dead-lens incidents (`feedback_claims_need_tests`, `feedback_reviewer_harness_fail_closed`) are why detection, not order, is the thing to prove.
 
 **Court selection — when red-first is mandatory versus negotiable.** Red-first is **mandatory for detector-class slices**: any deliverable whose job is to *catch* something — a gate, a check, a tamper proof, a fail-closed property, a discriminating mechanism. A detector never observed red might catch nothing, and a green suite would never tell you. Elsewhere — an IO shell, a report generator, glue — red-first is **negotiable with disclosure**: the slice may declare *build-then-verify* in its process paragraph, provided it names the verification that stood in for the red bar (a dual-leg discharge, a cross-language recount, a live run). The founding project's D3 authorship writeup is the exemplar of correct allocation: the report generators declared build-then-verify with a dual-leg discharge, while the fail-closed properties — the discharge's tamper proof, the validator's exit code — were pinned red-first.

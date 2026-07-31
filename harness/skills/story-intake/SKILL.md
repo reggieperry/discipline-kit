@@ -36,13 +36,16 @@ The scar this rule guards against is a familiar one: an intake reads a story tha
 
 ## Each acceptance criterion becomes a parked claim
 
-The incoming story enters the courthouse the same way any work does — claim-first. Take each acceptance criterion and register it verbatim as a parked claim through `ledger-preregister`: park it under a check name the gate cannot run, then supersede to the real check at landing. One criterion, one claim — atomic in, atomic out, so each can be discharged or lost on its own.
+Take each acceptance criterion and make it DISCHARGEABLE before any code exists: name the check
+that would settle it. One criterion, one check, so each can be satisfied or lost on its own.
 
-    echo '{"claim":"<acceptance criterion, verbatim> (board: <board-id>)","subject":"<slice>","source":"claude-code","kind":"assertion","status":"unverified","check":"<non-runnable-name>"}' | ledger/append
+Two shapes of weak criterion split here. A criterion that is *vague but mechanizable* — "performance
+is not affected" names no metric yet, but a benchmark could exist — is kept, with the gap raised as
+a question: what metric, what baseline, what threshold. A criterion that can *never* be mechanized —
+a pure judgment no check could settle — is surfaced as a question and recorded as the judgment it is,
+never dressed up as something a gate will decide. Pretending a court exists is the error; carrying an
+honest judgment is not.
 
-Two shapes of weak criterion split here. A criterion that is *vague but mechanizable* — "performance is not affected" names no metric yet, but a benchmark check could exist — parks under a non-runnable check name (the future check's address, for supersede-at-landing) **and** raises the gap as a question: what metric, what baseline, what threshold. A criterion that can *never* be mechanized — a pure judgment no check could ever settle — is surfaced as a question and not parked as a dischargeable claim; if it must be recorded it goes under `check: none` as the judgment it is, per `ledger-write`. Parking the mechanizable-but-vague is not the design error `ledger-preregister` warns about; parking the genuinely-undischargeable under a check name that pretends a court exists is. Deriving the claims before the code also lands the intake's ledger-only commit ahead of any build commit, so the precedence timestamp is intact (`ledger-preregister`, "The claim is its own commit").
-
-If the story carries a target metric — a throughput number, an error rate, a coverage floor — that is a prediction, and it rides its own claim line rather than folding into an acceptance criterion, per `ledger-preregister`. A bet that cannot independently die is not a bet.
 
 ## What intake does not do
 
@@ -50,7 +53,7 @@ Intake scores, parks, and questions; it does not build, and it does not rewrite 
 
 ## Record the board id both ways
 
-Carry the board id verbatim in the claim so traceability runs in both directions. The ledger schema has no external-reference field, so the claim text is where the id lives durably: with it embedded, a signed `clm-NNNN` walks back to the ticket that asked for it, and the ticket walks forward to the claims that discharge it. Keep the id byte-exact — a paraphrased or reconstructed id breaks the return trip, and a claim that cannot be traced to its source is a claim that lost its board story.
+Carry the board id verbatim so traceability runs in both directions: the story walks back to the ticket that asked for it, and the ticket walks forward to the work that satisfies it. Keep the id byte-exact — a paraphrased or reconstructed id breaks the return trip, and a claim that cannot be traced to its source is a claim that lost its board story.
 
 ## When the board story changes after intake
 

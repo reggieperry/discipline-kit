@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# --- dev-ledger gate (kit harness) ---
-# Forgery guard + mechanical check-discharge + ledger audit, in the commit path. A "done" report is
-# only ever an unverified assertion; nothing acquires a signature except through a check run HERE.
-# If any automation commits via a route that bypasses this hook, close that route.
-if [ -f ledger/gate.py ]; then
-  if ! python3 ledger/gate.py --pre-commit; then
+# The kit's mechanical check, in the commit path. Green means a machine ran the suite.
+# (The dev-ledger gate that used to live here was removed 2026-07-30; see scripts/check.sh.)
+if [ -x scripts/check.sh ]; then
+  if ! bash scripts/check.sh; then
+    echo "✖ check failed — commit blocked." >&2
     exit 1
   fi
 fi
