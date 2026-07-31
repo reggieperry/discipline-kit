@@ -5,6 +5,8 @@ paths:
 
 # Java concurrency
 
+**Enforcement grade:** review and convention — `checkstyle` is a style scanner, not a concurrency analyzer. SpotBugs would be the natural source and fails CLOSED on a source-only tree; its default-path wiring awaits a compiled pilot, so nothing here is scanned today.
+
 Threading, shared state, and task composition for code that does real I/O — network calls, database round-trips, file reads — on a Java 21 platform floor. Java 21 changes the default: virtual threads make a blocking call cheap, so a thread no longer has to be rationed against a scarce pool, and the design pressure shifts from "reuse threads" to "don't share mutable state." Sources: Brian Goetz, Tim Peierls, Joshua Bloch, Joseph Bowbeer, David Holmes, and Doug Lea, *Java Concurrency in Practice* (the shared-state, safe-publication, and building-blocks chapters); JEP 444, *Virtual Threads* (final in Java 21); JEP 453, *Structured Concurrency* (preview in Java 21); and the `java.util.concurrent` package documentation, including the value-based-class synchronization warning.
 
 > See `java-types.md` for the immutable-record and sealed-type modeling that keeps shared state read-only, `java-errors.md` for exception and `InterruptedException` handling across task boundaries, `java-style.md` for naming and the try-with-resources convention, `java-testing.md` for exercising concurrent code deterministically, and `craft-complexity.md` for keeping concurrency policy out of the domain logic so the logic stays unit-testable.

@@ -6,6 +6,8 @@ paths:
 
 # Scala errors in the types
 
+**Enforcement grade:** partly mechanical — `scalafix`'s `DisableSyntax` (`noNulls`, `noReturns`, `throw`) and WartRemover's `OptionPartial`/`TryPartial`/`EitherProjectionPartial` both ride Check A, so the partial-accessor and null bans are real WHERE THE REPO ENABLES THEM. A repo that runs WartRemover only under a scan flag gets none of the wart half — check before relying on it.
+
 Errors live in the return type, not in thrown exceptions. A pure core — your domain value types, the parsing and validation layer, the functions that transform them — is pure by design, so a failure is a value the type system forces the caller to confront rather than a control-flow jump the caller can forget. Sources: *Scala with Cats* (Welsh and Gurnell), chapters 9 (`MonadError`) and 11 (`Semigroupal`, `Applicative`, and `Validated`); *Functional Programming in Scala*, 2nd ed. (Chiusano and Bjarnason), chapter 4 (why exceptions break referential transparency, `Option`, `Either`, `Validated`); *Practical FP in Scala* (Volpe), chapter 1 (`MonadError`/`ApplicativeError`, typed errors versus `F[A]`); the cats and cats-effect documentation (`Validated`, `ApplicativeError`/`MonadError`); and the WartRemover and Scalafix `DisableSyntax` catalogs for the lints that mechanize these rules. The design principle behind several of these rules — define errors out of existence — comes from `craft-complexity.md`.
 
 > See `craft-complexity.md` for defining errors away, `craft-domain-modeling.md` for modeling the failure cases as part of the domain, `scala-types.md` for the error ADTs and the pure-core/`IO`-shell split, `scala-concurrency.md` for the one-effect-system rule, and `scala-llm.md` for feeding validation errors back to the model.

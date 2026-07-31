@@ -6,6 +6,8 @@ paths:
 
 # Python project and package layout
 
+**Enforcement grade:** review and convention — nothing enforces package boundaries or dependency direction. The adjacent mechanical fact is Check B: a new suppression anywhere fails the diff.
+
 How to organize a Python package and its metadata. Sources: the Python Packaging User Guide (src layout, `pyproject.toml`), PEP 621, and mypy's re-export rules.
 
 > See `craft-complexity.md` for deep, cohesive modules, `craft-domain-modeling.md` for packages named in domain terms and the bounded-context seams, and `python-style.md` for import conventions.

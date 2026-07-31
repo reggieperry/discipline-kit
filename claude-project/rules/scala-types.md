@@ -6,6 +6,8 @@ paths:
 
 # Scala domain modeling with the type system
 
+**Enforcement grade:** partly mechanical, via the compiler more than the gate — `-Werror` with `-Wunused:all` and `-Wvalue-discard` makes an inexhaustive match and a dropped result fatal, and the gate's fail-closed compile precondition means a non-compiling tree blocks rather than reading as clean. The modeling discipline is review, carried by the suites.
+
 Encode your domain's invariants in the type system so the compiler rejects an illegal value before it reaches the code that consumes it — a closed set of states, a branded identifier, a value object with two coherent fields, and a multi-field validation all carry their laws as types, not as runtime checks. Sources: the Scala 3 reference (enums, opaque type aliases, contextual abstractions / type classes), *Functional Programming in Scala* 2nd ed (ADTs, the `Either`-to-`Validated` derivation and error accumulation in chapter 4), *Scala with Cats* (the anatomy of a type class, type classes and variance), and *Programming in Scala* 5th ed (case classes and pattern matching). The substitutability discipline is from Liskov (`craft-abstraction.md`); the value-object and ubiquitous-language discipline is from Evans (`craft-domain-modeling.md`).
 
 > See `craft-domain-modeling.md` for value objects, entities, and naming in the ubiquitous language; `craft-abstraction.md` for abstract data types and the substitution principle; `scala-style.md` for the brace and given-clarity defaults; and `scala-llm.md` for the structured-output type as the typed model boundary at the LLM call.

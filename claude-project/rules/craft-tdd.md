@@ -9,6 +9,8 @@ paths:
 
 # Test-driven development and the design feedback it gives
 
+**Enforcement grade:** review and convention. Nothing mechanical observes whether a test was written first, and this kit ships no tool that does. ORDER is unprovable in principle — git shows a commit sequence, but nothing stops an author writing the code first and reordering. DETECTION POWER is provable in principle (build the implementation at the merge-base against the tests from HEAD and confirm the new tests go red, which kills tautologies and green-by-weakening); a repo that wants that guarantee builds it. Trust detection, not order — and read a silent loop as "nobody looked", never as "the loop was followed".
+
 How tests drive design, not just verify it. Source: Steve Freeman & Nat Pryce, *Growing Object-Oriented Software, Guided by Tests*. The mechanics of writing tests live in the language overlay; this rule is the cadence and the design discipline.
 
 > See the active language overlay (`go-testing.md`, the `python-*` and `scala-*` sets) for test mechanics and property testing, `craft-complexity.md` for the deep modules testable code tends toward, and `craft-abstraction.md` for the small interfaces that "mock roles, not objects" produces.

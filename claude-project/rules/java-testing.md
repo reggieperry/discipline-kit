@@ -8,6 +8,8 @@ paths:
 
 # Java testing
 
+**Enforcement grade:** mechanically enforced for the anti-weakening section below — Check D counts JUnit skip markers (`@Disabled`, `@Ignore`), assertion sites (`assertEquals`/`assertThat`/`assertThrows`/`fail`), and jqwik parameter weakening (a `tries` fall, `ShrinkingMode.OFF` appearing — the shrinking key is always emitted so 0→1 is caught), with a JaCoCo coverage-drop scan opt-in behind `--coverage`.
+
 How to write Java tests: JUnit 5 (Jupiter) suite structure, a fresh test instance per method with no shared mutable state, AssertJ fluent assertions that read in the domain's words, and deterministic property-based testing with jqwik — one shared generator provider per module, corners pinned deliberately, and a distribution property that proves the generator reaches them. Sources: the JUnit 5 user guide (`@Test`, `@Nested`, `@DisplayName`, `@ParameterizedTest`, the per-method lifecycle, the conditional-execution annotations), the AssertJ documentation (`assertThat`, `as`, `assertThatThrownBy`, the type-specific assertions), and the jqwik user guide (`@Property`, `@ForAll`, `@Provide`, `Arbitraries`, `@Domain` / `DomainContextBase`, `Statistics`, shrinking, and seeds). The floor is Java 21 — records and sealed types carry the value-model invariants these tests pin. Unlike the Scala layer, Java has no stock law bundle, so the algebraic laws below are hand-written properties rather than a `checkAll`.
 
 > See `java-types.md` for the records and sealed ADTs whose invariants these tests pin, `java-errors.md` for the exceptions the negative-space tests assert, `craft-tdd.md` for red-green-refactor and "listen to the tests", and `craft-xunit.md` for the arrange-act-assert and one-behavior-per-test mechanics this rule specializes.

@@ -9,6 +9,8 @@ paths:
 
 # Decoupling discipline
 
+**Enforcement grade:** review and convention — no check measures coupling, and the term this file defines is a reading of a design, not a metric a scanner can compute.
+
 Files under `.claude/` are project-portable infrastructure: portable rules,
 slash commands, hooks, skills. Every change to these paths must keep the file
 as portable as it was, or improve it. Project-specific content belongs in a

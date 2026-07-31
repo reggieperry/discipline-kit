@@ -8,6 +8,8 @@ paths:
 
 # TypeScript project and dependency structure
 
+**Enforcement grade:** review and convention — the gate registers no TypeScript toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned, and `tsc` resolves an import cycle without complaint.
+
 How to organize modules, draw boundaries between them, and configure the resolver and the package manifest so imports mean one thing. Sources of record: the TypeScript Handbook on Modules and Module Resolution (typescriptlang.org/docs/handbook/modules), the Node.js ESM and Packages documentation (nodejs.org/api/esm.html, /api/packages.html), the Vite guide on `resolve.alias` and env (vite.dev/config/shared-options), the package.json `exports` field reference, and typescript-eslint (`consistent-type-imports`) plus `eslint-plugin-import` (`no-cycle`). One house rule governs the rest: **this is an ES-modules codebase — every package sets `"type": "module"`, and there is no CommonJS in first-party source.**
 
 > See `ts-types.md` for the branded value types and discriminated unions these modules pass across their seams, `ts-style.md` for import ordering and naming, `ts-errors.md` for the error types that cross a boundary, `ts-react.md` for feature-folder layout in a component tree, `craft-complexity.md` for deep cohesive modules and the dependency-versus-obscurity frame, and `craft-domain-modeling.md` for drawing module boundaries along bounded-context seams.

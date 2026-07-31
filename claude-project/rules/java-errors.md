@@ -5,6 +5,8 @@ paths:
 
 # Java errors
 
+**Enforcement grade:** partly mechanical — `checkstyle` catches a few shapes (an empty catch block, an illegal catch of `Exception`) through Check A. Typed exception hierarchies, translating at the boundary, and never swallowing are review and convention.
+
 Java routes failure through exceptions, and using that channel well is the difference between a failure that names its cause and one that disappears into an empty catch. The stance is unchecked-by-default: reserve a checked exception for a condition a caller can plausibly recover from, and raise a runtime exception for a programming error that no caller should be catching. Sources: *Effective Java*, 3rd ed. (Bloch) — Items 69–77 on exceptions (using them only for exceptional conditions, checked versus unchecked, the standard types, translating to the right abstraction, failure-capture detail, failure atomicity, and never ignoring one), Item 9 on `try`-with-resources, and Item 55 on returning `Optional` judiciously — and the Java 21 language documentation, the floor for this set. The design principle behind several of these rules — define errors out of existence — comes from `craft-complexity.md`.
 
 > See `java-types.md` for the domain value types and the null-free boundary, `java-concurrency.md` for exceptions crossing a thread or an executor, `java-style.md` for the guard-clause control flow, `java-testing.md` for asserting the thrown type and message, and `craft-complexity.md` for defining errors away.

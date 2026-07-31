@@ -6,6 +6,8 @@ paths:
 
 # Scala LLM boundary (structured output)
 
+**Enforcement grade:** review and convention — nothing scans a model boundary. The keep-the-SDK-off-the-core half is enforceable structurally, by a build-level dependency boundary rather than a scanner.
+
 The typed contract between your Scala code and the model — the single place this boundary's reliability is bought, and the only place an otherwise-pure core touches the outside world. Sources: the model provider's Java SDK, reached over JVM interop (most providers ship no native Scala SDK); the provider's structured-outputs documentation (the `outputConfig` equivalent and the JSON-schema limitations); and cats-effect `IO` for the effect boundary. The model is reached through the provider's official Java SDK; the model id is configured per call site. Pin the dated model id for reproducibility, and confirm the exact SDK `Model` enum against the resolved artifact at first wiring.
 
 > See `scala-types.md` for the output as a typed contract (the case class the schema is derived from), `scala-concurrency.md` for wrapping the blocking SDK call in `IO` and putting a timeout on it, `scala-errors.md` for surfacing validation failures as typed values rather than thrown exceptions, `scala-modules.md` for keeping the SDK off the pure core's dependency surface, and `craft-abstraction.md` for the schema as a specification the call is written against.

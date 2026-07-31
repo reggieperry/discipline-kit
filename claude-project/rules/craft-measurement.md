@@ -10,6 +10,8 @@ paths:
 
 # Measuring, and why an instrument reads clean when it is not looking
 
+**Enforcement grade:** review and convention, entirely — and this is the file where that matters most. No check notices a metric bounded by its own workload, a filtered failure signal, a wait loop with no deadline, or a statistic whose assumptions were never tested against a known-healthy series. Every rule here was paid for by a defect a green build did not catch.
+
 Load this when writing or reading a benchmark, soak harness, metric, health check, wait
 loop or CI gate, or when interpreting a number a run produced. Otherwise skip it.
 

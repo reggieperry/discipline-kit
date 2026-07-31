@@ -5,6 +5,8 @@ paths:
 
 # Java types
 
+**Enforcement grade:** partly mechanical — `checkstyle` catches some declaration-level issues through Check A, and the fail-closed compile precondition means a non-compiling tree blocks rather than reading as clean. Nothing type-checks beyond `javac`; sealed hierarchies and value-type modeling are review.
+
 Encode your domain's invariants in Java's type system so the compiler rejects an illegal value before the code that consumes it runs — a closed set of cases, an immutable data carrier, a wrapped identifier, and a non-null-by-default reference each carry their laws as types, not as scattered runtime checks. Sources: *Effective Java* 3rd ed (Joshua Bloch — Item 17 "minimize mutability" and the `record` as its modern realization, Item 62 "avoid strings where other types are more appropriate"), the Java 21 language documentation for records, sealed classes and interfaces, and pattern matching for `switch`, and the JSpecify nullness specification (jspecify.org). The value-object and ubiquitous-language discipline is from Evans (`craft-domain-modeling.md`); the fight against needless complexity is from Ousterhout (`craft-complexity.md`). Floor: Java 21.
 
 > See `java-errors.md` for closed-alternative failure handling and the exception-versus-result boundary; `java-style.md` for pattern matching and the `switch` defaults; `java-modules.md` for package boundaries and where `@NullMarked` is declared; `java-testing.md` for pinning the invariants the type cannot state; `craft-domain-modeling.md` for value objects, entities, and the ubiquitous language; and `craft-complexity.md` for keeping each module deep.

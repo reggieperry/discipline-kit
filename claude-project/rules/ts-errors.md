@@ -6,6 +6,8 @@ paths:
 
 # TypeScript errors in the types
 
+**Enforcement grade:** review and convention — the gate registers no TypeScript toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. Errors as values, typed error unions, and never swallowing a rejection are unscanned.
+
 TypeScript inherits JavaScript's `throw`, which can throw any value and carries no type in the signature — so the discipline here is to pull failures back into the types wherever a caller branches on them, and to keep `throw` for the genuinely exceptional. A caught value is `unknown`, a custom error carries a discriminant, an expected failure rides a `Result` union rather than a thrown exception, and a floating rejected promise is a bug the linter must catch. Sources: the TypeScript Handbook (the `unknown` type, narrowing, discriminated unions, `never` for exhaustiveness); *Effective TypeScript* (Vanderkam), Items on modeling state with unions and on preferring `unknown` to `any`; the MDN `Error` reference (`Error`, `cause`, the built-in subclasses, `Error.isError`); typescript-eslint (`no-floating-promises`, `no-misused-promises`, `only-throw-error`); the neverthrow `Result` API; and the React docs on error boundaries. The design principle behind several of these rules — define errors out of existence — comes from `craft-complexity.md`.
 
 > See `craft-complexity.md` for defining errors away, `craft-domain-modeling.md` for modeling the failure cases as part of the domain, `ts-types.md` for the discriminated-union and `unknown`/`never` machinery these rules lean on, `ts-react.md` for the component side of error boundaries, `ts-security.md` for what must never reach a user-facing message, and `ts-llm.md` for feeding validation errors back to the model.
