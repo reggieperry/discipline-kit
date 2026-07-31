@@ -238,10 +238,6 @@ Apply these in every prompt:
     verdict; drop the chatty "ground truth is complete, writing the
     verdict" block.
 
-12. **Findings route to the ledger as refutations.** In a ledgered repo,
-    findings land as `kind: refutation` entries `about` the slice's claim
-    (`source: subagent`); a clean pass is an absence-report testimony, not
-    an approval, and carries one lineage under the agreement discount.
 
 ## Tone notes
 

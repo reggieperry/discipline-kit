@@ -42,7 +42,7 @@ The problem statement points at real code, not an abstraction. Before writing it
 
 ## Acceptance criteria carry the anti-weakening contract
 
-A story's acceptance criteria are the prose parents of the loop's parked claims — the claim-first step (`ledger-preregister`) is those criteria entering the courthouse, one line each, before any code. Write each so a named check discharges it, not a reader's judgment: name the check and point at the artifact, never "it works."
+A story's acceptance criteria are settled BEFORE any code, one line each. Write each so a named check discharges it, not a reader's judgment: name the check and point at the artifact, never "it works."
 
 Every acceptance section carries the anti-weakening contract verbatim, alongside its work-specific criteria:
 
@@ -58,4 +58,4 @@ When the story ships a detector — a gate, a check, a fail-closed guard, a tamp
 
 ## After the draft
 
-A draft is not `ready`. `story-tighten` is the sharpening pass — it splits a story too large for one red-first slice, cuts an acceptance line no check can reach, and re-grounds a stale `path:line`. When the story turns on a decision chosen among alternatives, that decision is an ADR and not a story section: write it with `adr-write` and have the story cite it. Once the story is `ready`, its acceptance criteria become the pre-registered claims of the build loop (`ledger-preregister`).
+A draft is not `ready`. `story-tighten` is the sharpening pass — it splits a story too large for one red-first slice, cuts an acceptance line no check can reach, and re-grounds a stale `path:line`. When the story turns on a decision chosen among alternatives, that decision is an ADR and not a story section: write it with `adr-write` and have the story cite it. Once the story is `ready`, its acceptance criteria are the standing obligations the build loop works against.

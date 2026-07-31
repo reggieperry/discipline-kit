@@ -19,7 +19,7 @@ ADR files are named `ADR-NNNN-<slug>.md`, where `NNNN` is a four-digit zero-padd
 **Ids are stable and never renumbered.** Once an id is issued it belongs to that ADR
 permanently, even after the ADR is superseded or deprecated. Allocate the next free integer;
 never reuse a retired one, and never renumber to close a gap. A stable id is what lets every
-cross-reference, ledger claim, and commit message point at a decision that will still be there.
+cross-reference and commit message point at a decision that will still be there.
 The next id is one past the highest in the registry table below.
 
 ## The fixed section order
@@ -33,7 +33,7 @@ than being dropped. The template is authoritative on the shape.
 
 A Status line near the top records the ADR's state — Proposed, Accepted, Superseded-in-part,
 Superseded, or Deprecated — and cites the verdict that admitted it. An acceptance-gate pass, a
-deep-reason adversary or a committee review, lands in the ledger as *testimony*; testimony
+deep-reason adversary or a committee review, is *testimony*; testimony
 attests but never signs, so the Status line cites the testimony's `clm-NNNN` rather than
 reporting the pass in prose. A verdict cited by id is receipted and checkable; a verdict
 asserted in prose is neither.
@@ -46,7 +46,7 @@ its text and gains a "superseded-in-part" banner naming the successor and, expli
 **retains** — the parts that still govern. The ADR's Status line moves to Superseded-in-part;
 its sibling Decisions are untouched and keep their numbers.
 
-This mirrors the ledger's supersede-never-edit discipline: a changed decision is a new record
+Supersede, never edit: a changed decision is a new record
 that names the old one, not an edit that erases the fact that the decision changed. The audit
 value is in the diff — a maintainer must be able to see what was decided, what replaced it, and
 what survived.
@@ -55,7 +55,7 @@ what survived.
 
 The **Falsification condition** is non-negotiable: every ADR states the condition under which
 its decision would be shown wrong. That condition is not allowed to live only in the ADR's
-prose. Wherever it is mechanically checkable, it registers in the ledger as a claim — an
+prose. Wherever it is mechanically checkable, it registers as a check — an
 `unverified` assertion parked under the check that would fire it — and the ADR cites the
 `clm-NNNN`. As the design maxim holds, *a falsifier living only in prose is a court nobody
 convenes*: a condition with no court is a sentence nobody can act on, while a condition

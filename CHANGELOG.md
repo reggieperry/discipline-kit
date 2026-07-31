@@ -2,6 +2,31 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## Unreleased — the dev-ledger removed
+
+**Removed the dev-ledger and everything that prompted for it.** Its own record decided this: 284
+entries, 140 signed, and every one of the 140 cited the same authority — `repo-check`, i.e. the
+repo's mechanical check. There was never a second signing authority, so the claim algebra over the
+repo's own development reduced to "did the check pass," recorded 140 times in JSON. The compiler
+already returns that bit.
+
+Gone: `harness/ledger/`, `ledger/`, the six `ledger-*` skills, `install-harness.sh`,
+`harness-verify.sh`, `install.md`, the inbound-guard workflow and template, the ledger walkthroughs,
+and the ledger-specific methodology memories. The claim-first, signing, forgery-guard, audit,
+precedence and preregistration prompting is stripped from the rules, skills, templates, issue
+templates, README, CONTRIBUTING and SECURITY.
+
+**Kept, because it was the part that was catching things:** the mechanical check on the commit path,
+now `scripts/check.sh` and a plain pre-commit hook with no claim apparatus around it. Also kept:
+`harness/rule_grades.py` and its fixture, moved out of the ledger tree — they check that coding rules
+declare an enforcement grade, which has nothing to do with claims.
+
+**Not claimed:** that this makes the kit weaker or stronger at catching defects. The measured
+position is narrower — the ledger was not catching them. Over seven build slices in the originating
+repo, the mechanisms that caught real defects were the compiler, the review discipline, and
+adversarial verification; the ledger's entire contribution was blocking one malformed ledger entry,
+which existed only because the ledger did.
+
 ## Unreleased
 
 - **Sender-repo attestation (shared-tier roadmap).** Where cryptographic provenance is wanted, the sender's CI — on a green `harness-verify` — emits a keyless GitHub artifact attestation ("harness verified green at `<sha>`, kit `<VERSION>`", via the workflow's OIDC identity); the PR body links it, and the receiver's inbound workflow verifies it in one call. Bounded guarantee, stated so it never reads stronger: this proves a repo whose CI vouches for a green harness sent the contribution — it does not and cannot prove what kind of author wrote it, which is unprovable in principle and, under this constitution, unnecessary. Verify the claims, never the badge (memory `verify-claims-not-badges`).

@@ -17,59 +17,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
+
       - name: scrub-gate (no private identifiers anywhere)
         run: bash scrub-gate.sh
 
-      - name: ledger board selftest (views match the committed fixture)
-        run: bash harness/ledger/board.sh --selftest
 
-      - name: retire immutability fixture (verbatim-move green, old rewrite red)
-        run: python3 harness/ledger/fixtures/retire_immutable_test.py
 
-      - name: red-proof fixture (genuine test passes, tautology rejected)
-        run: python3 harness/ledger/fixtures/red_proof_test.py
 
-      - name: tdd-precedence + coverage fixture (claim precedes code; red-proof coverage counts)
-        run: python3 harness/ledger/fixtures/tdd_precedence_test.py
 
-      - name: installer --upgrade fixture (kit-owned overwritten, repo-owned untouched, VERSION stamped)
-        run: python3 harness/ledger/fixtures/install_upgrade_test.py
 
-      - name: gate sentinel fixture (env overrides ignored without ledger/.test-mode)
-        run: python3 harness/ledger/fixtures/gate_sentinel_test.py
 
-      - name: java plumbing fixture (mvn/gradle check_command; .java auto-detect; vendored-java inert)
-        run: python3 harness/ledger/fixtures/java_plumbing_test.py
 
-      - name: squash-safe precedence fixture (--certify emits; main-side consumes the certificate)
-        run: python3 harness/ledger/fixtures/squash_precedence_test.py
 
-      - name: memory-index size fixture (soft WARNs, hard FAILs — index honesty with teeth)
-        run: python3 harness/ledger/fixtures/memory_index_test.py
 
-      - name: install-completeness fixture (referenced docs vendored into the target on install)
-        run: python3 harness/ledger/fixtures/install_completeness_test.py
 
-      - name: refresh-rules fixture (install.sh --refresh-rules re-syncs rules into an existing install)
-        run: python3 harness/ledger/fixtures/refresh_rules_test.py
 
-      - name: inbound-guard fixture (an added signed ledger line is rejected on the inbound path)
-        run: python3 harness/ledger/fixtures/inbound_guard_test.py
 
-      - name: interchange fixture (valid/receipt-failing/forged-passing/malformed blocks graded)
-        run: python3 harness/ledger/fixtures/interchange_test.py
 
-      - name: authoring-artifacts fixture (the ADR/story templates + four skills keep their structure)
-        run: python3 harness/ledger/fixtures/authoring_artifacts_test.py
 
-      - name: precedence PR mode (emit certificates on the intact branch, pre-squash; read-only)
-        if: github.event_name == 'pull_request'
-        run: python3 harness/ledger/audit.py --certify
 
       - name: differential gate unit tests (36 stdlib tests, incl. the Java toolchain)
         run: python3 reference/test_sdlc_gate.py
 
-      - name: algebra check (re-prove the ledger-dynamics laws + laundering exhibits)
-        # validate_note.py fails closed (exits non-zero) if any base law or laundering
-        # exhibit regresses — a reintroduced ⊗ₖ glut-identity or ∨ₜ dual laundering fails CI by name.
-        run: python3 harness/algebra/validate_note.py

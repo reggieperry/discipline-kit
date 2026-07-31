@@ -13,10 +13,10 @@ labels: bug
 
 ## Version receipt
 
-The `ledger/VERSION` of the repo where the harness is installed:
+The `the version` of the repo where the harness is installed:
 
 ```
-<paste the contents of ledger/VERSION>
+<paste the contents of the version>
 ```
 
 ## Verification output

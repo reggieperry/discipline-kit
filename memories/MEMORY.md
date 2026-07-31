@@ -2,8 +2,6 @@
 
 Portable engineering-discipline memories, scrubbed of all machine, project, and personal identifiers. One file per fact; this index is loaded into context each session. Drop these into your project (or user) memory directory and keep the one-line-per-memory convention when you add your own.
 
-**The memory/ledger boundary law:** a memory carries *durable discipline*; any mechanically checkable assertion belongs in the dev-ledger as a claim with a named check, and the memory cites its `clm-` id — a recheck recipe living in a memory file is a claim in the wrong courthouse. On detecting a memory that asserts a checkable mechanical fact, register the claim, annotate the memory with the id, and never delete the memory.
-
 ## Feedback — how to work (corrections, confirmed approaches)
 
 - [As simple as possible, but no simpler](feedback_simplicity_principle.md) — Guiding design principle — Einstein's "as simple as possible, but no simpler." Use it to calibrate recommendations.
@@ -27,18 +25,11 @@ Portable engineering-discipline memories, scrubbed of all machine, project, and 
 - [feedback-credibility-gestures](feedback_credibility_gestures.md) — Cut \"real\" and similar credibility-claim phrasings — gesture at trust instead of demonstrating it
 - [feedback-deep-reasoning-agent](feedback_deep_reasoning_agent.md) — Use the \"deep reasoning agent\" pattern as a second reasoning model for substantial research, audit, validation, and review tasks (framing superseded v1.2.0 → adversary, see adversary-not-second-opinion)
 - [adversary-not-second-opinion](feedback_adversary_not_second_opinion.md) — Deep-reason is a fresh-context ADVERSARY not a second opinion (E3): correlated approval near-worthless; findings dischargeable; a clean pass is an absence report
-- [retire-any-commit](feedback_retire_any_commit.md) — Retire is verbatim-move + sidecar (v1.1.0), immutability-safe in ANY later commit; the same-commit-only rule is history; supersedes the lesson half of the --sweep scar (incident stands)
-- [squash-safe-precedence](feedback_squash_safe_precedence.md) — Precedence certificates are content, not commit topology; squash-merge supported via audit.py --certify (v1.3.1)
-- [chain-aware-counters](feedback_chain_aware_counters.md) — The loop's counters measure the full supersedes-chain, not a 2-link pair (the clm-0030 fix, v1.3.1)
 - [rule-grade-matches-gate](feedback_rule_grade_matches_gate.md) — A rule states its enforcement grade; a scanner wiring and its disclaimer removal share one commit (v1.3.2)
-- [memory-ledger-boundary](feedback_memory_ledger_boundary.md) — Checkable assertions are ledger claims with a named check, not memories; register+annotate+never-delete (v1.3.3)
 - [fail-posture-taxonomy](feedback_fail_posture_taxonomy.md) — Three fail postures by role: blocking→CLOSED, advisory→QUIET, safety→STRICT (v1.3.3)
-- [config-is-a-claim](feedback_config_is_a_claim.md) — A repo's configuration choices are recorded as one check:none ledger assertion, defaults included (v1.3.4)
 - [prompts-are-the-api](feedback_prompts_are_the_api.md) — The kit's interface is the prompt; the conversational path is a TESTED front door, not folklore (v1.3.4)
-- [specs-are-claim-parents](feedback_specs_are_claim_parents.md) — ADR falsifiers and story acceptance criteria are the prose parents of registered claims; the record-home rule applies at every grain (v1.4.0)
 - [adversaries-hunt-never-vote](feedback_adversaries_hunt_never_vote.md) — adversarial-review fans N attackers out by ROLE and never votes; agreements weightless, dedupe by lineage, a finding is real when its check goes red (v1.4.1)
 - [inbound-is-claim-traffic](feedback_inbound_is_claim_traffic.md) — inbound is claim traffic: bug = refutation (or the missing claim); reproduce-or-park; credit the reporter; signatures never arrive from outside the gate (v1.5.0)
-- [verify-claims-not-badges](feedback_verify_claims_not_badges.md) — author identity is unprovable and irrelevant; re-run a contribution's disposing check, never the sender badge; attestation binds repo state, not authorship (v1.5.0)
 - [feedback-display-times-in-pt](feedback_display_times_in_pt.md) — Display timestamps in the user's local timezone for human-facing summaries, not UTC; UTC is fine in raw tool output but rendered summarie...
 - [feedback-llm-prompt-defenses-and-evaluation](feedback_llm_prompt_defenses_and_evaluation.md) — Eight rules from Chip Huyen's *AI Engineering* (2024) — pair every prompt-attack defense with violation + false-refusal rates, apply the...
 - [feedback-postgres-concurrency-operational](feedback_postgres_concurrency_operational.md) — Seven Postgres-specific rules from Fontaine's *The Art of PostgreSQL* — serialization-failure retries with bounded backoff, `INSERT ... O...
@@ -63,7 +54,6 @@ Portable engineering-discipline memories, scrubbed of all machine, project, and 
 - [tdd-discipline-and-listening-to-the-tests](feedback_tdd_listening.md) — Test-driven development as a design activity, not a verification activity. Distilled from Growing Object-Oriented Software, Guided by Tes...
 - [tdd-skill-for-interactive-code](feedback_tdd_skill_for_interactive_code.md) — For code landing in a PR/push, apply the full engineering methodology (kit mapping: tdd/simplify/security-review/review → craft-tdd + loop, refactoring, security rules, pr-review)...
 - [test-discipline-readability-fixtures-boundaries](feedback_test_discipline.md) — How to write tests that pull their weight. Names describe behavior; canonical setup-exercise-verify shape; fresh fixtures per test; probe...
-- [typed-events-decision-tree](feedback_typed_events_decision_tree.md) — When typed events are the right architectural pattern vs alternatives (method call, frozen dataclass, polymorphic dispatch, record-and-qu...
 - [xunit-test-patterns-meszaros](feedback_xunit_test_patterns.md) — xUnit Test Patterns (Meszaros 2007) — fine-grained test-double taxonomy, named test-smell catalog, 13 principles, fixture strategies, fiv...
 
 ## Reference — pointers and distilled external sources
