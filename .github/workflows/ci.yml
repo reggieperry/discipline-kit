@@ -3,6 +3,10 @@ name: ci
 # A discipline kit whose own repo has no gate is an argument against itself. This runs the kit's
 # acceptance suite on every push and PR. Read-only permissions and no secrets, so fork PRs are safe
 # by default (the jobs never need any). No external toolchains — bash, python3, and git only.
+#
+# Keep this list identical to `scripts/check.sh`, which is what the commit path runs. A check that
+# runs locally but not in CI passes review and fails nobody; a check that runs in CI but not locally
+# is discovered at push time. CONTRIBUTING.md tells contributors these are the same set.
 on:
   push:
     branches: [main]
@@ -17,7 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-
+      - name: scrub-gate (no private identifiers anywhere)
+        run: bash scrub-gate.sh
 
       - name: rule enforcement grades declared and in-vocabulary
         run: python3 harness/rule_grades.py
@@ -25,24 +30,10 @@ jobs:
       - name: rule-grade checker discriminates (fixture)
         run: python3 harness/fixtures/rule_grades_test.py
 
-      - name: scrub-gate (no private identifiers anywhere)
-        run: bash scrub-gate.sh
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       - name: differential gate unit tests (36 stdlib tests, incl. the Java toolchain)
         run: python3 reference/test_sdlc_gate.py
 
+      # Fails closed if any base law or laundering exhibit in the algebra note regresses — a
+      # reintroduced glut-identity laundering fails CI by name rather than by a silent diff.
+      - name: algebra-note validator
+        run: python3 harness/algebra/validate_note.py

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Red-first fixture for `harness/ledger/rule_grades.py`.
+"""Red-first fixture for `harness/rule_grades.py`.
 
 An instrument that has never been observed failing is not known to be watching. Each case
 builds a throwaway rules directory and asserts the checker's exit code:
@@ -13,7 +13,7 @@ builds a throwaway rules directory and asserts the checker's exit code:
 The last two matter most: a checker that passes when it found nothing to check reports the
 same green as one that verified everything.
 
-Run: python3 harness/ledger/fixtures/rule_grades_test.py   (exit 0 = pass).
+Run: python3 harness/fixtures/rule_grades_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
@@ -72,26 +72,33 @@ def case(name: str, files: dict[str, str] | None, want: int) -> bool:
         return ok
 
 
-def installed_layout_case() -> bool:
-    """Regression: the tool must find the rules with NO argument, from an INSTALLED layout.
+def installed_layout_case(nest: tuple[str, ...]) -> bool:
+    """Regression: the tool must find the rules with NO argument, at ANY depth.
 
-    Every case above passes an explicit directory, which bypasses discovery entirely — so they
-    all stayed green while discovery was broken. In the kit this file sits at `harness/ledger/`;
-    an installed repo gets it at `ledger/`, one level shallower. A fixed `parents[N]` root is
-    right for exactly one of those and points outside the repo for the other.
+    Every fixed-directory case above bypasses discovery entirely — so they all stayed green
+    while discovery was broken. This one runs the tool with no argument, from a synthesized
+    repo, at a chosen depth below the root.
+
+    TWO depths, and the pair is the point: `start` is the script's own directory, so a fixed
+    `parents[N]` is exactly right for one depth and points OUTSIDE the repo for every other —
+    where it finds no rules, the reading this tool exists to refuse to call a pass. A single
+    depth therefore cannot discriminate: measured on this fixture, a `parents[1]` mutant is
+    correct for a 2-deep layout and passes it, and is caught only because the 1-deep case runs
+    beside it. Keep both, and keep them unequal.
     """
     with tempfile.TemporaryDirectory() as td:
         repo = Path(td) / "repo"
-        (repo / "ledger").mkdir(parents=True)
+        (repo.joinpath(*nest)).mkdir(parents=True)
         (repo / ".claude" / "rules").mkdir(parents=True)
         (repo / ".claude" / "rules" / "a.md").write_text(GRADED, encoding="utf-8")
-        installed = repo / "ledger" / "rule_grades.py"
+        installed = repo.joinpath(*nest) / "rule_grades.py"
         installed.write_text(TOOL.read_text(encoding="utf-8"), encoding="utf-8")
         got = subprocess.run(
             [sys.executable, str(installed)], capture_output=True, text=True, cwd=repo
         ).returncode
         ok = got == 0
-        print(f"  {'ok  ' if ok else 'FAIL'} installed-layout (no argument): want exit 0, got {got}")
+        depth = "/".join(nest)
+        print(f"  {'ok  ' if ok else 'FAIL'} discovery at {depth}/ (no argument): want exit 0, got {got}")
         return ok
 
 
@@ -102,7 +109,8 @@ def main() -> int:
         case("bad-token", {"a.md": GRADED, "b.md": BAD_TOKEN}, 1),
         case("empty", {}, 2),
         case("missing", None, 2),
-        installed_layout_case(),
+        installed_layout_case(("harness",)),
+        installed_layout_case(("tools", "vendored")),
     ]
     if all(results):
         print("rule_grades_test: all cases pass")

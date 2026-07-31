@@ -3,9 +3,17 @@ set -uo pipefail
 
 # The kit's mechanical check, in the commit path. Green means a machine ran the suite.
 # (The dev-ledger gate that used to live here was removed 2026-07-30; see scripts/check.sh.)
-if [ -x scripts/check.sh ]; then
-  if ! bash scripts/check.sh; then
-    echo "✖ check failed — commit blocked." >&2
-    exit 1
-  fi
+#
+# A hook is only as good as the routes it covers: if any automation commits by a path that
+# bypasses this hook, close that route rather than trusting it not to be taken.
+if [ ! -f scripts/check.sh ]; then
+  # An absent check is not a passing one. Reaching here means the gate was deleted, renamed,
+  # or the hook is running from the wrong directory — every one of which must block, because
+  # "no check ran" and "the check passed" would otherwise be the same green.
+  echo "✖ scripts/check.sh not found — commit blocked (no check ran)." >&2
+  exit 1
+fi
+if ! bash scripts/check.sh; then
+  echo "✖ check failed — commit blocked." >&2
+  exit 1
 fi
