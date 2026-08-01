@@ -1,0 +1,347 @@
+# Design — a kit-local, language-pluggable, mostly-autonomous SDLC chain
+
+**Status:** design doc. It explores; it does not decide. Per `docs/adrs/README.md`, the forks it
+names — the sequencer model, the containment posture, the state authority — each warrant an ADR
+before anything is built. None has been written.
+
+**Supersedes:** the chain design on `feat/kit-chain`, archived as tag `archive/kit-chain`. That
+branch's five agents and four support scripts exist only on the tag; `harness/chain/` is not on
+`main`. So this revises a design that was never shipped, not one that is running.
+
+**Provenance.** Produced 2026-08-01 by two multi-agent passes over the `sdlc-discipline-pack`, this
+kit, and `claim-algebra-lab` as a second language instance, followed by a capability review of the
+Claude Code documentation against a numbered list of the prior design's weaknesses, and three
+adversarial verification passes. The verification passes rejected claims the first synthesis marked
+verified on the strength of a documentation reading alone; the evidence convention below exists
+because of that.
+
+**Evidence convention.** Every mechanism carries one mark, and the marks are not decorative:
+
+- **VERIFIED** — measured on a real machine, with the measurement named. Not "the docs say so."
+- **DOCUMENTED** — stated in Claude Code documentation and checked against the installed 2.1.220
+  binary where a flag or field name was involved, but not exercised end to end.
+- **PROPOSED** — design invention. Not built, not measured. Some of it will be wrong.
+
+Nothing is marked VERIFIED on a documentation reading. Where a measurement contradicts a document,
+the measurement wins and the contradiction is recorded rather than smoothed.
+
+**Two things a reader should carry into every section.** Containment of an agent holding Bash was
+measured and largely does not hold — five of six deny-rule evasions succeeded. And the harness's own
+success report is not a phase verdict — a phase that could do nothing reports success on every field
+it exposes. Both are in §6, and both are the reason the human merge stays.
+
+---
+
+# Revised design — kit-local, language-pluggable, mostly-autonomous SDLC chain
+
+Supersedes the prior chain design (branch `feat/kit-chain`, archived as tag `archive/kit-chain`). Every mechanism below carries one of three marks:
+
+- **VERIFIED** — measured on this machine during the capability review or the verification passes, with the measurement named. Not "the docs say so."
+- **DOCUMENTED** — stated in Claude Code documentation, checked against the live 2.1.220 install where a flag or field name was involved, but not exercised end to end.
+- **PROPOSED** — design invention. Not built, not measured. Some of it may not work.
+
+Nothing here is marked VERIFIED on the strength of a documentation reading alone. The prior draft did that in at least five places and the verification pass rejected all of them.
+
+---
+
+## 1. What changed, and why
+
+### 1.1 Four things the prior design called impossible that are not
+
+**The sequencer can run its own predicates.** The prior design's central constraint was "a Workflow script has no filesystem or shell access, so the sequencer cannot run its own predicate" — which forced an agent to mediate every phase transition and made the chain's central property (advancement decided by a mechanical predicate, re-derived from durable state, by a sequencer holding no judgment) unenforceable. That constraint was an artifact of choosing Workflow as the sequencer. A plain bash driver running `claude -p` once per phase is an OS process with a shell and a filesystem. Predicates become ordinary subprocess calls between invocations. **DOCUMENTED** (`claude --help` confirms `-p`, `--agents <json>`, `--output-format`, `--resume`); **VERIFIED** that real `claude -p` invocations complete and return parseable output.
+
+**The chain can start without a human turn.** The prior design read `.claude/scheduled_tasks.lock` (`{sessionId, pid, procStart, acquiredAt}`, and it lives at *project* scope, not `~/.claude/` as the earlier draft said) and concluded correctly that `/loop` is session-scoped, therefore a human turn was structurally required. An OS cron entry invoking the bash driver needs no pre-existing session. **DOCUMENTED**, and trivially true of cron.
+
+**There is a real filesystem partition for the attest-only grader.** `isolation: worktree` in subagent frontmatter puts the subagent's edits in a temporary git worktree and leaves the parent checkout untouched. The prior design enforced tester non-interference only by a post-hoc `git diff` from the driver. **DOCUMENTED** (sub-agents.md line 290). One caveat and its fix: the worktree branches from the *default branch*, not parent HEAD — set `worktree.baseRef: "head"`, documented for exactly this case ("Use this when isolating subagents that need to operate on in-progress work"). The prior draft's workaround (have the agent check out the worker's sha as its first Bash call) is unnecessary.
+
+**Provider outages inside a run are survivable.** `CLAUDE_CODE_RETRY_WATCHDOG=1` retries capacity errors indefinitely; `system/api_retry` stream events carry `attempt`, `max_retries`, `retry_delay_ms`, `error_status`, and an error category. The prior design had no retry concept and treated an outage longer than a session as fatal. **DOCUMENTED**.
+
+### 1.2 Six things the prior design assumed that turned out false
+
+**Warrant containment by `tools:` list plus command grep does not contain a Bash holder.** Measured against the live deny rule `Bash(rm -rf*)`: `rm -fr` executed, `rm -r -f` executed, `/bin/rm -rf` executed, `python3 -c 'shutil.rmtree(...)'` executed, and `bash -c 'rm -rf <path>'` executed *carrying the literal banned string*. Only `R=rm; F="-rf"; $R $F` was denied, because the matcher resolves simple variable assignments. Five of six evaded. **VERIFIED**. The gap analysis's sentence "compound commands are split... so the trivial evasions are covered" is false: splitting and wrapper-stripping are real, but flag reorder, flag splitting, path qualification, and every interpreter argument go straight through. `bash -c` alone defeats the whole command-fence layer in one call.
+
+**A tool-scoped hook is not a filesystem control.** The live `PreToolUse:Write` hook blocked a Write with exit 2 and its validator's reason on stderr — so hooks genuinely reach subagents, which is the design's central premise and is sound. Then the byte-identical content, written to the same path with `printf > file` through Bash, landed with no hook invocation. **VERIFIED**, both halves. An agent holding Bash never needs the instrumented tool.
+
+**A denied tool call in headless mode does not fail.** `claude -p '...' --permission-mode dontAsk` with the call unapproved: the Bash call was denied, the file was never created, and the process **exited 0** with `is_error: false`, `subtype: "success"`, `stop_reason: "end_turn"`, and a `result` text asking permission of nobody. **VERIFIED**. A driver branching on `$?` reads a clean pass on a phase that did nothing. This is exactly the shape `craft-measurement.md` was written about, and it would have run every night.
+
+**`--output-format json` is unusable for an unattended driver.** SIGKILL of a mid-turn `claude -p --output-format json` produced exit 137 and a **zero-byte** output file — a killed phase byte-identical to a phase that never started, with no `session_id` to resume and no cost. The same kill under `--output-format stream-json --verbose` left 16 usable event lines with no `result` event. **VERIFIED**. The absence of a `type: "result"` line is the clean completion signal the prior design said did not exist.
+
+**User-scope settings are not out of the agent's reach, and neither are the hook scripts.** User-scope settings are owner-readable and owner-writable, and the phase agent runs as that same owner — measured by having a subagent touch the file and create a sibling. File modes are no barrier when the agent is the owner. The prior draft's "a project-scope deletion cannot remove the user-scope hook" protects against an adversary that was never the threat. Worse and unnamed anywhere before: the hook *bodies* are agent-writable too, being ordinary executable scripts owned by the same user. Pinning the config while leaving the script writable moves the recursion one file over. **VERIFIED**.
+
+**The chain harness is not broken — it is not shipped.** `harness/chain/` does not exist on discipline-kit `main`. I confirmed this directly: `git ls-tree -r --name-only main | grep '^harness/'` returns twelve paths (rule grades, algebra validator, four skills, five templates) and nothing under `chain/`. All five chain agents and all four chain support files exist only under tag `archive/kit-chain`. So "a chain run today halts rather than advancing on a fake pass" describes a chain that cannot run at all. The prior gap analysis's claim of 34 ledger paths on the archive is correct for the `harness/ledger/` prefix (I measured 34); the verification lens's 28 counted a different prefix. Not a real disagreement.
+
+Separately, the archived `postcondition.py` does `sys.path.insert(...); import model` at module scope (line ~34–36) and the ledger is gone, so it raises `ModuleNotFoundError` and exits **1**, not 2. Its docstring asserts exit 1 is "also fail-closed for the driver's purposes" — that is intent, not mechanism, and there is no driver to honor it.
+
+### 1.3 What that adds up to
+
+The prior design tried to buy containment from the harness's configuration surface and mostly bought labels. The revised design buys three things from the harness that it actually supplies — hooks that fire inside subagents, a worktree partition, and a parseable phase result — and puts everything else in the bash driver and in git, where it is re-derivable and where no agent mediates it.
+
+---
+
+## 2. The neutral core (unchanged)
+
+Stated briefly because it survives intact.
+
+**Five phases, one warrant each.** planner (park the plan), worker (build through the gate), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §3.
+
+**The human merge is the transition-grade backstop.** The chain is autonomous up to a merge-ready branch and no further. The finalizer does not merge. This was right before, it is right now, and nothing measured in the review earns the right to retire it. The archived `chain-worker.md` says it plainly and should be kept verbatim: what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
+
+**Review testifies; only a check signs.** A clean review is an absence report. A finding is real when its disposing check goes red.
+
+**The operator writes the plan and the stories.** The chain does not decide what to build.
+
+**No signing apparatus.** The dev-ledger is not coming back. Its obligation edges — `about`, `supersedes`, `discharged_by` — return as plain fields on a driver-written event log (§3.5). No claims, no hashes, no signatures, no `.hook-signed` forgery root.
+
+**The two axes stay orthogonal.** Runtime (§3) names no language. Language (§4) supplies commands and scanners to a runtime that does not know what they are.
+
+---
+
+## 3. The runtime: containment, sequencing, and the autonomous loop
+
+### 3.1 The tension, and the position
+
+Containment and headless autonomy pull against each other, and the pull is specific rather than philosophical.
+
+Autonomy requires that a phase not silently no-op. Measured: an unapproved tool call in `-p` exits 0 with `subtype: "success"`. To avoid a night of phases that "succeed" having done nothing, the phase must run with permissions effectively out of the way — `--dangerously-skip-permissions`, or an allow set wide enough to cover everything a build phase does, which for a worker holding Bash is nearly everything.
+
+Containment, in the prior design, was `permissions.deny` rules plus a `tools:` allowlist. Both are weakened or void under that mode.
+
+**The position: containment is hook-based, never `permissions.deny`-based, and the command-string layer is called friction rather than containment.**
+
+Three measurements make this the only coherent choice:
+
+- `--dangerously-skip-permissions` does **not** disable PreToolUse hooks. Control: a project-scope PreToolUse hook on Bash exiting 2 on a pattern, run under that flag — 1 denial recorded, file not created. **VERIFIED**.
+- `--bare` disables hook discovery entirely. Identical invocation plus `--bare` — 0 denials, file created. **VERIFIED**. `--safe-mode` is a second one-flag hook bypass (`claude --help`: "Start with all customizations... disabled"), along with `--settings`, `--setting-sources`, `--agents`, and `--disable-slash-commands`. **DOCUMENTED**.
+- A hook exiting 2 stops the tool call *before permission rules are evaluated* (permissions.md line 419). **DOCUMENTED**. This is why the hook layer survives a bypass mode and the deny layer does not.
+
+And one measurement makes the "friction" label mandatory rather than modest: five of six deny-rule evasions succeeded, `bash -c` among them. A denylist over shell strings raises the cost of an accident by about one line and the cost of an intent by zero.
+
+So the design says, in the doc and in the agent briefs: **the fence catches drift and accidents. It does not contain a phase agent that means to get out. What reaches main rests on the human merge.**
+
+### 3.2 What is actually containment
+
+Three things, in descending order of how much they carry.
+
+**(a) The driver holds the decision, and re-derives it.** No agent computes whether the chain advances. The bash driver runs the predicate itself, between `claude -p` invocations, from git and the filesystem. This is the chain's central property and it is now structurally true rather than conventionally true. **PROPOSED** (the driver does not exist), but the enabling capability is **DOCUMENTED** and the shape is ordinary shell.
+
+**(b) `isolation: worktree` on the tester and the reviewer.** Real filesystem partition for the two attest-only phases: their edits land in a temporary worktree, the parent checkout is untouched, and the worktree is auto-cleaned if they change nothing. With `worktree.baseRef: "head"` so they grade the worker's actual tree. **DOCUMENTED**. Keep the driver-side `git diff` re-derivation anyway, because it re-derives rather than trusts, and because it is the check that would fail if the isolation quietly stopped working.
+
+**(c) PreToolUse hooks keyed on `agent_type`.** Subagent PreToolUse input carries `agent_id` and `agent_type` (**DOCUMENTED**), and hooks do fire inside subagents (**VERIFIED**). A single project hook can deny Write/Edit from `chain-tester` and `chain-reviewer`. That closes the instrumented path, which is the path an unmotivated model reaches for first. It does not close `printf > file`. Say so in the hook's own comment.
+
+The fence pattern set, for the record, with the corrections the verification pass forced:
+
+- `--no-verify`, `core.hooksPath`, `HUSKY=0`, `GIT_DIR=` — readable forms, worth denying.
+- `claude .*(--bare|--safe-mode|--settings|--setting-sources|--dangerously-skip-permissions|--disable-slash-commands)` — the customization-bypass family. Note this is a denylist over another program's flag surface across releases, which is a moving target.
+- Drop the bare `-n` alternative. It fires on `grep -n`, `sort -n`, `head -n 20`. Shipped as written it halts ordinary phase work constantly, and the predictable response is that someone widens or removes the hook. Anchor it to `git commit` or leave it out; `--no-verify` covers the readable form.
+- `permissions.deny` as a secondary layer only, and spelled `Bash(* --no-verify *)` with a leading wildcard, because `Bash(git commit --no-verify *)` is prefix-anchored and misses `git commit -m x --no-verify`. **DOCUMENTED** (permissions.md: `Bash(* install)` matches any command ending in ` install`).
+- Every fence hook bounds its own subprocess with `timeout` and exits 2 on expiry. Timeout polarity for a PreToolUse *command* hook is **undocumented** — HTTP hooks and UserPromptSubmit command hooks fail open, an Agent-SDK callback on PreToolUse fails closed and the docs say explicitly that it does so "because a callback there can be acting as a policy gate that must not fail open." You cannot rely on either. Bounding it yourself makes the polarity irrelevant.
+
+### 3.3 What the machine has to supply, and what the kit cannot
+
+Two hardening steps are real containment and neither is a kit deliverable. The kit ships the payload and an install checklist; the operator (or the machine's admin) applies them.
+
+**Endpoint-managed settings at `/etc/claude-code/managed-settings.json`.** Highest precedence, not overridable by user, project, local, or CLI arguments (**DOCUMENTED**). Unprivileged `mkdir -p /etc/claude-code` from a subagent returned Permission denied (**VERIFIED**), so the earlier INFERRED flag on its write-protection can be discharged for the unprivileged case. But if passwordless non-interactive sudo is available, `sudo -n tee /etc/claude-code/managed-settings.json` is one Bash call away. **Test it on your own machine before relying on this tier:** `sudo -n true`; a zero exit means the tier is not a trust root for you. **The managed tier is a trust root only if passwordless sudo is removed first.** That is the precondition, it is stated in the install checklist, and without it this closes nothing.
+
+Two corrections to what goes in the payload: `disableBypassPermissionsMode` is **not** managed-only — permissions.md line 510 says it "works from any scope" — and its value is the string `"disable"`, not a boolean. A design that writes `true` silently does not take. Pair it with `allowManagedPermissionRulesOnly`. Both are required, not optional: without them the fence is a setting the fenced agent owns, and a permissive `defaultMode` in an agent-writable settings file leaves the fence owned by the fenced agent. Check what your own default mode is before assuming otherwise.
+
+Predicate scripts and the trusted-base list live at absolute paths outside any working tree, root-owned `0755`, with an absolute root-owned interpreter in the shebang. The archived `trusted-base-touched.sh` already names this in its provenance header; it was never done.
+
+**The bubblewrap sandbox.** This is the only mechanism in the entire surveyed surface that reaches inside `python -c` and `bash -c`, because it is a kernel-enforced mount namespace and not a string match. permissions.md points at it ("For OS-level enforcement that blocks all processes from accessing a path, enable the sandbox") and the earlier analysis stopped at the pointer while declaring the residual irreducible. Strings from the running 2.1.220 binary show a `{allowWrite, denyWrite, denyRead}` filesystem policy, settings keys `sandboxDenyPaths` / `sandboxEnabled` / `sandbox.bwrapPath`, and a managed-policy key `areUnsandboxedCommandsForbiddenByPolicy`.
+
+Marked **PROPOSED**, not DOCUMENTED, for two reasons. The capability was read out of binary strings rather than out of docs. And it does not currently work here: on the Linux host measured, bwrap failed with `setting up uid map: Permission denied` under the Ubuntu 24.04+ default `kernel.apparmor_restrict_unprivileged_userns=1` with no bwrap AppArmor profile installed, and a subagent could not relax the sysctl. Root-level enablement, same bar as managed settings, and it belongs in the same change.
+
+If both land, the residual that W1/W3/W5/W9 share stops being irreducible. Until then it is irreducible in practice and the design says so.
+
+### 3.4 The driver and the phase contract
+
+One bash script. Per story, per phase:
+
+```
+claude -p "<phase prompt>" \
+  --agents <chain agents json> \
+  --output-format stream-json --verbose \
+  --permission-mode manual|dontAsk \
+  [--dangerously-skip-permissions for build phases] \
+  --resume <session_id if resuming> \
+  >> runs/<story>/<phase>.jsonl
+```
+
+Notes on the invocation, each marked:
+
+- `--permission-mode default` **does not exist at the CLI**. `claude --help` on 2.1.220 lists exactly `acceptEdits, auto, bypassPermissions, manual, dontAsk, plan`. Frontmatter accepts `default` as an alias for `manual`; the CLI rejects it before the session starts. Use `manual`, or `dontAsk` for locked-down phases. **VERIFIED** against the installed help text.
+- `stream-json` is appended incrementally, so a killed phase leaves a start-shaped file with no `result` line. **VERIFIED**.
+
+**The phase verdict is a postcondition re-derived from git, not a reading of the harness's own
+report.** This corrects the first draft of this design, which proposed a conjunction over stream
+fields. That conjunction was measured and it does not discriminate.
+
+The measurement, run against Claude Code 2.1.220 on 2026-08-01:
+
+```
+claude -p 'Create a file named denial-probe.txt ... You must use a tool to do it.' \
+  --disallowedTools 'Bash' 'Write' 'Edit' 'NotebookEdit' --output-format json
+
+EXIT=0                     file: NOT created  (the phase did nothing)
+is_error: False            subtype: "success"        stop_reason: "end_turn"
+permission_denials: 0      (empty)
+```
+
+Every field the harness exposes says success, and the phase could not act at all. The proposed
+conjunction — result present, `is_error` false, `subtype` success, `permission_denials` empty —
+returns PASS on that run. **VERIFIED.**
+
+`permission_denials` covers the permission-*prompt* path: a tool call made and refused. It does not
+cover a tool that is disabled, because the model then receives an ordinary tool error, handles it,
+and explains itself in prose — which is exactly what a driver must not parse. There are at least two
+"the phase could not act" paths and the field covers one of them. Assume there are more.
+
+An earlier probe of the same question was itself a bad instrument and is recorded because the shape
+recurs: denying only `Bash` did not reproduce the defect, because the model routed around the denial
+and used `Write` instead. The task completed, the fields were honest, and a careless reading would
+have cleared the mechanism. Deny every write path, or you are measuring the model's resourcefulness
+rather than the harness's reporting.
+
+So the driver decides advancement the way §3.2(a) already says it must:
+
+```
+phase_ok(story, n) :=
+      git rev-parse --verify chain/<story>/phase-<n>     # the ref the phase had to create
+  AND <the phase's own postcondition, run by the driver> # e.g. tester-clean, red-proof, the gate
+```
+
+Stream fields are corroboration and diagnosis, never the verdict. `permission_denials`, `is_error`
+and `subtype` still get logged, because when a postcondition fails they are how you find out why —
+and a non-empty `permission_denials` is a fast, specific explanation. But no phase advances on them.
+
+This is the design's central property applied to the design itself. The first draft asserted that
+the sequencer holds no judgment and re-derives from durable state, then had it read the harness's
+self-report. The self-report is a claim by the party being judged, which is the same defect that
+retired the dev-ledger.
+
+Grounded exit-code map, since the docs call it undocumented: **0** = harness completed, including a denied no-op; **1** = harness error (`subtype: error_max_turns` measured, invalid model measured); **137** = SIGKILL; **143** = SIGTERM. **VERIFIED** for all four. The exit code separates harness failure from task failure and nothing else — it is never the phase verdict.
+
+### 3.5 Durable state: git is the state machine, the log is an audit trail
+
+The prior design's park rule (an unpaired start record means the phase died) is necessary and insufficient. It detects death *inside* a phase. It cannot detect death *between* phases: phase N's end record lands, the driver dies before phase N+1's start record, and the store reads as clean and complete. A resumed driver re-runs N+1 from scratch and duplicates any non-idempotent side effect. That state is also indistinguishable from "the run finished normally at N."
+
+**So phase position is re-derived from git, every resume, always.** A phase completes by creating a ref — `chain/<story-id>/phase-<n>` — or by a phase-tagged commit trailer. The resume path asks git "what is the highest completed phase for this story?" and never asks the log, and never asks a story spec's `status:` frontmatter. This generalizes W9's conclusion: **status fields are advisory, git is authority.**
+
+The unpaired-start rule stays as a secondary in-phase liveness alarm, and it now has a positive form: a `.jsonl` with events and no `result` line is in-phase death, detected rather than inferred.
+
+**The event log** is driver-written, append-only, one record per phase transition, at an absolute path outside the repo working tree. Fields carry the ledger's obligation edges without its apparatus:
+
+```
+{ ts, story, phase, event, sha, session_id, wall_ms, total_cost_usd,
+  retry_count, about, supersedes, discharged_by, predicate, verdict }
+```
+
+`about` names what the record concerns (a story, a phase, a predicate). `supersedes` points at a record this one replaces. `discharged_by` names the check that settled an obligation. No claims, no hashes, no signing. Agents never write it — the driver does, between invocations. Backstop with a PreToolUse hook denying any tool input naming the store path, and understand that the backstop is friction (§3.1).
+
+Two cost facts, both **VERIFIED**, one of them a trap: `total_cost_usd` **does** aggregate nested subagent spend, while the `usage` token counts do **not**. A phase that spawned an Explore subagent reported $0.0340 against a `usage` block pricing to about $0.0050 — roughly one seventh. A driver estimating spend by summing `usage.output_tokens` undercounts fan-out by close to an order of magnitude. `total_cost_usd` is the only correct field, and on a trivial run it matched hand-computed API pricing to within a rounding step, so it is real pricing rather than an estimate. Keep wall time and cost as separate columns; wall time includes retry backoff and a blended number would confound provider capacity with work done.
+
+### 3.6 Liveness, retry, and the SLO
+
+`CLAUDE_CODE_RETRY_WATCHDOG=1` plus `CLAUDE_CODE_MAX_RETRIES` in the driver environment (**DOCUMENTED**). The watchdog covers capacity errors only; auth failures and non-retryable 4xx still end the run and need their own branch.
+
+The retry watchdog and the stall SLO are in direct tension and the resolution has to be explicit: **the SLO bounds total phase wall-clock, not silence.** A run stuck retrying forever emits `system/api_retry` events, looks alive, and makes no progress — which is precisely the green that means nobody is looking. The supervisor kills a phase at N minutes regardless of activity, and separately counts `api_retry` events so the overrun can be attributed to provider capacity rather than to work.
+
+A `SessionEnd` hook can write a death marker and does run on the SIGTERM path (**DOCUMENTED**: SIGTERM "aborts the in-progress turn, terminates the process tree of any running Bash command, runs SessionEnd hooks, and exits with code 143"). Set an explicit per-hook `timeout` on it — the default SessionEnd budget is 1.5 seconds and a disk write under contention can be cancelled inside it, indistinguishably from a clean exit. And never treat marker absence as evidence: SIGKILL runs no hooks at all. **VERIFIED** that SIGKILL gives 137 with a truncated but readable stream, which is the better signal anyway.
+
+Resume uses `--resume <session_id>` from the same cwd, with the session id read off the result event. Background Bash and Monitor tasks are **not** restored on resume (**DOCUMENTED**), so no phase may park work in a background task.
+
+### 3.7 Starting unattended, and not starting twice
+
+**OS cron only.** The prior draft offered Routines as the durable option. Routines were refuted twice in the environment measured: the account's policy limits disallowed them, and routines.md states each run clones a **GitHub** repository, while this lab's only remote is a local bare path and the standing rule is that it never gets a GitHub remote. Not a preference — an account-level block plus a structural impossibility. The `/schedule` skill is not installed. **VERIFIED**.
+
+**Concurrency ships in the same change as the cron start, not after it.** Removing the human turn removes the serialization the attended design got by accident. Mutual exclusion is ordinary OS and git in the driver: `flock` on a per-story lockfile held for the whole run, plus atomic `git branch chain/<story-id>` whose creation fails if the branch exists. The lock is not agent-proof (an agent with Bash deletes lockfiles), which is consistent with §3.1 and needs saying rather than hiding.
+
+**The quota being spent is the metered API tier, not the Max subscription.** `claude -p` authenticates via an API key when one is set in the environment — the harness's own stderr says so ("claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set and takes precedence over your claude.ai login"). **VERIFIED**. An overnight batch bills ITPM/OTPM/RPM. That is a cost decision the operator should make knowingly.
+
+**Wall clock is the binding constraint, not budget.** Extrapolating from the 12-agent, 1.24M-token, 29-minute reference workflow: roughly $1.70–$6.60 per committee-scale fan-out on Opus 5, so an 8-story × 5-phase night lands near $40–$80. Throughput is the limit — about two hours for a five-phase story at that scale means a ten-hour window serializes roughly five stories. Parallelizing to fit more hits the concurrency exposure and the rate limit at the same time; a single workflow sustained about 43K tokens/min, so three concurrent stories needs about 128K TPM. **The tier's actual ITPM must be looked up before choosing a concurrency level.** I do not have it and will not guess it. Design the batch to a measured tokens-per-minute budget, not a story count.
+
+---
+
+## 4. The per-language plug points
+
+The runtime names no language. A per-repo profile does, and the kit already has most of the machinery.
+
+**The profile** (`.claude/chain/profile.toml`, **PROPOSED**) supplies, per repo:
+
+| Key | What it is | Example |
+|---|---|---|
+| `check` | the commit-path mechanical check | `bash scripts/check.sh` |
+| `build` | compile only, for the fail-closed precondition | `sbt Test/compile` |
+| `test_one` | run one named test | `sbt 'testOnly *FooSuite'` |
+| `gate_toolchain` | forced toolchain for the differential gate | `scala` |
+| `rules_glob` | which rule family injects | `scala-*.md` |
+| `red_proof` | how to build old-impl-against-new-tests | (see below) |
+
+**The differential gate is already the language plug point and already has the right shape.** `reference/sdlc-gate.py` on kit main carries a scanner-plugin layer: one language-agnostic engine (baseline/diff worktree model, `(file, code)` multiset identity, rename tracking, relocation-advisory downgrade, waivers, verdict logic) with per-toolchain scanners for Check A (static-analysis identity), Check B (suppressions), and Check D (test weakening). Detection is by marker file, `--toolchain` forces it. I confirmed the toolchains present: **python** (ruff/mypy/bandit), **scala** (scalafix/wartremover, plus a fail-closed compile precondition and opt-in scoverage), **java** (checkstyle, jqwik parameter weakening, opt-in JaCoCo). **VERIFIED** by reading the source.
+
+**Go is a gap.** `claude-project/rules/` ships eight `go-*.md` rules, and `sdlc-gate.py` has no Go toolchain and no `go.mod` marker — its own error message lists only scala, java, and python. **VERIFIED**. So the language axis is three-of-four on rules and three-of-four on the gate, with different holes. A Go toolchain (golangci-lint for Check A, `//nolint` for Check B, `t.Skip` plus assertion-site counts for Check D) is the obvious next scanner and it lands standalone, independent of the chain.
+
+**The scanner-exit-code hazard is a per-language plug-point audit item.** The lab's Scala `gate` module has a live instance: `gate/src/main/scala/gate/ScalafixScan.scala:33` runs `sbt scalafixAll --check` and never reads `r.exitCode`, where `WartScan` does read it and raises. **VERIFIED**. The fix is not to copy WartScan's polarity — scalafix `--check` returns non-zero *precisely when findings exist* — but a three-way discrimination: non-zero with parseable findings (normal), non-zero with no parseable findings or a compile-error stderr (operational, fail closed), clean. That needs a captured transcript of a genuinely failing scalafix run to ground it, per this repo's own standing rule that each scanner's format is captured from the real tool before its parser is written. Every toolchain the kit adds must be audited for the same shape: **does this scanner distinguish "clean" from "did not run"?** It belongs in the plug-point contract, not in a per-language footnote.
+
+**Red-proof is language-parameterized and git-only.** The instrument existed and was thrown out with the ledger: `ledger/red-proof --test-cmd '<runs the new tests>'` built the implementation at the merge-base against HEAD's tests and required them to go red. Its substance is git plus a test command, so unlike the postconditions it survives the ledger's deletion. Reinstate it as a standalone script with no `model` import: exit 0 (went red, detection power shown), exit 2 (stayed green, the test cannot fail). The driver runs it as the worker→tester transition predicate. `test_one` and `test` come from the profile; the script names no language. **PROPOSED**, but the mechanism is recoverable verbatim from `archive/kit-chain`.
+
+**Rules injection stays as it is.** `.claude/rules/*.md` with `paths:` globs, auto-injected on matching file opens. The chain does not touch this; it is already per-language and already works.
+
+---
+
+## 5. Build order
+
+Each step is useful standalone. Nothing later is required for anything earlier to pay.
+
+**1. The phase runner, with a git-derived verdict.** A single shell function wrapping `claude -p --output-format stream-json --verbose`, appending to a per-phase `.jsonl`, and deciding the phase from a postcondition the runner evaluates itself (§3.4) — never from the stream fields. Stream fields are logged for diagnosis. Plus the pinning test, which is not optional: run a phase with every write path withheld and assert the runner reports FAILURE. Measured, that phase reports `subtype: "success"`, `is_error: false`, empty `permission_denials`, and exit 0 while doing nothing, so a runner without this test is verified only by never having been given a phase that could not act. *Standalone value:* anyone running headless Claude in CI gets a success predicate that is about the work rather than about the harness.
+
+**2. Git-derived phase markers and the driver event log.** Phase refs (`chain/<story>/phase-<n>`), the resume path that asks git rather than the log, and the append-only log with `about` / `supersedes` / `discharged_by` / cost / wall time. *Standalone value:* an audit trail and a resumable position for any multi-step automation, chain or not.
+
+**3. The predicate set, rebuilt over git.** Recover `postcondition.py` from `archive/kit-chain`, delete the module-scope `import model`, restore `tester-clean` (pure git already — `git rev-parse`, `git diff --name-only`, a removed-line scan), and re-express `worker-complete` and `no-open-refutation` over git-derivable state, since the obligation edges they folded over now live on the driver's log. Driver branches on `rc != 0`, never `rc == 2`. **Each predicate pinned by both a known-good fixture returning 0 and a known-bad fixture returning non-zero** — a predicate that always fails and a driver that always halts are externally indistinguishable from a working fence. *Standalone value:* runnable checks the operator can call by hand today.
+
+**4. The language profile plus the existing gate.** `profile.toml`, and wire `sdlc-gate.py --toolchain <x>` in as the gate predicate. *Standalone value:* the gate already works; this makes it callable uniformly.
+
+**5. Red-proof, reinstated.** Git-only, `--test-cmd` from the profile, exit 0/2. *Standalone value:* a detection-power check for any TDD slice, chain or not.
+
+**6. The five agents and their phase prompts.** Recovered from `archive/kit-chain` with every ledger and claim reference stripped, warrant language kept, and the frontmatter honesty fix applied: the `tools:` list is a runtime allowlist for *tool* calls (**DOCUMENTED**) and is not containment for a Bash holder (**VERIFIED**) — say so in the brief. `isolation: worktree` plus `worktree.baseRef: "head"` on tester and reviewer.
+
+**7. The fence hooks.** PreToolUse on `Bash` and `Write|Edit`, keyed on `agent_type`, with the corrected pattern set, each bounding its own subprocess with `timeout`. Header comment states plainly that this is friction. *Standalone value:* catches accidental `--no-verify` and accidental grader edits from day one.
+
+**8. Cron start and the concurrency lock, in one change.** `flock` per story, atomic `git branch chain/<story>`, cron entry, stall SLO on total phase wall-clock, `CLAUDE_CODE_RETRY_WATCHDOG=1`. Never ship 8 without the lock.
+
+**9. The machine hardening checklist.** Not code — an `INSTALL-HARDENING.md` the operator applies: remove passwordless sudo and re-measure with `sudo -n true`; install `/etc/claude-code/managed-settings.json` root-owned with `disableBypassPermissionsMode: "disable"` and `allowManagedPermissionRulesOnly`; move predicate scripts to a root-owned path with an absolute root-owned interpreter; attempt the bubblewrap sandbox and record whether it works. Each step has a measurement that says whether it took.
+
+**10. A Go toolchain for the gate.** Independent of everything above.
+
+Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis.
+
+---
+
+## 6. The honest ceiling
+
+**Containment remains a label for every warrant that depends on a phase agent holding Bash.** Measured, not argued: `bash -c 'rm -rf <path>'` executed with the banned string in the inspected command, `printf > file` wrote content a PreToolUse hook had rejected seconds earlier, and five of six deny-rule evasions succeeded. The phase agents hold Bash by design. The warrant partition the design wants is not among the mechanisms available to it. `isolation: worktree` is real and is kept on its own merit; the command grep beside it must not be co-billed as a second layer.
+
+**The path to real containment is two root-owned changes away and neither is done.** Endpoint-managed settings need passwordless sudo removed first; verify with `sudo -n true`. The bubblewrap sandbox — the only mechanism that reaches inside `python -c` and `bash -c` — fails on stock Ubuntu 24.04+ with `setting up uid map: Permission denied` unless an AppArmor profile for bwrap is installed, and the sysctl cannot be relaxed from a subagent. Until both are installed *and measured*, the correct sentence is the prior design's own: what reaches main rests on the human merge or a server-side gate.
+
+**Hooks enforce that a check ran. They never enforce that it discriminates.** This is the one weakness no configuration surface reaches. Red-proof establishes that a new test fails against the *old* implementation; it does not establish that it fails against a plausible *wrong new* implementation, which is the property actually wanted. That needs mutation testing and nothing in the surveyed capability surface supplies it. Every mechanism above buys enforcement; detection power has to be bought separately and mostly is not.
+
+**The harness's self-report is not a phase verdict, and this was measured rather than reasoned.** A
+headless phase with no write-capable tool exits 0 with `is_error: false`, `subtype: "success"` and an
+empty `permission_denials` having done nothing (§3.4). Any driver that branches on those fields runs
+a night of phases that succeed at nothing. The mitigation — re-derive from git — is the design's own
+central property, and the first draft of this document violated it. Assume the same failure exists in
+any other place the design reads a self-report, and go looking.
+
+**Four things are unmeasured and the design must not assume them.**
+
+1. *PreToolUse command-hook timeout polarity.* Undocumented for the event that matters, documented both ways on adjacent events. Mitigation (bound your own subprocess) is mandatory rather than defensive. Measurement: run a PreToolUse command hook that sleeps past its timeout, record whether the Bash call proceeds.
+2. *Compaction under `-p`.* Nothing in the readings describes what a headless phase does when its context fills. Measurement: run a phase with a deliberately oversized context, record whether a compaction event appears in the stream, whether the phase completes, and whether `--resume` recovers it.
+3. *SubagentStop's real blocking strength.* hooks.md documents it as blocking ("Prevents the subagent from stopping"); whether re-engagement can be refused indefinitely by the subagent is untested. The driver-side predicate is the authority regardless, which is why this does not change the design.
+4. *The API tier's ITPM.* Unknown, and it decides the concurrency level against a measured ~43K tokens/min per workflow. Look it up; do not infer it from a story count.
+
+**Two structural limits that no amount of building removes.**
+
+The fence is a denylist over another program's flag surface and over arbitrary shell. Both move. `--bare` and `--safe-mode` are today's one-flag bypasses; the next release may add a third. A design that treats the evasion set as enumerable is wrong in a way that gets worse over time, which is the reason the word is friction.
+
+And the sequencer's judgment-free property holds only as far as its predicates are honest. A predicate that always fails and a driver that always halts look exactly like a working fence from outside — which is what the archived `postcondition.py` has been for a month. The known-good fixture is not optional polish; without it the fence is verified only by never having been passed.
+
+**What the chain is, stated without softening.** A bash driver that runs five phases, decides advancement from git and from predicates it runs itself, logs what happened outside the tree, survives provider outages and its own death, and stops at a merge-ready branch. It contains accidents and drift. It does not contain intent. The human merge is not a placeholder for a mechanism that is coming — it is the mechanism, and everything above it is instrumentation for the person doing the merging.
