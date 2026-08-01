@@ -28,7 +28,9 @@ the measurement wins and the contradiction is recorded rather than smoothed.
 **Two things a reader should carry into every section.** Containment of an agent holding Bash was
 measured and largely does not hold — five of six deny-rule evasions succeeded. And the harness's own
 success report is not a phase verdict — a phase that could do nothing reports success on every field
-it exposes. Both are in §6, and both are the reason the human merge stays.
+it exposes. Both are in §7, and both are the reason the human merge stays. A third, added after the
+first draft: the chain detects the drift you can already detect, and not the kind that has actually
+bitten this build — §3.
 
 ---
 
@@ -82,7 +84,7 @@ The prior design tried to buy containment from the harness's configuration surfa
 
 Stated briefly because it survives intact.
 
-**Five phases, one warrant each.** planner (park the plan), worker (build through the gate), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §3.
+**Five phases, one warrant each.** planner (park the plan), worker (build through the gate), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §4.
 
 **The human merge is the transition-grade backstop.** The chain is autonomous up to a merge-ready branch and no further. The finalizer does not merge. This was right before, it is right now, and nothing measured in the review earns the right to retire it. The archived `chain-worker.md` says it plainly and should be kept verbatim: what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
 
@@ -90,15 +92,162 @@ Stated briefly because it survives intact.
 
 **The operator writes the plan and the stories.** The chain does not decide what to build.
 
-**No signing apparatus.** The dev-ledger is not coming back. Its obligation edges — `about`, `supersedes`, `discharged_by` — return as plain fields on a driver-written event log (§3.5). No claims, no hashes, no signatures, no `.hook-signed` forgery root.
+**No signing apparatus.** The dev-ledger is not coming back. Its obligation edges — `about`, `supersedes`, `discharged_by` — return as plain fields on a driver-written event log (§4.5). No claims, no hashes, no signatures, no `.hook-signed` forgery root.
 
-**The two axes stay orthogonal.** Runtime (§3) names no language. Language (§4) supplies commands and scanners to a runtime that does not know what they are.
+**The two axes stay orthogonal.** Runtime (§4) names no language. Language (§5) supplies commands and scanners to a runtime that does not know what they are.
 
 ---
 
-## 3. The runtime: containment, sequencing, and the autonomous loop
+## 3. What work the chain suits, and what drift it catches
 
-### 3.1 The tension, and the position
+### 3.1 A slice is a story
+
+The two words name the same thing. A slice of a layered build plan carries acceptance criteria, a
+done-condition, and a scope, which is a story whose criteria happen to be structural rather than
+user-facing. Feeding either to the chain works. The naming is not where the question lives.
+
+The property that decides fit is this: **can you write the check before the work, such that the check
+fails if the work is wrong?** The chain advances on a predicate re-derived from durable state, so it
+works exactly as well as your ability to state, in advance and mechanically, what done means. Where
+you can, it is excellent. Where you cannot, it is a machine for producing green builds.
+
+That is the same test as red-first TDD, and the resemblance is not a coincidence — **the chain is TDD
+lifted to the work-item level.** The planner writes the failing check and parks it; the worker
+discharges it. Same cadence, one level up. Which means it inherits TDD's limits precisely: strong
+where done is checkable, weak where the hard part is deciding what to build, and carrying the
+identical blind spot that a passing check says nothing about whether the check could fail.
+
+### 3.2 Three axes of fit, and they do not matter equally
+
+**Is done mechanically checkable?** Decisive. If no, do not use the chain for that item.
+
+**Is the check discriminating?** The trap, and the one no configuration surface reaches.
+
+**Are the items independent?** This sets the size of the win, not whether it works. A strictly ordered
+queue still gets role separation, re-derived advancement, and unattended operation; what it loses is
+parallelism. "Grind through a sequence overnight and hand me merge-ready branches" is worth having on
+its own.
+
+### 3.3 The unit is smaller than a slice, so intake is decomposition
+
+Slice 6 of the ClaimOS build shipped in one commit and split three ways under this standard
+(**VERIFIED**, observed step by step):
+
+| Part | Fit | Why |
+|---|---|---|
+| Rehabilitation results (Def 6.2.1, Thm 6.2.2, Cor 6.2.3) | good | the specification states the formula outright; the suites failed to compile against absent symbols, a genuine red |
+| Safety theorems (6.1 – 6.5) | poor | conformance tests over already-shipped code, so red was never available; all twelve passed first run, and one did not test its own proposition |
+| Adequacy (Prop 3.1, Prop 8.1) | good | "at a gap prior, normalize Replacement(ε, g) to Open(g)" is directly testable; the test went red and found a real conformance gap |
+
+So the intake question is not "is this item statable" but **"which part of this item is statable."**
+Intake is a decomposition step, not a scoring step. The operator splits the comprehension work out
+and keeps it; the chain gets the remainder.
+
+### 3.4 What the record says when the standard is applied backwards
+
+Across the ClaimOS build, where the notable defects were actually caught. The slice-6 rows are
+**VERIFIED** here; the earlier rows are as recorded in the lab's own history.
+
+| Defect | Caught by |
+|---|---|
+| `Bytes` reference equality | inspection |
+| The neutrality gate's own `grep -c` fail-open | inspection |
+| ν̂ homomorphism untested | a compiling mutant surviving |
+| Bilattice De Morgan and four-closure untested | an operator's question |
+| N5 pentagon control invalid | a validity test written first |
+| Per-candidate granularity in Thm 6.3 | a surviving mutant |
+| Prop 8.1's gap-prior arm | red-first, from the specification text |
+| A vacuous check on a struck member's `support` | the test failing, then reading why |
+
+One of eight came from the ordinary red-first beat the chain automates. **The chain automates the
+beat that caught the fewest defects in this build.** It would still have done substantial work — the
+tests, the registry upkeep, a 73-file mechanical reorganization — but the value concentrated where it
+does not reach, and a design that does not say so is selling something.
+
+### 3.5 Three kinds of drift, and the chain covers one
+
+**Structural drift — caught, and more reliably than by a person.** A promised symbol unshipped fails
+the ship list. A row unmapped in a shipped slice fails the conformance map under `--strict`. A row
+naming a test that no longer exists fails the test-existence arm. The chain runs these every phase
+and never skips one because it is late.
+
+**Semantic drift — not caught, with a worked example.** The conformance map verifies that a mapped row
+names a test that *exists*. It cannot verify the test still tests the row's proposition. Row
+`RESULT/C6.3` states "no pro evidence atom appears that no admitted event supplied **for that
+candidate**," was mapped to a test that existed and passed, and that test compared a *global* token
+set. Green registry, green suite, green row, and the test did not test its own statement — written by
+the same author in the same sitting. **VERIFIED.** Only a mutant found it.
+
+**Source drift — nothing catches it at all.** No script reads `claim-algebra.html` or
+`claim-calculus.html`; the sole mention in `build.sbt` is inside a comment. Meanwhile the sources
+carry **35** distinct `§` citations as scaladoc prose, checked by nobody (**VERIFIED**, both counts).
+This has already happened once: v0.4.7 shifted §1.4→§1.5, Def 3.1→Def 3.2 and others, twelve stale
+citations were corrected by hand, and the slice that corrected them introduced three more. If the
+document moves again every test still passes and the map stays green.
+
+### 3.6 What would catch semantic drift
+
+**Do not write the law.** Where a proposition is a standard law, `checkAll` against a stock bundle
+enforces it by construction — you cannot write a weaker version because you did not write a version.
+This is the strongest mechanism available and it is underused; every row that could be a `discipline`
+RuleSet and is not carries avoidable risk.
+
+**Mutation, for vacuity and for weakness.** The only mechanism in the whole surveyed surface that asks
+whether a test discriminates. Its limit is the mutant set: standard syntactic operators would likely
+not have produced the mutation that caught the Thm 6.3 error, which was semantically motivated.
+
+**Blind re-derivation, which is the chain's real structural edge.** The reason the author missed it is
+that the author wrote the test and could no longer read it as anything but what was meant. A fresh
+agent has no such problem. Give a reviewer the row's proposition, withhold the test, have it state
+what a correct test must assert, and diff. **PROPOSED.** Two limits, both stated rather than hidden:
+the seats are correlated, being the same model family with the same blind spots, and the output is
+testimony — a disagreement flags a human, it does not decide.
+
+### 3.7 What would catch a misread of the specification
+
+The residue §3.6 leaves is a row whose own statement misreads the source. Every mechanism above then
+agrees with it. This cannot be eliminated — the lab's own law-audit checklist, whose entire job was
+preventing misreads, itself said supersession was `refute` when it is `strike`, and a second reading
+caught it rather than the checklist. So the goal is detection and a bounded blast radius.
+
+**Quote, do not paraphrase, and check the quote.** Require each row's statement to carry a verbatim
+run from its cited section; the documents extract cleanly to text, so a substring check is mechanical.
+**PROPOSED.** Honest limit: the Thm 6.3 test *did* quote §6.3 verbatim in its comment and was written
+wrong anyway. Quoting did not prevent the error, but it made the diagnosis immediate once the mutant
+fired.
+
+**Read the document twice, not the registry twice.** This is a level correction to §3.6's reviewer,
+which inherits the row statement and is therefore blind to exactly this failure. Hand a reader the
+cited section cold, ask what obligations it imposes, and diff that list against the rows citing it.
+Missing obligations surface as absent rows; misconstrued ones as a disagreement. **PROPOSED.**
+
+**Mine the document's negative space.** The entire calculus contains **14** sentences carrying an
+explicit qualifier — "not automatically", "does not", "outside this theorem", "only if", "unless"
+(**VERIFIED**, counted). That is a tractable checklist, and those sentences are where misreads live
+because they are what a fast reader drops. §6.5's "a mixed tree may lawfully recover and is outside
+this theorem" is one, and its control exists only because the document said so. The §6 law table's
+Status column is the same idea: the source naming which laws are false.
+
+**An independent finite model, for the rows that matter.** How v0.4.7 was established in the first
+place, applied one level down to our construal of it. Expensive per row, decisive where used.
+
+**And one policy rather than a check: under ambiguity, implement the stronger reading.** Global versus
+per-candidate was not a coin flip — per-candidate is strictly stronger and cannot be wrong in the
+fail-open direction. This is the fail-closed default applied to construal, and it would have got §6.3
+right by disposition rather than by insight.
+
+**The triage that follows.** A row's risk is a function of whether its proposition has an external
+anchor. A row discharged by a stock law bundle cannot drift. A row with a finite-model control is
+checked against something outside the author's reading. A row that is a bespoke hand-written assertion
+in the author's own prose has no anchor at all — which is exactly what `RESULT/C6.3` was. Count the
+unanchored rows and spend the second reader on those; that set is identifiable mechanically, and it is
+where every misread in this build has lived.
+
+---
+
+## 4. The runtime: containment, sequencing, and the autonomous loop
+
+### 4.1 The tension, and the position
 
 Containment and headless autonomy pull against each other, and the pull is specific rather than philosophical.
 
@@ -118,7 +267,7 @@ And one measurement makes the "friction" label mandatory rather than modest: fiv
 
 So the design says, in the doc and in the agent briefs: **the fence catches drift and accidents. It does not contain a phase agent that means to get out. What reaches main rests on the human merge.**
 
-### 3.2 What is actually containment
+### 4.2 What is actually containment
 
 Three things, in descending order of how much they carry.
 
@@ -136,7 +285,7 @@ The fence pattern set, for the record, with the corrections the verification pas
 - `permissions.deny` as a secondary layer only, and spelled `Bash(* --no-verify *)` with a leading wildcard, because `Bash(git commit --no-verify *)` is prefix-anchored and misses `git commit -m x --no-verify`. **DOCUMENTED** (permissions.md: `Bash(* install)` matches any command ending in ` install`).
 - Every fence hook bounds its own subprocess with `timeout` and exits 2 on expiry. Timeout polarity for a PreToolUse *command* hook is **undocumented** — HTTP hooks and UserPromptSubmit command hooks fail open, an Agent-SDK callback on PreToolUse fails closed and the docs say explicitly that it does so "because a callback there can be acting as a policy gate that must not fail open." You cannot rely on either. Bounding it yourself makes the polarity irrelevant.
 
-### 3.3 What the machine has to supply, and what the kit cannot
+### 4.3 What the machine has to supply, and what the kit cannot
 
 Two hardening steps are real containment and neither is a kit deliverable. The kit ships the payload and an install checklist; the operator (or the machine's admin) applies them.
 
@@ -152,7 +301,7 @@ Marked **PROPOSED**, not DOCUMENTED, for two reasons. The capability was read ou
 
 If both land, the residual that W1/W3/W5/W9 share stops being irreducible. Until then it is irreducible in practice and the design says so.
 
-### 3.4 The driver and the phase contract
+### 4.4 The driver and the phase contract
 
 One bash script. Per story, per phase:
 
@@ -201,7 +350,7 @@ and used `Write` instead. The task completed, the fields were honest, and a care
 have cleared the mechanism. Deny every write path, or you are measuring the model's resourcefulness
 rather than the harness's reporting.
 
-So the driver decides advancement the way §3.2(a) already says it must:
+So the driver decides advancement the way §4.2(a) already says it must:
 
 ```
 phase_ok(story, n) :=
@@ -220,7 +369,7 @@ retired the dev-ledger.
 
 Grounded exit-code map, since the docs call it undocumented: **0** = harness completed, including a denied no-op; **1** = harness error (`subtype: error_max_turns` measured, invalid model measured); **137** = SIGKILL; **143** = SIGTERM. **VERIFIED** for all four. The exit code separates harness failure from task failure and nothing else — it is never the phase verdict.
 
-### 3.5 Durable state: git is the state machine, the log is an audit trail
+### 4.5 Durable state: git is the state machine, the log is an audit trail
 
 The prior design's park rule (an unpaired start record means the phase died) is necessary and insufficient. It detects death *inside* a phase. It cannot detect death *between* phases: phase N's end record lands, the driver dies before phase N+1's start record, and the store reads as clean and complete. A resumed driver re-runs N+1 from scratch and duplicates any non-idempotent side effect. That state is also indistinguishable from "the run finished normally at N."
 
@@ -235,11 +384,11 @@ The unpaired-start rule stays as a secondary in-phase liveness alarm, and it now
   retry_count, about, supersedes, discharged_by, predicate, verdict }
 ```
 
-`about` names what the record concerns (a story, a phase, a predicate). `supersedes` points at a record this one replaces. `discharged_by` names the check that settled an obligation. No claims, no hashes, no signing. Agents never write it — the driver does, between invocations. Backstop with a PreToolUse hook denying any tool input naming the store path, and understand that the backstop is friction (§3.1).
+`about` names what the record concerns (a story, a phase, a predicate). `supersedes` points at a record this one replaces. `discharged_by` names the check that settled an obligation. No claims, no hashes, no signing. Agents never write it — the driver does, between invocations. Backstop with a PreToolUse hook denying any tool input naming the store path, and understand that the backstop is friction (§4.1).
 
 Two cost facts, both **VERIFIED**, one of them a trap: `total_cost_usd` **does** aggregate nested subagent spend, while the `usage` token counts do **not**. A phase that spawned an Explore subagent reported $0.0340 against a `usage` block pricing to about $0.0050 — roughly one seventh. A driver estimating spend by summing `usage.output_tokens` undercounts fan-out by close to an order of magnitude. `total_cost_usd` is the only correct field, and on a trivial run it matched hand-computed API pricing to within a rounding step, so it is real pricing rather than an estimate. Keep wall time and cost as separate columns; wall time includes retry backoff and a blended number would confound provider capacity with work done.
 
-### 3.6 Liveness, retry, and the SLO
+### 4.6 Liveness, retry, and the SLO
 
 `CLAUDE_CODE_RETRY_WATCHDOG=1` plus `CLAUDE_CODE_MAX_RETRIES` in the driver environment (**DOCUMENTED**). The watchdog covers capacity errors only; auth failures and non-retryable 4xx still end the run and need their own branch.
 
@@ -249,11 +398,11 @@ A `SessionEnd` hook can write a death marker and does run on the SIGTERM path (*
 
 Resume uses `--resume <session_id>` from the same cwd, with the session id read off the result event. Background Bash and Monitor tasks are **not** restored on resume (**DOCUMENTED**), so no phase may park work in a background task.
 
-### 3.7 Starting unattended, and not starting twice
+### 4.7 Starting unattended, and not starting twice
 
 **OS cron only.** The prior draft offered Routines as the durable option. Routines were refuted twice in the environment measured: the account's policy limits disallowed them, and routines.md states each run clones a **GitHub** repository, while this lab's only remote is a local bare path and the standing rule is that it never gets a GitHub remote. Not a preference — an account-level block plus a structural impossibility. The `/schedule` skill is not installed. **VERIFIED**.
 
-**Concurrency ships in the same change as the cron start, not after it.** Removing the human turn removes the serialization the attended design got by accident. Mutual exclusion is ordinary OS and git in the driver: `flock` on a per-story lockfile held for the whole run, plus atomic `git branch chain/<story-id>` whose creation fails if the branch exists. The lock is not agent-proof (an agent with Bash deletes lockfiles), which is consistent with §3.1 and needs saying rather than hiding.
+**Concurrency ships in the same change as the cron start, not after it.** Removing the human turn removes the serialization the attended design got by accident. Mutual exclusion is ordinary OS and git in the driver: `flock` on a per-story lockfile held for the whole run, plus atomic `git branch chain/<story-id>` whose creation fails if the branch exists. The lock is not agent-proof (an agent with Bash deletes lockfiles), which is consistent with §4.1 and needs saying rather than hiding.
 
 **The quota being spent is the metered API tier, not the Max subscription.** `claude -p` authenticates via an API key when one is set in the environment — the harness's own stderr says so ("claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set and takes precedence over your claude.ai login"). **VERIFIED**. An overnight batch bills ITPM/OTPM/RPM. That is a cost decision the operator should make knowingly.
 
@@ -261,7 +410,7 @@ Resume uses `--resume <session_id>` from the same cwd, with the session id read 
 
 ---
 
-## 4. The per-language plug points
+## 5. The per-language plug points
 
 The runtime names no language. A per-repo profile does, and the kit already has most of the machinery.
 
@@ -288,11 +437,11 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 
 ---
 
-## 5. Build order
+## 6. Build order
 
 Each step is useful standalone. Nothing later is required for anything earlier to pay.
 
-**1. The phase runner, with a git-derived verdict.** A single shell function wrapping `claude -p --output-format stream-json --verbose`, appending to a per-phase `.jsonl`, and deciding the phase from a postcondition the runner evaluates itself (§3.4) — never from the stream fields. Stream fields are logged for diagnosis. Plus the pinning test, which is not optional: run a phase with every write path withheld and assert the runner reports FAILURE. Measured, that phase reports `subtype: "success"`, `is_error: false`, empty `permission_denials`, and exit 0 while doing nothing, so a runner without this test is verified only by never having been given a phase that could not act. *Standalone value:* anyone running headless Claude in CI gets a success predicate that is about the work rather than about the harness.
+**1. The phase runner, with a git-derived verdict.** A single shell function wrapping `claude -p --output-format stream-json --verbose`, appending to a per-phase `.jsonl`, and deciding the phase from a postcondition the runner evaluates itself (§4.4) — never from the stream fields. Stream fields are logged for diagnosis. Plus the pinning test, which is not optional: run a phase with every write path withheld and assert the runner reports FAILURE. Measured, that phase reports `subtype: "success"`, `is_error: false`, empty `permission_denials`, and exit 0 while doing nothing, so a runner without this test is verified only by never having been given a phase that could not act. *Standalone value:* anyone running headless Claude in CI gets a success predicate that is about the work rather than about the harness.
 
 **2. Git-derived phase markers and the driver event log.** Phase refs (`chain/<story>/phase-<n>`), the resume path that asks git rather than the log, and the append-only log with `about` / `supersedes` / `discharged_by` / cost / wall time. *Standalone value:* an audit trail and a resumable position for any multi-step automation, chain or not.
 
@@ -312,11 +461,17 @@ Each step is useful standalone. Nothing later is required for anything earlier t
 
 **10. A Go toolchain for the gate.** Independent of everything above.
 
-Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis.
+**11. The citation checker.** Extract every `§N.M` from the sources, confirm the cited document has that section, and confirm the cited section's text still contains the term the scaladoc claims. *Standalone value:* closes source drift (§3.5) mechanically, where twelve stale citations were previously corrected by hand and the correcting slice introduced three more.
+
+**12. The negative-space checklist.** Extract the qualifier-bearing sentences from each cited section and require the registry to account for each. Fourteen in the whole calculus, so this is small. *Standalone value:* a review checklist grounded in the document rather than in memory.
+
+**13. Blind re-derivation as a reviewer phase.** Two forms, per §3.6 and §3.7: derive the test from the row statement, and derive the row statements from the document section. *Standalone value:* neither needs the chain to run; both are workflows an operator can invoke on a slice today.
+
+Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis. Steps 11–13 are the drift instruments, and they are the ones that address where this build's defects actually came from (§3.4).
 
 ---
 
-## 6. The honest ceiling
+## 7. The honest ceiling
 
 **Containment remains a label for every warrant that depends on a phase agent holding Bash.** Measured, not argued: `bash -c 'rm -rf <path>'` executed with the banned string in the inspected command, `printf > file` wrote content a PreToolUse hook had rejected seconds earlier, and five of six deny-rule evasions succeeded. The phase agents hold Bash by design. The warrant partition the design wants is not among the mechanisms available to it. `isolation: worktree` is real and is kept on its own merit; the command grep beside it must not be co-billed as a second layer.
 
@@ -326,7 +481,7 @@ Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps
 
 **The harness's self-report is not a phase verdict, and this was measured rather than reasoned.** A
 headless phase with no write-capable tool exits 0 with `is_error: false`, `subtype: "success"` and an
-empty `permission_denials` having done nothing (§3.4). Any driver that branches on those fields runs
+empty `permission_denials` having done nothing (§4.4). Any driver that branches on those fields runs
 a night of phases that succeed at nothing. The mitigation — re-derive from git — is the design's own
 central property, and the first draft of this document violated it. Assume the same failure exists in
 any other place the design reads a self-report, and go looking.
