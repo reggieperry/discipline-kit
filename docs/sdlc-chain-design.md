@@ -481,7 +481,19 @@ reviewer as a candidate row rather than as a reviewer success.
 
 §3.3 says intake is decomposition and stops there. This is the structure that carries it, restoring a capability the prior Gas City system had — an ADR maps to one or more stories, stories form a dependency graph, and the operator and the agent agree a *set* whose working order is then derived rather than negotiated. The machinery is files and git; there is no daemon, no database, and no bead.
 
-**Stories own their edges; the ADR is referenced, never referencing.** One file per story under `stories/`, and it is the only writer of its own node. The direction is the whole design decision: ADR ids are stable and decisions are superseded individually and never deleted, so an ADR carrying a story list turns the one document whose stability is a stated requirement into the most-churned file in the repo — and its `Status:` line becomes a readiness authority a worker could edit on its own branch. Stories point at ADRs.
+**The lineage is three documents deep: a general design doc, the ADRs that decide how to realize it, and the stories that discharge each decision.**
+
+```
+docs/design/<subject>.md      what the system is to do
+        ↓   decided by
+docs/adr/ADR-NNNN-*.md        numbered Decisions D1, D2, …
+        ↓   discharged by
+stories/STORY-NNNN-*.md       adr: + decisions: + deps:
+```
+
+Each arrow points *down* in authorship order and each reference points *up*. A story names the ADR it was built from; an ADR names the design it realizes. Nothing points down, and that is the whole structural decision: ids upstream are stable and their documents are append-mostly, so a document that listed its consumers would be edited every time work was added, split, or re-pointed — turning the most stable artifact into the most churned one. It would also hand a worker its own supervision, since a `Status:` line that gates readiness sits in a file the worker's branch can edit.
+
+**Stories own their edges.** One file per story, the only writer of its own node. Elder validated this in production before we chose it: *"Stories declare their dependencies via frontmatter; the dependency graph is derived, not declared centrally."*
 
 ```
 ---
@@ -490,7 +502,8 @@ title: Parse the slot descriptor
 adr: ADR-0007
 decisions: [D1]
 group: A
-after: [STORY-0039]
+milestone: v1-slot-identity
+deps: [STORY-0039]
 cites:
   - docs/claim-algebra/claim-algebra.html#sec-1-4
 acceptance:
@@ -498,7 +511,21 @@ acceptance:
 ---
 ```
 
-**Eight admitted keys, and the parser enforces the list** — an unknown key, a duplicate key, or the same `id` in two files is fatal, naming both. There is no `status:`, no `roster:`, no `filed_as_bead:`. The admission rule: *a field may live here only if being wrong about it cannot produce a wrong readiness answer.* A ninth key is a reviewed diff to the parser.
+**The parser enforces the key list** — an unknown key, a duplicate key, or the same `id` in two files is fatal, naming both. The admission rule: *a field may live here only if being wrong about it cannot produce a wrong readiness answer.* A new key is a reviewed diff to the parser. Elder is permissive here instead ("adding unknown fields is fine but won't be carried to bd metadata"); it can afford to be, because an unrecognized field still reaches a runtime substrate that might use it. With no such substrate, an unknown key is a typo that silently does nothing, so it is fatal.
+
+#### What was dropped from Elder's schema, and why
+
+Elder's story frontmatter is `story_id, title, phase, build_item, deps, parent, labels, sensitive_files, status, filed_as_bead`. Four of those do not survive the move, and the reasons differ.
+
+**`build_item` — absorbed.** Elder's spine is `docs/build-plan.md`, a numbered enumeration that stories implement (`build_item: N`) and ADRs amend ("Amends build item #15"). Under the design-doc → ADR → story lineage it has no job left. Lineage runs through `adr:`. Order comes from the `deps:` graph. Coverage comes from two reverse-coverage seams one level apart — *does every design obligation have an ADR or a waiver*, and *does every ADR decision have a story or a waiver* — which compose to answer "is everything being built" without a fourth enumeration to keep in sync. Its amendment role splits cleanly: an ADR that changes *how* supersedes an earlier decision, which per-decision supersession already expresses more precisely than amending a deliverable; an ADR that changes *what* amends the design doc, which is the enumeration.
+
+**`phase` → `milestone`, renamed for what it does.** This is the one job a dep graph genuinely cannot do. A graph gives a partial order; it never says where v1 ends. Release grouping is an operator judgment about shipping, not a fact about building, so it is carried as a label and is never an ordering input.
+
+**`status` — replaced by derivation, and Elder's own repo is the argument.** The pack rule states the boundary plainly: *"Stories are the design-time artifact. bd is the runtime substrate… after filing, bd owns runtime state. Don't round-trip."* The story's `status` is therefore a *projection* of state living somewhere else, kept current by hand — and the cost is visible in Elder: a standing manual reconciliation rule in `CLAUDE.md` naming an "F1/F2/F3 zombie surface", a sweeper (`scripts/audit_zombie_specs.py`) for stale `status: filed` specs, a backfill story for a frontmatter-status sweep, and a projector daemon queued to fix it properly. **None of that is a defect in Elder's design; it is the price of having two substrates.** Here there is only one — git — so state is derived rather than projected and there is nothing to reconcile.
+
+**`filed_as_bead` and `parent` — no substrate, no epics.** Both name Gas City machinery. `sensitive_files` is dropped by operator decision (§4.9).
+
+**Retained from Elder unchanged:** stable never-reused ids, `deps:` as the derived graph, cycle detection in validation on the commit path, and the body sections — Outcome, Acceptance criteria as a checkbox list, Scope In/Out, Notes.
 
 **`cites:` is the same field §4.11's completeness mode is derived from**, so a story's citations already decide the strength of its own planner check, and the count of `prose`-mode stories is printed on every run.
 
@@ -514,7 +541,13 @@ acceptance:
 
 The witnesses are **not or-ed**; the strict one decides and a loose scan exists only to catch it reading false: strict and loose both true is `SATISFIED`, both false is `BLOCKED`, loose-true-strict-false is `SQUASHED` and exits loud, and a tip that is an ancestor with no merge record is `MERGED-UNRECORDED`. Chain merges are `--no-ff` by policy; a forgotten flag stalls loudly rather than releasing silently.
 
-**Group B needs no second mechanism.** Its gate — "the predecessor feature has merged" — *is* an ordinary `after:` edge under merge-satisfaction. The A/B distinction survives only as a scheduling tie-break.
+**Group B needs no second mechanism.** Its gate — "the predecessor feature has merged" — *is* an ordinary `deps:` edge under merge-satisfaction. The A/B distinction survives only as a scheduling tie-break.
+
+#### Two practices taken from Elder wholesale
+
+**Depth tiers.** Specs are written to three depths by proximity: full for imminent work, medium for the next milestone, and light stubs — dep edges and a rough scope, nothing more — for anything months out. Elder's reasoning is the part worth keeping: *"detailed acceptance criteria for stories we won't touch for months would speculate against constraints we don't yet have. The dep edges and rough scope are enough to keep the graph intact."* **The graph must be complete; the specs need not be.** This matters more here than it did there, because §4.11 derives a story's completeness mode from its `cites:` — so a thin future story is honestly `prose`-mode and is counted as such, rather than being dressed up with citations nobody checked.
+
+**A closing record in `stories/_archive/`.** A merged story moves there with `merged_pr`, `merged_sha`, `deviations`, and `lessons` appended, so that — in Elder's words — *"`git log -- stories/_archive/` becomes the searchable record of how the system was built."* This is the write-forward record §4.9 found missing: the chain is otherwise amnesic across runs, and `deviations` in particular is the only place a story's acceptance criteria and what actually shipped are reconciled in writing. The move is an operator action after the merge, which is the same seam the merge witness already sits on.
 
 **The throughput consequence, paid in the open.** Nothing is satisfied until a human merges, so a set worked in one session goes as *wide* as it allows and exactly *one deep*. A four-deep set takes four merge cycles. `propose` prints the depth before the operator agrees, and the finalizer ends each story by printing the exact merge command. What is explicitly rejected is a session-local mode where a terminal phase ref counts as satisfied for dependents: that puts a dependent's work on top of unreviewed code, and a bounce in the predecessor would cascade §4.10's re-walk rule across a story boundary, which nothing here defines.
 
