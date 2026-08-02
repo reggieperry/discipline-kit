@@ -34,18 +34,6 @@ bitten this build — §3.
 
 ---
 
-# Revised design — kit-local, language-pluggable, mostly-autonomous SDLC chain
-
-Supersedes the prior chain design (branch `feat/kit-chain`, archived as tag `archive/kit-chain`). Every mechanism below carries one of three marks:
-
-- **VERIFIED** — measured on this machine during the capability review or the verification passes, with the measurement named. Not "the docs say so."
-- **DOCUMENTED** — stated in Claude Code documentation, checked against the live 2.1.220 install where a flag or field name was involved, but not exercised end to end.
-- **PROPOSED** — design invention. Not built, not measured. Some of it may not work.
-
-Nothing here is marked VERIFIED on the strength of a documentation reading alone. The prior draft did that in at least five places and the verification pass rejected all of them.
-
----
-
 ## 1. What changed, and why
 
 ### 1.1 Four things the prior design called impossible that are not
@@ -242,6 +230,137 @@ checked against something outside the author's reading. A row that is a bespoke 
 in the author's own prose has no anchor at all — which is exactly what `RESULT/C6.3` was. Count the
 unanchored rows and spend the second reader on those; that set is identifiable mechanically, and it is
 where every misread in this build has lived.
+
+---
+
+### 3.8 The three readers, and what belongs in each prompt
+
+§§3.6 and 3.7 name what would catch semantic drift and a misread. This section is the operational
+answer: which reader catches which class, and what each prompt has to contain to work rather than to
+produce confident noise. Everything below is drawn from a single day's build in
+`claim-algebra-lab`, where a green suite, a fully mapped registry and passing strict mode concealed
+a blocking conformance hole.
+
+**The three readers are complementary because they read DIFFERENT ARTIFACTS.**
+
+| Reader | Reads | Catches |
+|---|---|---|
+| Planner | the specification | obligations nobody answered |
+| Reviewer | the specification **against** the code | drift between them |
+| Mutation | the code **against** the tests | tests that do not discriminate |
+
+None of them reads what the others read. That is the whole argument for having all three, and it is
+why a fourth reviewer lens adds less than the first mutation harness — a point that survives the
+observation that reviewers are cheap and mutation harnesses are not.
+
+Measured on nine real defects from that build: the planner class accounts for roughly four, the
+reviewer class for three, and mutation for two that neither reading caught.
+
+#### What the planner prompt must contain
+
+Each requirement traces to a specific defect, not to good practice in general.
+
+- **Emit counts, always.** "Def 2.1 — four conjuncts." "The update table — nine rows." A count is
+  checkable and a prose summary is not. Three of Def 2.1's four conjuncts and three of the table's
+  nine rows shipped unimplemented under a green build.
+- **Read the SECTION, never an existing statement.** A registry row that already carries a statement
+  is a starting point for reading, never a substitute. One row said "evidence inclusion and common
+  evidence are defined"; §6.1.2's very next clause says "this order is a distributive lattice", and
+  the lattice laws went untested because the plan trusted the statement and never opened the
+  section. **"Already stated" is not "stated completely."**
+- **Enumerate the negative space.** The whole calculus contains **14** sentences carrying an explicit
+  qualifier — "not automatically", "does not", "outside this theorem", "only if", "unless". That is
+  small enough to require exhaustively, and it is where side conditions, deliberate non-theorems and
+  non-implications live.
+- **Split every conjunction into separate records**, one per independently fixable thing. A single
+  failure name covering three binding clauses had to be split after the fact; so did a registry row
+  whose id joined two obligations with "-and-".
+- **State each obligation's QUANTIFIER explicitly.** This is the highest-value line in the prompt,
+  because it is the only planner instruction that reaches the granularity class. A record reading
+  "PER CANDIDATE: no pro atom appears that no admitted event supplied for THAT candidate" makes a
+  test comparing a global set visibly answer a different question. The planner cannot write the
+  test; it can pin the quantifier the test must carry.
+- **Ask of every proposition: is this a standard algebraic law?** If yes, name the bundle. That one
+  question would have caught two rows that were discharged by hand when a stock law suite was
+  available — including one whose own suite already existed, unmapped.
+- **Quote verbatim, cite the section, and flag math-bearing quotations**, so the citation check can
+  read the output.
+- **Output rows, not prose.** The planner's records must land in the conformance registry where the
+  existing checks can fail on them — collective-family, compound-id, duplicate-needle,
+  test-existence, strict mode. A planner producing a handsome markdown document produces prose that
+  drifts.
+
+#### Test kind is part of the plan, and it is mechanically checkable
+
+A test kind is derivable from the proposition's shape: a named algebraic structure takes a law
+bundle; a row the specification marks FALSE takes a witness that it fails; a side condition takes a
+fails-when-violated test; a conjunction of N conjuncts takes N refusals and a control.
+
+Stating the rule is not enough — the lab's build plan already stated exactly this rule in its
+definition of done, and a row shipped hand-rolled anyway. So the kind goes in the registry as a
+column, and two cheap checks fall out:
+
+- `bundle` → the resolved test id must be a `checkAll(` call.
+- `witness` → the resolved test must **not** be a `checkAll`, because a bundle proves a law holds
+  and these rows exist because it does not. This is what stops a deliberate non-theorem being
+  quietly "fixed" into a law.
+
+The first check alone would have caught both hand-rolled rows. **This is the cheapest item in this
+entire document and it needs no prompting at all.**
+
+#### What the reviewer prompt must contain
+
+The lab's audit found two blocking defects, so a well-prompted reviewer demonstrably works. Five
+things made it work, and a prompt missing any of them produces noise instead:
+
+1. **A paid-for checklist.** Every check was a defect that build had actually shipped and later
+   found. A generic checklist reports generic findings.
+2. **Six of ten checks required reading the specification**, not only the code.
+3. **Adversarial verification of every finding.** Two of ten were refuted; without that pass they
+   would have been reported as real.
+4. **"Default to NOT reporting."** A finding that cannot be demonstrated costs more than it saves.
+5. **Evidence rules**: cite `file:line`, quote the specification text, and state a concrete wrong
+   outcome rather than a category.
+
+**Two reviewer passes, with different reference points, and they are different prompts.**
+
+| Pass | Reference | Blind to |
+|---|---|---|
+| plan vs specification | the section | nothing about the implementation |
+| code vs plan | the plan | anything the plan itself missed |
+| code vs specification | the section | whether the plan was honest |
+
+Checking that the plan was FOLLOWED catches deviation — a planned obligation with no row, a wrong
+test kind, a moved count, scope nobody planned. It does **not** catch incompleteness: asked whether
+the plan was followed for the distributive-lattice row, a reviewer answers yes, because the plan
+said "already stated" and the code matched the statement. The defect was upstream of the plan. This
+is the same level error as a reviewer given a row statement and asked to derive its test: it
+inherits the statement and is blind to the statement being wrong.
+
+#### Reviewing is not transcribing
+
+The audit reported that the fold implemented "6 of 9 update-table rows". A fourth row was also
+wrong, and the audit did not name it — it was found by transcribing the table arm by arm, where
+every row had to be handled or the compiler objected.
+
+**Comparison is lossy; transcription is not.** Where the specification supplies a table, an
+enumerated definition, or a fixed-priority list, converting it row-for-row into match arms beats
+scrutinising it afterwards. That is a planner instruction — "emit this table as N records" — rather
+than a reviewer one.
+
+#### The pattern underneath all of it
+
+The mechanisms that worked that day made omission **structurally impossible** rather than carefully
+checked:
+
+- `-Werror` on an unused parameter refused to compile when a gate conjunct was dropped, so the
+  conjunct cannot be removed without a visible API change.
+- Nine match arms over `(Belief, Event)` forced every update-table row to be handled.
+- A stock law bundle supplied nineteen laws including the absorption law that hand-written
+  assertions had missed.
+
+None of those is a review. Prefer a construction that cannot omit over a check that looks for
+omissions, and spend the readers on what no construction reaches.
 
 ---
 
@@ -461,13 +580,19 @@ Each step is useful standalone. Nothing later is required for anything earlier t
 
 **10. A Go toolchain for the gate.** Independent of everything above.
 
-**11. The citation checker.** Extract every `§N.M` from the sources, confirm the cited document has that section, and confirm the cited section's text still contains the term the scaladoc claims. *Standalone value:* closes source drift (§3.5) mechanically, where twelve stale citations were previously corrected by hand and the correcting slice introduced three more.
+**11. The `test-kind` registry column, and its two checks.** A column recording the kind of test a
+row requires, plus: `bundle` rows must resolve to a `checkAll(` call, and `witness` rows must not.
+*Standalone value:* the cheapest item in this document, needing no prompting at all — it catches a
+row discharged by hand when a stock law suite was available, which happened twice in one build even
+though the plan stated the rule (§3.8).
 
-**12. The negative-space checklist.** Extract the qualifier-bearing sentences from each cited section and require the registry to account for each. Fourteen in the whole calculus, so this is small. *Standalone value:* a review checklist grounded in the document rather than in memory.
+**12. The citation checker.** Extract every `§N.M` from the sources, confirm the cited document has that section, and confirm the cited section's text still contains the term the scaladoc claims. *Standalone value:* closes source drift (§3.5) mechanically, where twelve stale citations were previously corrected by hand and the correcting slice introduced three more.
 
-**13. Blind re-derivation as a reviewer phase.** Two forms, per §3.6 and §3.7: derive the test from the row statement, and derive the row statements from the document section. *Standalone value:* neither needs the chain to run; both are workflows an operator can invoke on a slice today.
+**13. The negative-space checklist.** Extract the qualifier-bearing sentences from each cited section and require the registry to account for each. Fourteen in the whole calculus, so this is small. *Standalone value:* a review checklist grounded in the document rather than in memory.
 
-Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis. Steps 11–13 are the drift instruments, and they are the ones that address where this build's defects actually came from (§3.4).
+**14. Blind re-derivation as a reviewer phase.** Two prompts, not one, per §3.8: plan-vs-specification and code-vs-plan have different reference points and different blind spots. Two forms, per §3.6 and §3.7: derive the test from the row statement, and derive the row statements from the document section. *Standalone value:* neither needs the chain to run; both are workflows an operator can invoke on a slice today.
+
+Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis. Steps 11–14 are the drift instruments, and they are the ones that address where this build's defects actually came from (§3.4).
 
 ---
 
