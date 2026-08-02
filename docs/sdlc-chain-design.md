@@ -726,6 +726,30 @@ The same edge on the other steps. **Tester:** gate red returns to the worker wit
 
 **A bounce budget, or the chain loops.** N returns to the worker, then a typed park. Without it a reviewer and a worker can disagree indefinitely and burn a night on one story. The budget counts *returns to the worker*, so a re-walk does not consume it. The number is per-repo; two is a sane default.
 
+### 4.11 The completeness chain: source → plan → code
+
+Completeness is two checks at two seams, not one check in one place, and they compose into an unbroken chain of custody.
+
+**Seam one, at the planner: does the plan account for everything the source says?** **Seam two, after the worker: did every obligation the plan parked get an answer?** The reviewer then re-derives the composition — specification against code — independently of both, so a reader is checking the chain rather than being the only thing holding it up.
+
+Seam two is the easy one: a set difference against the planner's parked rows, mechanical and re-derivable, run by the main loop immediately after the worker and before the tester, because it is grep-shaped and the tester is a full suite run. Cheapest gate first.
+
+**Seam one is the one that matters, because a registry cannot see what nobody wrote.** **VERIFIED** in the lab's own instrument: every loop in `scripts/conformance-map.sh` iterates the registry TSV or a derivation of it, and the script never opens `claim-algebra.html` or `claim-calculus.html` at all. Its completeness is bounded by its own contents. That is exactly how it read fully-mapped and strict-green while two shipped-slice objects did not exist. Seam two inherits that defect entirely: it can only be as complete as the rows it reads, so a thin plan produces a chain where everything passes.
+
+**The mechanism is constant; the source is not.** Whatever the source, extract its units, require every unit to be accounted for by at least one plan row, and print the denominator. What changes is what a unit *is* and how reliably it can be extracted — so the profile declares a mode, and **the check reports which mode it ran in, because a weak extraction must never render as a strong pass.**
+
+| Mode | Source shape | The unit | Strength |
+|---|---|---|---|
+| `enumerable` | a specification with numbered results; a story with `- [ ]` criteria | each Definition / Theorem / Proposition / Obligation, or each checkbox | **Strong.** A real set difference with a printed denominator: "47 numbered results in §8 examined, 0 unclaimed." |
+| `listed` | a finite set of documents — operator memory files, an ADR directory | each document | **Partial.** Proves every in-scope source was read and cited by some row. Proves coverage of *sources*, never of *obligations inside them*. |
+| `prose` | a story description with no enumerable criteria | a requirement-bearing clause | **Weak, and self-referential.** See below. |
+
+`claimos-core` is `enumerable` against the algebra and calculus documents, and it is the case where this pays most. A repo whose only input is operator memory is `listed`. A one-line ticket is `prose`.
+
+**Say the limit of `prose` plainly rather than letting the mode disguise it.** The pack's planner handled this by requiring at least three concrete acceptance criteria, each a check the suite can run — which converts `prose` into `enumerable` by having the planner *author* the structure. That is the right move and it should be kept, but it does not make the check strong, because the rows are then compared against criteria the same agent wrote in the same sitting. Internal consistency is not evidence. In `prose` mode the completeness check verifies form, not coverage, and coverage rests on the operator reading the plan or on the reviewer's independent read. The mode name is what tells a reader which of those they are relying on.
+
+**No source at all is a VOID, not a pass.** If the profile declares no sources, or the declared ones resolve to nothing, the check reports that it examined nothing and the chain records a completeness verdict it did not obtain. A silent green here is the failure this document is most repetitively about: a check that could not run reading identically to one that passed.
+
 ---
 
 ## 5. The per-language plug points
@@ -743,6 +767,26 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 | `rules_glob` | which rule family injects | `scala-*.md` |
 | `red_proof` | how to build old-impl-against-new-tests | (see below) |
 | `phases` | which steps are installed, in order | `["planner","worker","tester","reviewer","documenter","finalizer"]` |
+| `sources` | what the planner's completeness check reads, and how it enumerates units from each (§4.11) | see below |
+
+```toml
+# claimos-core: the strong case — a specification with numbered results
+[[sources]]
+path = "docs/claim-algebra/claim-calculus.html"
+mode = "enumerable"
+unit = '(Definition|Theorem|Proposition|Lemma|Obligation|Remark)\s+[0-9.]+'
+
+# a repo whose input is operator memory: coverage of sources, not of obligations
+[[sources]]
+path = "~/.claude/projects/<project>/memory/*.md"
+mode  = "listed"
+
+# a ticket with no enumerable criteria: the planner authors the structure, and the
+# check verifies form rather than coverage
+[[sources]]
+path = "story.md"
+mode = "prose"
+```
 
 **The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out.
 
