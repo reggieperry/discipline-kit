@@ -657,7 +657,37 @@ Three consequences, and one replacement:
 
 Hooks configured in the parent still fire for subagent tool calls even though the worktree checkout does not contain the settings file that defines them — configuration is inherited from the session, not re-read from the agent's cwd. **VERIFIED.**
 
-**The recommended shape, given all of the above:** a workflow drives sequence; subagents do the work in worktrees and commit; the phase verdict is a git hook plus a parent-side re-derivation done in Bash from the main session, never a field the workflow script computed from an agent's return value. That keeps §4.2(a) intact by relocating it rather than by trusting the orchestrator with it.
+**The recommended shape, given all of the above: the MAIN LOOP drives.** It spawns phase N's subagent; the subagent returns, so control comes back naturally; the main loop cuts its own scratch worktree from that phase's ref and evaluates the predicate itself; then it spawns phase N+1. Subagents do the work in worktrees and commit. A workflow is admissible only *inside* a phase, for fan-out where the aggregation rule must be fixed before results are seen — and each fanned-out agent commits its own artifact to its own branch, so nothing crosses the workflow boundary as a string. That keeps §4.2(a) intact by relocating it rather than by trusting the orchestrator with it.
+
+Two conditions on every main-loop verdict, both **VERIFIED** in source. **Pin the environment at the point of signing** — `conformance-map.sh:36` and `ship-list.sh:25` read `SHIPPED` from the environment and `.envrc` is gitignored, so the signing surface is weakenable by state no `git diff` can see. And **take the examiner from the base, not the judged branch** — `check.sh:15` is `cd "$(dirname "$0")/.."`, so it runs the *worktree's* copy of itself, letting the judged party supply its own examiner.
+
+### 4.9 What the pack was buying, measured against this design
+
+The `sdlc-discipline-pack` is a seven-agent chain built for Gas City. Its machinery is deliberately gone (§1). The question this section settles is whether its agents' *goals* survive, and it was answered by reading all seven templates rather than by recalling them.
+
+**The honest grade: the forward path is carried and strengthened; the failure paths are not carried at all.** On a green run this design has strictly better epistemics than the pack, whose worker self-reported its own gate and whose auto-merge rubric read `test_status=green` and `review_verdict=pass` — both metadata a prior agent wrote, which the "only a check signs" invariant rejects on principle. What does not survive is everything that appears only when something goes wrong, or goes beyond what was asked.
+
+**Nothing reads the code back against what was declared, and this is the design's structural blind spot.** Five of the seven per-agent reads found it from different angles. The reason none could see alone: every reading step here is defined by an input pair, and all the pairs point the same way — the worker is code against the compiler and the suite, mutation is code against the tests, the reviewer is specification against code. Spec-to-code finds *missing* work and structurally cannot find *surplus* work, because unrequested code violates no specification. The pack's `Scope In:/Out:` list and its sensitive-files declaration ran the other direction, and both the declaration and its enforcing gate are absent here.
+
+**The delivered artifact is gated by nothing.** The terminal step merges sibling branches into a tree that exists nowhere else; the worker's gate ran on the worker's tree and the tester's on the tester's. Hooks cannot cover it: **VERIFIED** that `.githooks/` ships only `pre-commit` and `post-commit`, while git 2.43 documents `pre-merge-commit` as the hook `git merge` invokes. So the one artifact the chain exists to produce is the one tree no check has ever run on — and it is handed to the human whose merge the whole safety argument rests on. **This is the first thing to fix**, because it fails on green runs rather than on bad ones.
+
+**There is no failure edge. VERIFIED** by search: the document has zero occurrences of bounce-back, re-entry, or on-failure handling, and its only retry concept is `CLAUDE_CODE_RETRY_WATCHDOG` for provider capacity. The pack bounces at two points — tester to worker when validation cannot be made green, reviewer to worker with a rejection reason. Detection is fully specified here and disposition is not specified at all. It compounds: a blocked subagent's worktree is auto-cleaned unless it commits, so it destroys its own account of why it stopped.
+
+**"Could not look" reads identically to "found nothing"** — §4.4's measured trap, one level down. That trap is answered at *phase* granularity by re-deriving from git; there is no answer at *check* granularity, so a lens that never ran and a lens that ran clean emit the same absence report. The correct output shape is three-valued: **refute / absence-with-a-coverage-receipt / could-not-inspect**. Only the middle one is clean, and the third is not an approval, so it costs nothing against "the reviewer never approves."
+
+**The differential axis is missing.** "Gate green" is absolute where anti-weakening is a comparison against merge-base. A worker deletes a failing test, the suite goes green, the gate goes green, and no step reports the deletion. `differential-gate.jar` already implements Check B and Check D and no phase names it.
+
+#### Operator decisions on the two agents with no counterpart
+
+**The slop-reviewer stays out, and this is a decision rather than an omission.** It was run and did not pay; the pack's own template says v1 shipped in shadow mode, annotate-only, pending a sample-size validation it never cleared. Recorded here so a later audit reading the pack does not re-propose it as an oversight.
+
+One residue outlives the agent and belongs to whoever owns test quality. An implementation-mirroring test parrots the production algorithm, so nearly every mutant breaks it and **mutation scores it excellent** — mutation rewards that pattern rather than detecting it, and the attest-only tester judged on "gate green" has an incentive pointing straight at it. That is a test-quality check, not a reviewer agent, and it does not require reinstating the pass that first named it.
+
+**The documenter stays in, repositioned: its value is PR authorship, not feature documentation.** That fills a gap this design opened elsewhere — dropping auto-merge was right, but it made the human's briefing matter *more* than in the pack, since the pack could at least auto-merge its glance tier while this chain never can, and the briefing went from mechanically derived to whatever the terminal package happens to contain. The documenter is where it becomes derived again.
+
+Keep it a distinct step rather than folding it into the finalizer. The pack separated them and the separation earned its keep: a documenter once shipped a clean feature document and silently deleted eleven unrelated story specs in the same commit, and it reached a PR — which is a direct refutation of "the human merge will catch it," the proposition this design leans on hardest. Whichever step is terminal carries the merged-tree gate above; that is what makes the ordering safe rather than the ordering itself.
+
+**The roster is per-repo.** Which steps are installed is an operator choice expressed in `profile.toml` (§5), not a property of the runtime.
 
 ---
 
@@ -675,6 +705,11 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 | `gate_toolchain` | forced toolchain for the differential gate | `scala` |
 | `rules_glob` | which rule family injects | `scala-*.md` |
 | `red_proof` | how to build old-impl-against-new-tests | (see below) |
+| `phases` | which steps are installed, in order | `["planner","worker","tester","mutation","reviewer","documenter","finalizer"]` |
+
+**The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out. The same applies to mutation, which is expensive and worth its cost on a detector-class module and not on glue.
+
+Two constraints on any roster, both from §4.9. The **terminal** step — whichever one `phases` ends with — carries the re-derived completion criterion on the merged tree, so removing a step must never orphan that check. And a roster is not a menu of independent items: dropping the documenter also drops the terminal scope gate it happened to carry, so the profile's own documentation has to say what each step is holding besides its name.
 
 **The differential gate is already the language plug point and already has the right shape.** `reference/sdlc-gate.py` on kit main carries a scanner-plugin layer: one language-agnostic engine (baseline/diff worktree model, `(file, code)` multiset identity, rename tracking, relocation-advisory downgrade, waivers, verdict logic) with per-toolchain scanners for Check A (static-analysis identity), Check B (suppressions), and Check D (test weakening). Detection is by marker file, `--toolchain` forces it. I confirmed the toolchains present: **python** (ruff/mypy/bandit), **scala** (scalafix/wartremover, plus a fail-closed compile precondition and opt-in scoverage), **java** (checkstyle, jqwik parameter weakening, opt-in JaCoCo). **VERIFIED** by reading the source.
 
