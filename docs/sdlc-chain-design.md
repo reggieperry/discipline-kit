@@ -744,7 +744,25 @@ Seam two is the easy one: a set difference against the planner's parked rows, me
 | `listed` | a finite set of documents — operator memory files, an ADR directory | each document | **Partial.** Proves every in-scope source was read and cited by some row. Proves coverage of *sources*, never of *obligations inside them*. |
 | `prose` | a story description with no enumerable criteria | a requirement-bearing clause | **Weak, and self-referential.** See below. |
 
-`claimos-core` is `enumerable` against the algebra and calculus documents, and it is the case where this pays most. A repo whose only input is operator memory is `listed`. A one-line ticket is `prose`.
+#### The mode belongs to the work item, and is derived rather than declared
+
+**The mode is not a property of the repo.** One repo produces all three: "implement slice 9 per calculus §9" is `enumerable`, "do what we discussed about the panel" is `listed`, "fix the flaky test in FooSuite" is `prose`. A per-repo setting would be at the wrong granularity, and pinning one would either over-claim on the thin items or under-claim on the whole corpus.
+
+**Nor may the planner declare it**, for the reason the rest of this document keeps returning to: that is the party being judged choosing the standard it is judged by, and the incentive runs one way. A planner short of time declares `prose` and passes.
+
+So the repo declares only what is *available* and how to extract units from it; the mode for a given run is **derived from what the work item cites**, by the main loop, before the planner starts:
+
+- The item cites a document and a locus (`calculus §9`, an ADR number, a file path with an anchor) → `enumerable` against that locus, with the repo's extraction pattern.
+- It cites whole documents with no internal structure to enumerate → `listed`.
+- It cites nothing → `prose`.
+
+**Derivation is monotonic toward the strong end.** Citing more strengthens the check; citing less weakens it, and the weakening is visible because the mode is reported. Nobody can reach a weaker mode than their citations support.
+
+**An uncited item still gets a scope, and the scope becomes a refutable artifact.** When the work item names no locus, the planner reads the corpus, determines which sections are relevant, and *records that determination*. The enumerable check then runs against the sections it named. The planner's scope selection is now the weak link — but it is a narrow, stated claim ("§9 is the relevant section") that the reviewer can refute directly, rather than a diffuse judgment buried in a plan. That is the same move as everywhere else here: convert an implicit choice into a written one that a later reader can attack.
+
+**Never average the modes.** A work item with a specification *and* operator memory gets two checks at two strengths, reported separately. Collapsing them to one grade hides the weaker one, which is the uncounted-family defect `craft-measurement.md` names — a plural row discharged on one mapping.
+
+**What no downstream check can find: an item that cites nothing but should have.** No mechanism detects a missing citation to a document nobody mentioned. That is an intake defect and it bounds the whole chain. The mitigation is not a check but a number: the mode is recorded per run, so a repo steadily producing `prose`-mode plans is visibly running a weak chain, and that is a metric the operator can watch rather than a silence they cannot.
 
 **Say the limit of `prose` plainly rather than letting the mode disguise it.** The pack's planner handled this by requiring at least three concrete acceptance criteria, each a check the suite can run — which converts `prose` into `enumerable` by having the planner *author* the structure. That is the right move and it should be kept, but it does not make the check strong, because the rows are then compared against criteria the same agent wrote in the same sitting. Internal consistency is not evidence. In `prose` mode the completeness check verifies form, not coverage, and coverage rests on the operator reading the plan or on the reviewer's independent read. The mode name is what tells a reader which of those they are relying on.
 
@@ -767,26 +785,29 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 | `rules_glob` | which rule family injects | `scala-*.md` |
 | `red_proof` | how to build old-impl-against-new-tests | (see below) |
 | `phases` | which steps are installed, in order | `["planner","worker","tester","reviewer","documenter","finalizer"]` |
-| `sources` | what the planner's completeness check reads, and how it enumerates units from each (§4.11) | see below |
+| `sources` | the corpus available to the planner's completeness check, and how to extract units from each (§4.11) | see below |
+
+**The profile declares availability and extraction. It does not declare the mode** — that is derived per work item from what the item cites, by the main loop, before the planner starts (§4.11). A repo produces all three modes across its stories, so pinning one here would be at the wrong granularity.
 
 ```toml
-# claimos-core: the strong case — a specification with numbered results
+# The strong case: a specification with numbered results. An item citing a locus in
+# this document ("calculus §9") derives `enumerable` against that section.
 [[sources]]
 path = "docs/claim-algebra/claim-calculus.html"
-mode = "enumerable"
 unit = '(Definition|Theorem|Proposition|Lemma|Obligation|Remark)\s+[0-9.]+'
 
-# a repo whose input is operator memory: coverage of sources, not of obligations
+# No internal structure to enumerate, so an item citing these derives `listed`:
+# coverage of the documents, never of the obligations inside them.
 [[sources]]
 path = "~/.claude/projects/<project>/memory/*.md"
-mode  = "listed"
 
-# a ticket with no enumerable criteria: the planner authors the structure, and the
-# check verifies form rather than coverage
+# A story with checkbox criteria is enumerable on the checkboxes.
 [[sources]]
 path = "story.md"
-mode = "prose"
+unit = '^- \[ \] '
 ```
+
+A source with no `unit` pattern can never reach `enumerable`; that is the honest ceiling of a corpus with nothing countable in it, and it should be visible in the profile rather than discovered at run time.
 
 **The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out.
 
