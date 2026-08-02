@@ -256,6 +256,13 @@ observation that reviewers are cheap and mutation harnesses are not.
 Measured on nine real defects from that build: the planner class accounts for roughly four, the
 reviewer class for three, and mutation for two that neither reading caught.
 
+> **The chain installs two of these three.** Mutation is not a phase — operator decision, recorded
+> with its reasoning in §4.9. The measurement above is left exactly as taken, because it is what
+> makes the cost of that decision legible: the two defects in the mutation column are the ones the
+> shipped chain no longer catches, and rounding them away would be the kind of comfortable
+> bookkeeping this section exists to argue against. The reading survives as a worker habit
+> (`craft-tdd.md` beat 3), which is testimony where a phase would have been re-derived.
+
 #### What the planner prompt must contain
 
 Each requirement traces to a specific defect, not to good practice in general.
@@ -667,7 +674,9 @@ The `sdlc-discipline-pack` is a seven-agent chain built for Gas City. Its machin
 
 **The honest grade: the forward path is carried and strengthened; the failure paths are not carried at all.** On a green run this design has strictly better epistemics than the pack, whose worker self-reported its own gate and whose auto-merge rubric read `test_status=green` and `review_verdict=pass` — both metadata a prior agent wrote, which the "only a check signs" invariant rejects on principle. What does not survive is everything that appears only when something goes wrong, or goes beyond what was asked.
 
-**Nothing reads the code back against what was declared, and this is the design's structural blind spot.** Five of the seven per-agent reads found it from different angles. The reason none could see alone: every reading step here is defined by an input pair, and all the pairs point the same way — the worker is code against the compiler and the suite, mutation is code against the tests, the reviewer is specification against code. Spec-to-code finds *missing* work and structurally cannot find *surplus* work, because unrequested code violates no specification. The pack's `Scope In:/Out:` list and its sensitive-files declaration ran the other direction, and both the declaration and its enforcing gate are absent here.
+**Nothing reads the code back against what was declared, and this is the design's structural blind spot.** Five of the seven per-agent reads found it from different angles. The reason none could see alone: every reading step here is defined by an input pair, and all the pairs point the same way — the worker is code against the compiler and the suite, the reviewer is specification against code. Spec-to-code finds *missing* work and structurally cannot find *surplus* work, because unrequested code violates no specification. The pack's `Scope In:/Out:` list ran the other direction, and both the declaration and its enforcing gate are absent here.
+
+**The remedy is a declaration/enforcement PAIR, and half a pair is worse than none.** The planner parks a machine-readable in-scope path list; the finalizer reconciles the cumulative diff against it, because the finalizer is the only step that sees the whole change. Placing only the enforcement half yields a check that reads nothing and reports clean, which is the failure mode this entire document is written against. (The pack also ran a sensitive-files declaration through the same pair. **Dropped by operator decision** — it is not carried here, and this sentence exists so a later reader does not restore it as an oversight.)
 
 **The delivered artifact is gated by nothing.** The terminal step merges sibling branches into a tree that exists nowhere else; the worker's gate ran on the worker's tree and the tester's on the tester's. Hooks cannot cover it: **VERIFIED** that `.githooks/` ships only `pre-commit` and `post-commit`, while git 2.43 documents `pre-merge-commit` as the hook `git merge` invokes. So the one artifact the chain exists to produce is the one tree no check has ever run on — and it is handed to the human whose merge the whole safety argument rests on. **This is the first thing to fix**, because it fails on green runs rather than on bad ones.
 
@@ -681,13 +690,41 @@ The `sdlc-discipline-pack` is a seven-agent chain built for Gas City. Its machin
 
 **The slop-reviewer stays out, and this is a decision rather than an omission.** It was run and did not pay; the pack's own template says v1 shipped in shadow mode, annotate-only, pending a sample-size validation it never cleared. Recorded here so a later audit reading the pack does not re-propose it as an oversight.
 
-One residue outlives the agent and belongs to whoever owns test quality. An implementation-mirroring test parrots the production algorithm, so nearly every mutant breaks it and **mutation scores it excellent** — mutation rewards that pattern rather than detecting it, and the attest-only tester judged on "gate green" has an incentive pointing straight at it. That is a test-quality check, not a reviewer agent, and it does not require reinstating the pass that first named it.
+**Mutation is not a chain step either. Operator decision, and it has a stated cost.** §3.8's own measurement over nine real defects splits them planner four, reviewer three, mutation two — and those two were defects *neither other reading caught*, because only mutation reads the code against the tests. Removing the step means the chain no longer catches that class. §7 already says detection power has to be bought separately and mostly is not; with this decision it is not bought at all, by choice rather than by oversight.
+
+What survives is the habit, not the phase. `craft-tdd.md` beat 3 — perturb the *shipped* code and confirm the suite objects — remains a worker practice, and §3.9's self-audit already carries the query that catches its commonest failure (a mutant that did not compile, read as a test result, four times in one session). The difference is grade, and it should be said rather than blurred: a worker's perturbation is self-reported testimony, where a phase would have been re-derived. `phases` in §5 makes the step re-addable per repo if that ever bites.
+
+Two residues now have no owner at all, and both were previously covered by the agents just removed. **Test quality has no reader**: an implementation-mirroring test parrots the production algorithm, and with the slop rubric gone and mutation gone, nothing detects it — the attest-only tester judged on "gate green" has an incentive pointing straight at it. And **no step reads the finished code as code** against the project's own standards; every remaining reading step is defined by a different pairing. Neither needs an agent to fix. Both need someone to decide they are acceptable, which is a different act from not noticing them.
 
 **The documenter stays in, repositioned: its value is PR authorship, not feature documentation.** That fills a gap this design opened elsewhere — dropping auto-merge was right, but it made the human's briefing matter *more* than in the pack, since the pack could at least auto-merge its glance tier while this chain never can, and the briefing went from mechanically derived to whatever the terminal package happens to contain. The documenter is where it becomes derived again.
 
 Keep it a distinct step rather than folding it into the finalizer. The pack separated them and the separation earned its keep: a documenter once shipped a clean feature document and silently deleted eleven unrelated story specs in the same commit, and it reached a PR — which is a direct refutation of "the human merge will catch it," the proposition this design leans on hardest. Whichever step is terminal carries the merged-tree gate above; that is what makes the ordering safe rather than the ordering itself.
 
 **The roster is per-repo.** Which steps are installed is an operator choice expressed in `profile.toml` (§5), not a property of the runtime.
+
+### 4.10 The failure edge
+
+Every step above states a pass condition. This section states what happens when one does not hold, which the design previously left unwritten — detection fully specified, disposition not specified at all.
+
+**A refuted review returns to the worker, and the reviewer's three outputs give the three dispositions directly:**
+
+| Reviewer output | Disposition |
+|---|---|
+| refute | back to the worker, findings verbatim |
+| could-not-inspect | typed park for the operator; the chain stops |
+| absence, with a coverage receipt | advance |
+
+That one-to-one mapping is the reason the output shape is three-valued rather than two. A reviewer restricted to refute-or-absence, when blocked, must either fabricate a rejection or emit a clean report — and the clean report is the likelier and the worse. The third state is what makes "back to the worker" mean a real finding rather than a reader who could not look.
+
+The same edge on the other steps. **Tester:** gate red returns to the worker with the failing output. **Finalizer:** a red gate on the merged tree, or a scope reconciliation that fails against the planner's declared list, returns to the worker. **Planner:** not-plannable is a typed park, never a bounce, because there is nothing upstream of it.
+
+**Triage before bouncing, because not every red is the worker's fault.** Three causes must be separated: a *worker fault* (return and fix), an *environment fault* (the check could not run — park, never bounce, since a worker cannot fix an absent `node_modules`), and a *stale baseline* (main moved — re-integrate, then re-derive). Returning an environment fault to the worker is how a chain spends a night failing to repair something that was never broken.
+
+**The re-walk rule.** A return to the worker invalidates every verdict downstream of it. After the fix, the tester and the reviewer run again, because their prior findings describe a tree that no longer exists. This is the staleness problem and the failure edge being one defect: without the rule, the chain ships a review of a tree it did not build.
+
+**A bouncing step must commit before it returns.** Measured: an unchanged worktree is auto-cleaned, so a step that stops without committing destroys its own account of why it stopped. The findings *are* the handoff. A bounce carrying no artifact is indistinguishable from a step that did nothing at all — the same non-discrimination §4.4 measured in the harness's own success fields, reappearing on the failure path.
+
+**A bounce budget, or the chain loops.** N returns to the worker, then a typed park. Without it a reviewer and a worker can disagree indefinitely and burn a night on one story. The budget counts *returns to the worker*, so a re-walk does not consume it. The number is per-repo; two is a sane default.
 
 ---
 
@@ -705,9 +742,9 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 | `gate_toolchain` | forced toolchain for the differential gate | `scala` |
 | `rules_glob` | which rule family injects | `scala-*.md` |
 | `red_proof` | how to build old-impl-against-new-tests | (see below) |
-| `phases` | which steps are installed, in order | `["planner","worker","tester","mutation","reviewer","documenter","finalizer"]` |
+| `phases` | which steps are installed, in order | `["planner","worker","tester","reviewer","documenter","finalizer"]` |
 
-**The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out. The same applies to mutation, which is expensive and worth its cost on a detector-class module and not on glue.
+**The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out.
 
 Two constraints on any roster, both from §4.9. The **terminal** step — whichever one `phases` ends with — carries the re-derived completion criterion on the merged tree, so removing a step must never orphan that check. And a roster is not a menu of independent items: dropping the documenter also drops the terminal scope gate it happened to carry, so the profile's own documentation has to say what each step is holding besides its name.
 
