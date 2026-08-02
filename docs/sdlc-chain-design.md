@@ -72,7 +72,7 @@ The prior design tried to buy containment from the harness's configuration surfa
 
 Stated briefly because it survives intact.
 
-**Five phases, one warrant each.** planner (park the plan), worker (build through the gate), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §4.
+**Five phases, one warrant each.** planner (park the plan), worker (build through the gate, **then audit its own diff and fix what the audit returns before handing off** — §3.9), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §4.
 
 **The human merge is the transition-grade backstop.** The chain is autonomous up to a merge-ready branch and no further. The finalizer does not merge. This was right before, it is right now, and nothing measured in the review earns the right to retire it. The archived `chain-worker.md` says it plainly and should be kept verbatim: what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
 
@@ -361,6 +361,112 @@ checked:
 
 None of those is a review. Prefer a construction that cannot omit over a check that looks for
 omissions, and spend the readers on what no construction reaches.
+
+### 3.9 The worker audits itself before handing off, and the audit is queries not judgment
+
+The three readers in §3.8 are all downstream of the worker. That leaves a gap the operator found
+empirically: across one build, **every single time the operator asked "is there anything we need to
+fix before going on", there was something.** Four rounds, four hits, on work that was already
+`sbt check` green with a fully mapped registry and passing strict mode.
+
+That is not a reviewer problem. It means the worker was handing off incomplete work as finished, and
+the plan's own requirements were the things going unmet.
+
+**The obvious fix is the one that will not work.** "Have the worker check its work before handing
+off" is already what the rules say. The repo carries `craft-measurement.md` on instruments that
+cannot fail, `craft-tdd.md` on proving a test can fail, and a conformance rule on saying so at the
+seam — and every defect below was found *after* those rules were in front of the author while the
+work was written. An exhortation to be careful is discharged by feeling careful. The worker will
+report that it audited, because it will believe it did.
+
+**So the audit is a fixed list of QUERIES, each returning evidence, and none requiring the worker to
+judge its own work.** That distinction is what makes self-audit viable at all: a worker asked "did I
+cover everything?" consults the same understanding that produced the gap, and gets the same answer.
+A worker asked "which symbols in this diff appear in no test file?" runs a grep and gets a list it
+did not author. The first is introspection and inherits the blind spot; the second is measurement
+and does not.
+
+#### The queries, each traced to a defect it would have caught
+
+Every row is a real finding from the build, in the round where the operator's question surfaced it.
+
+| Query | The defect it catches |
+|---|---|
+| Which symbols does this diff add that no test file names? | Two of five shipped symbols in one slice had zero test references. A ship-list check counted them **present**, which is a different question from **read**. |
+| For each record added or changed, which fields does no assertion mention? | Three of six fields of a new record were stored and asserted nowhere, so a constructor populating one from the wrong source would have shipped silently. |
+| Does the specification's version of each structure have the same shape as mine — same field count, same nesting? | A record carried seven positions where the document writes six, having flattened a sub-record and dropped two of its fields. Nothing downstream needed them, which is why it survived. |
+| Does every negative control have a positive half? | A control asserting an expression must not compile passed immediately, and was failing for an unrelated reason. The positive half went red and exposed it. |
+| Did each mutation I ran actually COMPILE? | A mutation reported as "no test objected" had not compiled — `-Werror` rejected it. A build failure was read as a test result. Four times in one session. |
+| Can each fixture vary each field independently? | One fixture drove two payload fields from a single argument, so neither could be varied alone and a dropped field survived. Another baked a value in as a constant, so no test could vary it. |
+| Does any test name a family and enumerate fewer? | "Changing ANY of the six payload fields" listed five. "The four definition digests" built three. |
+| Is any asserted count read from a constant rather than from the structure? | `fieldCount` was a value a human typed, compared against a literal a human typed. Deleting a real field left both untouched. |
+| For each predicate, is there a case where it must be FALSE? | A predicate's suite was entirely positive. Weakening it to over-fire survived the module, because a predicate that fires too often is only caught by a case it should refuse. |
+| Does every claim in a comment survive being tested? | A comment said a substitution "would break this pairing rather than pass silently." It would not. Another claimed a case "each conjunct alone would admit" — measured, and false. |
+
+Ten queries. Eight are greps or one-line scripts; two need the mutation harness the slice should be
+running anyway.
+
+#### Three properties that make this a phase and not a habit
+
+**It runs before handoff, and its output is an artifact.** The worker emits the query results, not a
+statement that it audited. A reviewer then reads work that has already had its mechanical residue
+removed, so what the reviewer finds is genuinely the part that needed a second reader — which makes
+the reviewer's signal more informative, not less. A reviewer whose findings are dominated by
+unasserted fields is a reviewer being spent on grep work.
+
+**A query that returns nothing must say what it looked at.** "No unexercised symbols" and "the query
+found no symbols to check" are the same output and different facts, and the second is the common one
+when a pattern is wrong. Print the denominator.
+
+**It does not replace the reviewer or the mutation pass, and the split is by artifact, not by
+thoroughness.** These queries read the diff against itself. Only the reviewer reads the
+specification against the code, and only mutation reads the code against the tests. A worker that
+audits well still cannot catch a faithful implementation of a misread requirement, because nothing
+in the diff disagrees with anything else in it.
+
+#### The driver re-runs the mechanical half, because a self-report is a claim by the party judged
+
+§4.2(a) says no agent computes whether the chain advances, and §4.4 shows the harness's own success
+fields clearing a phase that could not act at all. An audit the worker merely *reports* having done
+inherits that defect exactly: it is the same claim shape the dev-ledger was retired for.
+
+So the queries split by whether a driver can re-derive them — and the split was **measured against a
+real module rather than assumed**, because this design's own rule is to run a new check over the
+existing corpus and count the false positives before wiring it in.
+
+**Driver-enforced: one query, and it earned the place.**
+
+- *`typeChecks` negative controls with no positive counterpart in the same file.* Measured over 46
+  suites: two files use a negative compile-time control, one was correctly paired and one was not.
+  Zero false positives, and the unpaired one was a real defect — a control asserting a constructor
+  is closed, whose snippet named its fixtures unqualified, so it would have failed to compile for a
+  resolution error and passed for the wrong reason. It was found by a query written for a *different*
+  control in the same file, four tests away, committed twenty minutes earlier.
+
+**Demoted to worker-judgment after measurement.**
+
+- *Symbols the diff adds that appear in no test file.* This found two real gaps when run by hand over
+  a slice-sized diff. Run as a gate over the whole module it flagged **25 of 291 symbols, of which
+  roughly four were real** — the rest transitively exercised through a tested caller. Tightening it
+  to "and called from no other file" still left nine, most of them used inside their own file. An
+  85% false-positive rate is the shape that gets a check edited until it is quiet. It stays in the
+  audit as a query the worker runs and *classifies*, over a diff-sized denominator, which is where
+  it works.
+- Whether a family's enumeration is complete, whether a fixture can vary each field independently,
+  whether a comment's claim survives being tested, whether a structure's shape matches the
+  document's. These need reading and cannot be a gate.
+
+The one-to-nine ratio is the honest yield, and it is worth stating plainly so nobody budgets for
+more. What can be re-derived is re-derived; what cannot is disclosed and left to a reader of a
+different artifact. The enforced query is not the important half — it is the half a tired worker
+skips, and it costs one grep.
+
+#### What this does not fix
+
+Four rounds is four data points, all from one build, one worker and one operator. The queries are
+the recurring shapes *observed*, and a defect class that never happened to appear is not on the list
+and would not be caught by it. Expect the table to grow, and treat a defect that reaches the
+reviewer as a candidate row rather than as a reviewer success.
 
 ---
 
