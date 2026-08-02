@@ -500,18 +500,6 @@ acceptance:
 
 **Eight admitted keys, and the parser enforces the list** — an unknown key, a duplicate key, or the same `id` in two files is fatal, naming both. There is no `status:`, no `roster:`, no `filed_as_bead:`. The admission rule: *a field may live here only if being wrong about it cannot produce a wrong readiness answer.* A ninth key is a reviewed diff to the parser.
 
-#### The ADR exists first, and that is forced rather than preferred
-
-Two things fix the order. A story's `adr:` must resolve to a file, and the graph is read from `origin/main` — so the ADR must be **on trunk**, not merely written somewhere. A story citing an ADR that is only on a branch does not resolve, and the integrity check names it.
-
-**In practice they are authored in the same operator commit**: write the ADR (Context, numbered Decisions, the falsification condition), decompose each decision into stories, commit both to `main`, then `agree`. This costs no merge cycle — the chain may never write trunk, but the operator committing a decision and its decomposition is a human action, and it is the same act as deciding.
-
-Once the ADR exists the pull runs the other way. Reverse coverage requires every non-superseded decision to be cited by at least one story or to carry an explicit waiver, so **the ADR creates the obligation and the stories discharge it**. That is the whole relationship, and it is why the reference points up: obligations are declared once, in a stable place, and discharged many times.
-
-Two escape valves keep this from becoming ceremony. **`ADR-0000`** is the single named hatch for work that serves no recorded decision — a fix, a chore, ordinary cleanup — and its ratio is printed on every run so the hatch is watched rather than assumed small. **`Covered-by: none — <reason>`** discharges a decision that genuinely needs no story. Neither is silent.
-
-**The awkward case is work that reveals a decision mid-flight,** and it should be named rather than designed around. The story finishes under its original ADR or under `ADR-0000`, the decision gets its own ADR afterward, and re-pointing a story is an ordinary edit to one file. But the resulting record is a weaker artifact than one written at the fork — the ADR convention's own distinction is that a design doc explores while an ADR decides, and a decision recorded after the code is a description of what happened. The weakness shows up precisely in the falsification condition: a falsifier invented after the fact tends to be one the existing implementation already passes. Write it anyway, and treat a run of post-hoc ADRs as a signal that the forks are being noticed too late.
-
 **`cites:` is the same field §4.11's completeness mode is derived from**, so a story's citations already decide the strength of its own planner check, and the count of `prose`-mode stories is printed on every run.
 
 **The graph is read from `origin/main`, never from the worktree or the index.** A story edited on a branch does not change the graph until a human merges it — the same signature that governs everything else here.
