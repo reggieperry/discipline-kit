@@ -477,6 +477,59 @@ reviewer as a candidate row rather than as a reviewer success.
 
 ---
 
+### 3.10 The story graph: ADRs, dependencies, and what "ready" means
+
+§3.3 says intake is decomposition and stops there. This is the structure that carries it, restoring a capability the prior Gas City system had — an ADR maps to one or more stories, stories form a dependency graph, and the operator and the agent agree a *set* whose working order is then derived rather than negotiated. The machinery is files and git; there is no daemon, no database, and no bead.
+
+**Stories own their edges; the ADR is referenced, never referencing.** One file per story under `stories/`, and it is the only writer of its own node. The direction is the whole design decision: ADR ids are stable and decisions are superseded individually and never deleted, so an ADR carrying a story list turns the one document whose stability is a stated requirement into the most-churned file in the repo — and its `Status:` line becomes a readiness authority a worker could edit on its own branch. Stories point at ADRs.
+
+```
+---
+id: STORY-0041
+title: Parse the slot descriptor
+adr: ADR-0007
+decisions: [D1]
+group: A
+after: [STORY-0039]
+cites:
+  - docs/claim-algebra/claim-algebra.html#sec-1-4
+acceptance:
+  - A descriptor missing a field is rejected, naming the field.
+---
+```
+
+**Eight admitted keys, and the parser enforces the list** — an unknown key, a duplicate key, or the same `id` in two files is fatal, naming both. There is no `status:`, no `roster:`, no `filed_as_bead:`. The admission rule: *a field may live here only if being wrong about it cannot produce a wrong readiness answer.* A ninth key is a reviewed diff to the parser.
+
+**`cites:` is the same field §4.11's completeness mode is derived from**, so a story's citations already decide the strength of its own planner check, and the count of `prose`-mode stories is printed on every run.
+
+**The graph is read from `origin/main`, never from the worktree or the index.** A story edited on a branch does not change the graph until a human merges it — the same signature that governs everything else here.
+
+**`.chain/set` is the agreement, and the commit is the agreement record.** One line per ADR id (meaning every story of that ADR) or per story id. It has an author, a timestamp, a diff, and it reverts. Parking a story is deleting its line and committing — a scope decision recorded like every other scope decision, not a ref and not a field. `agree` refuses a set whose ADR has a decision with no story, until a story exists or the decision carries `Covered-by: none — <reason>` under its heading.
+
+**Order is Kahn over the agreed subgraph, critical path first** — keyed by `(-height, group, set-line-index, id)`, where height is the longest path to a sink. Depth costs human merge cycles and breadth does not, so the serial part is scheduled as early as possible. `tsort` runs on the same edges as a second opinion **read only for its exit status**, since it prints an ordering even for cyclic input.
+
+#### What "satisfied" means, decided
+
+**`origin/main` contains a merge commit carrying the trailer `Merged-Story: <ID>` whose second parent is the story branch's tip.** Not a phase ref, not a branch existing, not a file the finalizer wrote. Two questions decide it: *can it go true by accident?* — a finalizer-written record can, since an ordinary `--ours` conflict resolution merges the record while dropping the code. *Can it go false by routine maintenance?* — a content or path predicate can, since a `git mv` would un-land a merged story.
+
+The witnesses are **not or-ed**; the strict one decides and a loose scan exists only to catch it reading false: strict and loose both true is `SATISFIED`, both false is `BLOCKED`, loose-true-strict-false is `SQUASHED` and exits loud, and a tip that is an ancestor with no merge record is `MERGED-UNRECORDED`. Chain merges are `--no-ff` by policy; a forgotten flag stalls loudly rather than releasing silently.
+
+**Group B needs no second mechanism.** Its gate — "the predecessor feature has merged" — *is* an ordinary `after:` edge under merge-satisfaction. The A/B distinction survives only as a scheduling tie-break.
+
+**The throughput consequence, paid in the open.** Nothing is satisfied until a human merges, so a set worked in one session goes as *wide* as it allows and exactly *one deep*. A four-deep set takes four merge cycles. `propose` prints the depth before the operator agrees, and the finalizer ends each story by printing the exact merge command. What is explicitly rejected is a session-local mode where a terminal phase ref counts as satisfied for dependents: that puts a dependent's work on top of unreviewed code, and a bounce in the predecessor would cascade §4.10's re-walk rule across a story boundary, which nothing here defines.
+
+#### The integrity checks
+
+Twelve, each printing its denominator on success so that finding nothing is distinguishable from looking at nothing. Six read only trunk blobs and sit on the commit path — scoped to **every** story and ADR, not to the agreed set, because a cycle inside an unagreed ADR is still a cycle. Six need git state and run in `ready`. Parse, dangling ids (**separate exit code from cycles**, since both produce the same Kahn residual and send the operator to different remedies), cycles, unresolvable ADR references, orphan ratio, reverse coverage, set closure, trunk integrity, merge-record reconciliation, witness disagreement, branch hygiene, and the completeness-mode census.
+
+Two rules make them fail closed. **An ADR yielding zero parsed decisions is an error**, because a zero-decision parse is otherwise indistinguishable from full coverage. And the main loop branches on the exit code, never the prose — treating **exit 0 with empty stdout, or a missing terminal OK line, as a broken instrument rather than as "nothing to do"**, since `git for-each-ref` on an empty namespace and `git ls-tree` on a missing path both print nothing and exit 0.
+
+#### What it still cannot do
+
+**A merge that drops the work still reads satisfied.** Parentage proves a human merged the branch; it does not prove the merge carried the diff. Not fixable at this layer — it belongs to re-running the story's named acceptance check against trunk after the merge. **Reverse coverage is one bit per decision**: it sees a decision with no story, never a decision that decomposed into four stories of which two were written; partial decomposition is the planner's source-to-plan seam. **Every check is a drift detector, not a tamper barrier** — the agent has Bash. And **only one working copy knows what is in flight**, deliberately, so a second clone reads an in-flight story as ready.
+
+---
+
 ## 4. The runtime: containment, sequencing, and the autonomous loop
 
 ### 4.1 The tension, and the position
@@ -607,7 +660,11 @@ Grounded exit-code map, since the docs call it undocumented: **0** = harness com
 
 The prior design's park rule (an unpaired start record means the phase died) is necessary and insufficient. It detects death *inside* a phase. It cannot detect death *between* phases: phase N's end record lands, the driver dies before phase N+1's start record, and the store reads as clean and complete. A resumed driver re-runs N+1 from scratch and duplicates any non-idempotent side effect. That state is also indistinguishable from "the run finished normally at N."
 
-**So phase position is re-derived from git, every resume, always.** A phase completes by creating a ref — `chain/<story-id>/phase-<n>` — or by a phase-tagged commit trailer. The resume path asks git "what is the highest completed phase for this story?" and never asks the log, and never asks a story spec's `status:` frontmatter. This generalizes W9's conclusion: **status fields are advisory, git is authority.**
+**So phase position is re-derived from git, every resume, always.** A phase completes by creating a ref — `refs/chain/<story-id>/attempt-<a>/phase-<n>` — or by a phase-tagged commit trailer. The resume path asks git "what is the highest completed phase for this story?" and never asks the log, and never asks a story spec's `status:` frontmatter. This generalizes W9's conclusion: **status fields are advisory, git is authority.**
+
+> **Corrected: the phase ref lives in its own `refs/chain/` namespace, not under `refs/heads/`.** This section first wrote `chain/<story-id>/phase-<n>`, which is *impossible* alongside the story branch §4.7 creates at `git branch chain/<story-id>`. **VERIFIED**: with `refs/heads/chain/STORY-0041` present, `git update-ref refs/heads/chain/STORY-0041/phase-1` fails with `cannot lock ref … 'refs/heads/chain/STORY-0041' exists; cannot create`. A ref and a ref-directory cannot share a path. In a separate namespace the two coexist, which is also correct on the merits: phase refs are per-instance run state, never shared truth, so they are never pushed and a fresh clone reporting none is telling the truth. The `attempt-<a>` level exists for §4.10's re-walk rule — a return to phase N deletes `phase-{N..end}` of the current attempt in one `git update-ref --stdin` batch, so the git-derived resume answer cannot disagree with the rule that a bounce invalidates everything downstream.
+>
+> **And never configure a fetch refspec for that namespace.** `+refs/chain/*:refs/chain/*` with `--prune` deletes every local phase and park ref on the normal path, because nothing pushes them — which silently restarts in-flight stories from phase one and resurrects parked ones. Fetch only the trunk.
 
 The unpaired-start rule stays as a secondary in-phase liveness alarm, and it now has a positive form: a `.jsonl` with events and no `result` line is in-phase death, detected rather than inferred.
 
