@@ -11,5 +11,6 @@ cd "$(dirname "$0")/.."
 bash scrub-gate.sh
 python3 harness/rule_grades.py
 python3 harness/fixtures/rule_grades_test.py
+python3 harness/fixtures/scope_check_test.py
 python3 reference/test_sdlc_gate.py
 python3 harness/algebra/validate_note.py
