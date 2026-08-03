@@ -5,7 +5,7 @@ paths:
 
 # Go concurrency
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, and the sharpest tool here (`go test -race`) is not among them. Goroutine lifetime and context propagation are review.
+**Enforcement grade:** partly mechanical — the gate now registers a Go toolchain (`_TOOLCHAINS` holds python, scala, java, go, typescript): golangci-lint findings keyed (file, linter) are Check A, `//nolint` — bare and per-named-linter — is Check B, `t.Skip`/`t.Skipf`/`t.SkipNow` counts and assertion sites are Check D, and `go test -run=^$ ./...` is the fail-closed compile precondition. It is a DIFFERENTIAL against the merge base, so it blocks what a change ADDS and never what already stands, and `govet` catches part of this page — `lostcancel`, `copylocks`, `loopclosure` — so a new one blocks. **The sharpest tool here is still not run**: `go test -race` is not invoked by the gate or its precondition, so a data race introduced by a change passes. Goroutine lifetime and context propagation are review.
 
 Context propagation, goroutine lifecycle, and channel ownership for a program that shells out to external commands (`git`, a linter, and similar) and calls an LLM API. Sources: the Go blog on context (go.dev/blog/context-and-structs), pipelines (go.dev/blog/pipelines), the `errgroup` package, the race-detector blog, and the Uber/Google style guides.
 

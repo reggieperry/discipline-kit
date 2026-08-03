@@ -5,7 +5,7 @@ paths:
 
 # Go types and interfaces
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned. `go vet` would be the natural Check A source.
+**Enforcement grade:** partly mechanical — the gate now registers a Go toolchain (`_TOOLCHAINS` holds python, scala, java, go, typescript): golangci-lint findings keyed (file, linter) are Check A, `//nolint` — bare and per-named-linter — is Check B, `t.Skip`/`t.Skipf`/`t.SkipNow` counts and assertion sites are Check D, and `go test -run=^$ ./...` is the fail-closed compile precondition. It is a DIFFERENTIAL against the merge base, so it blocks what a change ADDS and never what already stands. `govet` and `staticcheck` are in the default set — both were observed firing on an unconfigured module — so a new finding from either blocks. Whether a type models the domain, and the choice between an interface and a concrete return, have no scanner.
 
 Encode invariants in the type system so the compiler catches wrong calls before the code runs, and keep interfaces small and consumer-defined. Sources: Go Code Review Comments, the Google and Uber style guides, *100 Go Mistakes*; the substitutability discipline is from Liskov (`craft-abstraction.md`).
 

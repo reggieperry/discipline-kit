@@ -5,7 +5,7 @@ paths:
 
 # Go testing
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, so the anti-weakening section below describes what a differential gate WOULD forbid for Go, not what this one does. A deleted test, a new `t.Skip`, or a dropped assertion passes.
+**Enforcement grade:** partly mechanical — the gate now registers a Go toolchain (`_TOOLCHAINS` holds python, scala, java, go, typescript): golangci-lint findings keyed (file, linter) are Check A, `//nolint` — bare and per-named-linter — is Check B, `t.Skip`/`t.Skipf`/`t.SkipNow` counts and assertion sites are Check D, and `go test -run=^$ ./...` is the fail-closed compile precondition. It is a DIFFERENTIAL against the merge base, so it blocks what a change ADDS and never what already stands. Check D reads `_test.go` files: skip markers must not rise and assertion sites (`t.Error*`, `t.Fatal*`, `require.*`, `assert.*`) must not fall, so a deleted test and a new `t.Skip` both block. The anti-weakening list below is therefore enforced in part. Two gaps, named rather than left to be found: coverage-drop is opt-in (`--coverage`), and no property or fuzz parameter is scanned, so a reduced fuzz corpus or a lowered generator budget passes.
 
 How to write Go tests: table-driven structure, the standard assertion idioms, test doubles, fuzzing, and property-based testing. Sources: the `testing` package docs, the Go blog (subtests, fuzzing), the Go Test Comments wiki (go.dev/wiki/TestComments), the Google style guide, `google/go-cmp`, and `pgregory.net/rapid`. The TDD cadence and design discipline are in `craft-tdd.md`; this rule is the Go mechanics.
 

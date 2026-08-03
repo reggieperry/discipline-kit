@@ -550,5 +550,136 @@ class TypeScriptCoverageTests(unittest.TestCase):
                 gate.run_istanbul_coverage(Path(td))
 
 
+# --- Go toolchain -------------------------------------------------------------
+# Formats captured from golangci-lint 2.12.2 and go 1.26 before these were written. Two of the
+# assertions below exist because the captured output differed from the obvious guess.
+
+class GoDetectTests(unittest.TestCase):
+    def test_go_mod_detects(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "go.mod").write_text("module example.com/x\n")
+            self.assertTrue(gate.GoToolchain().detect(Path(td)))
+
+    def test_no_marker_no_detect(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(gate.GoToolchain().detect(Path(td)))
+
+    def test_go_wins_over_package_json(self):
+        """A Go repo with a package.json for its frontend tooling is a Go repo."""
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "go.mod").write_text("module example.com/x\n")
+            (Path(td) / "package.json").write_text("{}")
+            self.assertIsInstance(gate.select_toolchain(Path(td), None), gate.GoToolchain)
+
+    def test_override_selects_go(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIsInstance(gate.select_toolchain(Path(td), "go"), gate.GoToolchain)
+
+
+class GolangciParseTests(unittest.TestCase):
+    def test_trailing_human_summary_does_not_break_the_parse(self):
+        """CAPTURED, not assumed: golangci-lint 2.x with --output.json.path stdout writes the JSON
+        document on line 1 and then appends a human-readable summary. json.load(stdout) raises
+        'Extra data'. A parser that took the whole stream would report zero findings on every
+        run — a silent fail-open, and the reason this test exists."""
+        payload = (
+            '{"Issues":[{"FromLinter":"errcheck","Text":"unchecked",'
+            '"Pos":{"Filename":"main.go","Line":7,"Column":15}}],"Report":{}}\n'
+            "3 issues:\n* errcheck: 1\n* staticcheck: 2\n")
+        self.assertEqual(gate._parse_golangci_json(payload, Path("/repo")),
+                         gate.Counter({("main.go", "errcheck"): 1}))
+
+    def test_findings_keyed_file_and_linter(self):
+        payload = json.dumps({"Issues": [
+            {"FromLinter": "staticcheck", "Pos": {"Filename": "a.go", "Line": 1}},
+            {"FromLinter": "staticcheck", "Pos": {"Filename": "a.go", "Line": 9}},
+            {"FromLinter": "errcheck", "Pos": {"Filename": "b/c.go", "Line": 2}},
+        ]})
+        self.assertEqual(gate._parse_golangci_json(payload, Path("/repo")), gate.Counter({
+            ("a.go", "staticcheck"): 2, ("b/c.go", "errcheck"): 1}))
+
+    def test_empty_and_malformed_are_empty_not_crash(self):
+        self.assertEqual(gate._parse_golangci_json("", Path("/repo")), gate.Counter())
+        self.assertEqual(gate._parse_golangci_json("nope", Path("/repo")), gate.Counter())
+        self.assertEqual(gate._parse_golangci_json('{"Issues":null}', Path("/repo")), gate.Counter())
+
+
+class GoSuppressionScanTests(unittest.TestCase):
+    def test_bare_and_targeted_are_distinct_keys(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "a.go").write_text("//nolint\nvar a = 1\n//nolint:errcheck // reason\nvar b = 2\n")
+            got = gate.scan_go_suppressions(root)
+            self.assertEqual(got[("a.go", "nolint")], 1)
+            self.assertEqual(got[("a.go", "nolint:errcheck")], 1)
+
+    def test_each_named_linter_is_its_own_key_so_broadening_is_visible(self):
+        """`//nolint:a` widened to `//nolint:a,b` must register as a NEW key, or Check B's
+        'broadened suppression' arm cannot see the widening at all."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "a.go").write_text("//nolint:errcheck,gosec\nvar a = 1\n")
+            got = gate.scan_go_suppressions(root)
+            self.assertEqual(got[("a.go", "nolint:errcheck")], 1)
+            self.assertEqual(got[("a.go", "nolint:gosec")], 1)
+            self.assertEqual(got[("a.go", "nolint")], 0)
+
+    def test_vendor_never_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "vendor" / "x").mkdir(parents=True)
+            (root / "vendor" / "x" / "y.go").write_text("//nolint\n")
+            self.assertEqual(gate.scan_go_suppressions(root), gate.Counter())
+
+
+class GoTestWeakeningScanTests(unittest.TestCase):
+    def test_skip_family_and_assert_sites(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "a_test.go").write_text(
+                "func TestA(t *testing.T) { t.Skip(\"x\") }\n"
+                "func TestB(t *testing.T) { t.Skipf(\"%s\", \"y\") }\n"
+                "func TestC(t *testing.T) { t.SkipNow() }\n"
+                "func TestD(t *testing.T) { t.Errorf(\"e\"); t.Fatalf(\"f\") }\n"
+                "func TestE(t *testing.T) { require.NoError(t, err); assert.Equal(t, 1, 1) }\n"
+            )
+            got = gate.scan_go_test_weakening(root)
+            self.assertEqual(got["skips"]["a_test.go"], 3)
+            self.assertEqual(got["asserts"]["a_test.go"], 4)
+
+    def test_non_test_file_not_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "a.go").write_text("t.Skip()\n")
+            self.assertEqual(gate.scan_go_test_weakening(root)["skips"], {})
+
+    def test_is_test_file(self):
+        self.assertTrue(gate._go_is_test_file("internal/x/a_test.go"))
+        self.assertFalse(gate._go_is_test_file("internal/x/a.go"))
+
+
+class GoCoverageTests(unittest.TestCase):
+    def test_module_path_prefix_is_stripped(self):
+        """CAPTURED: a coverprofile names files by MODULE path, not repo-relative path —
+        `example.com/goprobe/main.go` for a file at `main.go`. Keys that keep the prefix match
+        nothing on the other side of the differential, so every package reads as new."""
+        profile = ("mode: set\n"
+                   "example.com/m/internal/a/x.go:5.13,12.2 4 1\n"
+                   "example.com/m/internal/a/y.go:3.1,4.2 1 0\n"
+                   "example.com/m/cmd/z.go:1.1,2.2 2 1\n")
+        got = gate.parse_go_coverprofile(profile, "example.com/m")
+        self.assertAlmostEqual(got["internal/a"], 80.0)   # 4 of 5 statements
+        self.assertAlmostEqual(got["cmd"], 100.0)
+
+    def test_zero_statement_block_never_minted_as_100(self):
+        self.assertEqual(gate.parse_go_coverprofile("mode: set\nm/a.go:1.1,2.2 0 0\n", "m"), {})
+
+    def test_missing_profile_is_operational_not_empty(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "go.mod").write_text("module m\n")
+            with self.assertRaises(gate.CoverageOperationalError):
+                gate.run_go_coverage(Path(td))
+
+
 if __name__ == "__main__":
     unittest.main()

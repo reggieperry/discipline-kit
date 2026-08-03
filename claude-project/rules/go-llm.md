@@ -6,7 +6,7 @@ paths:
 
 # Go LLM boundary (structured output)
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, and no scanner anywhere in the kit reads a model boundary.
+**Enforcement grade:** review and convention — the gate now registers a Go toolchain (`_TOOLCHAINS` holds python, scala, java, go, typescript): golangci-lint findings keyed (file, linter) are Check A, `//nolint` — bare and per-named-linter — is Check B, `t.Skip`/`t.Skipf`/`t.SkipNow` counts and assertion sites are Check D, and `go test -run=^$ ./...` is the fail-closed compile precondition. It is a DIFFERENTIAL against the merge base, so it blocks what a change ADDS and never what already stands — but no scanner anywhere in this kit reads a model boundary, so a bounded call, a re-validated boundary DTO, a pinned model id, and the prompt-safety rules are unenforced in every language.
 
 The typed contract between your code and the model — the single place this boundary's reliability is bought. Sources: the model provider's Go SDK, `invopop/jsonschema`, `go-playground/validator`, and `encoding/json`. The model is called through its official Go SDK; the model id is configured per call site.
 

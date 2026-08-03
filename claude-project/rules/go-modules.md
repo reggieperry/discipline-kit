@@ -7,7 +7,7 @@ paths:
 
 # Go module and package layout
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned. `go mod tidy` drift and `govulncheck` findings are unpoliced.
+**Enforcement grade:** review and convention — the gate now registers a Go toolchain (`_TOOLCHAINS` holds python, scala, java, go, typescript): golangci-lint findings keyed (file, linter) are Check A, `//nolint` — bare and per-named-linter — is Check B, `t.Skip`/`t.Skipf`/`t.SkipNow` counts and assertion sites are Check D, and `go test -run=^$ ./...` is the fail-closed compile precondition. It is a DIFFERENTIAL against the merge base, so it blocks what a change ADDS and never what already stands — but nothing in that set reads this file's topics. The compile precondition resolves the module graph, so an unresolvable dependency fails closed; `go mod tidy` drift, `govulncheck` findings, and package-boundary direction are unpoliced.
 
 How to organize packages and the module tree. Source of record: the official Go layout guide (go.dev/doc/modules/layout). The popular `golang-standards/project-layout` repo is **not** a Go standard and is explicitly contested — prefer the official shape.
 
