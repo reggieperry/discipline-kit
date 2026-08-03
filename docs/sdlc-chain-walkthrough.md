@@ -304,6 +304,27 @@ absolute gate greener.
 A **workflow inside the phase** — one subagent per lens, each committing its own findings to its own
 branch. The main loop unions from refs, never from the workflow's return string.
 
+**The lenses are `/pr-review` steps 4 to 6, and they are computed rather than chosen.** The kit
+already ships a seven-step review that loads the reviewed repo's own rules, targets them by the
+enforcement grade each declares, and applies the neutral core and the simplification lens. The chain
+consumes that rather than inventing a second definition of what a review looks at — one place says
+what gets read, and the chain reads it.
+
+So the lens list is the grade-partitioned rule set: one subagent per `review and convention` rule,
+because nothing else will ever check those; one per `partly mechanical` rule, pointed at the
+remainder and required to state which part it treated as covered; `mechanically enforced` rules
+skipped and recorded as skipped.
+
+Steps 1 to 3 are not skipped, they are already done. Scope is supplied — the reviewer is handed the
+branch and the base. Language detection happens inside step 4's glob matching. And **the gate is
+READ, not re-run**: the tester already gated this same tree with this same script, so a third run is
+the duplication §4.9 warns about rather than re-derivation. The reviewer cites the tester's receipt
+and moves on; a gate result it did not obtain is still a gate result it must report.
+
+Step 7's content is unchanged and its shape is not. The findings still carry `file:line`, still
+verify before asserting, still separate "wrong" from "I'd prefer" — but severity routes to
+disposition instead of to prose.
+
 Reads the specification against the code. **Never approves.** Three outputs, and they map one-to-one
 onto three dispositions:
 
@@ -317,6 +338,20 @@ The third state is why the output is three-valued. A reviewer restricted to refu
 blocked from reading, must either fabricate a rejection or emit a clean report — and the clean report
 is likelier and worse. **The main loop enumerates the lenses it expected** rather than unioning
 whatever refs it finds, which is what makes a lens that never ran visible.
+
+**A fourth output, which is not a disposition: the non-blocking finding.** A review can be clean on
+its gate and still return something worth fixing — this exact review returned two — and the three
+dispositions have nowhere to put it, so under `merge_ok` it merges and the finding evaporates. That
+was named as a loss when the pack was audited and not repaired. It drains into the **documenter's
+briefing**: visible during the veto window, and preserved in `stories/_archive/` afterwards. A drain,
+not a gate — it records without blocking, which is the tier the pack had and this design dropped.
+
+**And the coverage receipt is a `merge_ok` conjunct, not a courtesy.** §4.12 accepts one piece of
+testimony and reads it as a bare "no undisposed refutation", which cannot tell a review that covered
+every dimension from one that skipped a dimension entirely. The receipt already carries that — rules
+applicable versus rules read, and which matched nothing. A receipt showing an unexamined dimension
+**parks rather than merges**. Without this the reviewer is made to produce a measurement that nothing
+reads, which is the defect this document spends §7 on.
 
 ### D6 · Documenter
 
