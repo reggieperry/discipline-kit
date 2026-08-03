@@ -346,12 +346,30 @@ blocked from reading, must either fabricate a rejection or emit a clean report �
 is likelier and worse. **The main loop enumerates the lenses it expected** rather than unioning
 whatever refs it finds, which is what makes a lens that never ran visible.
 
-**A fourth output, which is not a disposition: the non-blocking finding.** A review can be clean on
-its gate and still return something worth fixing — this exact review returned two — and the three
-dispositions have nowhere to put it, so under `merge_ok` it merges and the finding evaporates. That
-was named as a loss when the pack was audited and not repaired. It drains into the **documenter's
-briefing**: visible during the veto window, and preserved in `stories/_archive/` afterwards. A drain,
-not a gate — it records without blocking, which is the tier the pack had and this design dropped.
+**The non-blocking finding goes back down the loop, and is not filed.** A review can be clean on its
+gate and still return something worth fixing — this exact review returned two — and the earlier draft
+of this section drained those into the documenter's briefing to record without blocking.
+
+That is the pattern Elder used, and it was measured failing: findings became issues and the issues
+accumulated. A briefing entry nobody acts on is an issue nobody closes, and filing one is how a
+finding becomes somebody's problem later instead of this run's problem now. **The chain has a loop.
+Use it.**
+
+So: **nothing exits un-dispositioned.** Every finding is either fixed, or refused with a reason that
+is recorded. There is no third state and no queue.
+
+- **One bounce carries every finding**, blocking and non-blocking together. The budget counts
+  returns, not findings, so three nits are one return rather than three.
+- **The worker may refuse**, and the refusal is committed with its reason. Some findings should be
+  refused: a preference where the alternatives are worse is not a defect, and a reviewer that must
+  be satisfied can always find one more thing.
+- **The re-walk reviewer sees prior refusals.** It either accepts them or refutes the same finding
+  again — and a second refutation of a finding already refused is a genuine disagreement, so it
+  **escalates to the operator** rather than bouncing a third time. That is what stops a polish loop
+  without capping the reviewer.
+
+**"Clean at exit" is the state the chain leaves in**, and unlike "merged with three open findings" it
+is checkable: no finding without a disposition.
 
 **And the coverage receipt is a `merge_ok` conjunct, not a courtesy.** §4.12 accepts one piece of
 testimony and reads it as a bare "no undisposed refutation", which cannot tell a review that covered
