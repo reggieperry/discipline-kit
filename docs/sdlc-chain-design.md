@@ -74,7 +74,9 @@ Stated briefly because it survives intact.
 
 **Five phases, one warrant each.** planner (park the plan), worker (build through the gate, **then audit its own diff and fix what the audit returns before handing off** — §3.9), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §4.
 
-**The human merge is the transition-grade backstop.** The chain is autonomous up to a merge-ready branch and no further. The finalizer does not merge. This was right before, it is right now, and nothing measured in the review earns the right to retire it. The archived `chain-worker.md` says it plainly and should be kept verbatim: what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
+**~~The human merge is the transition-grade backstop.~~ RETIRED by §4.12 — and this entry is kept rather than deleted, because it was the load-bearing claim of the whole design and its removal should be visible.** It read: the chain is autonomous up to a merge-ready branch and no further; the finalizer does not merge; what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
+
+That held while the design assumed a sensitive-file list and a repository where a bad merge is expensive. Neither survives: the list is gone by operator decision (§4.9), and this repository class has no irreversible action — revert restores the prior state. **The backstop is now revert, and it has three named expiry conditions** (§4.12): a push to a public remote, a consumed tag, and a change to the formal core documents. When one of those enters play, this entry comes back rather than being re-argued from scratch.
 
 **Review testifies; only a check signs.** A clean review is an absence report. A finding is real when its disposing check goes red.
 
@@ -786,7 +788,9 @@ What survives is the habit, not the phase. `craft-tdd.md` beat 3 — perturb the
 
 Two residues now have no owner at all, and both were previously covered by the agents just removed. **Test quality has no reader**: an implementation-mirroring test parrots the production algorithm, and with the slop rubric gone and mutation gone, nothing detects it — the attest-only tester judged on "gate green" has an incentive pointing straight at it. And **no step reads the finished code as code** against the project's own standards; every remaining reading step is defined by a different pairing. Neither needs an agent to fix. Both need someone to decide they are acceptable, which is a different act from not noticing them.
 
-**The documenter stays in, repositioned: its value is PR authorship, not feature documentation.** That fills a gap this design opened elsewhere — dropping auto-merge was right, but it made the human's briefing matter *more* than in the pack, since the pack could at least auto-merge its glance tier while this chain never can, and the briefing went from mechanically derived to whatever the terminal package happens to contain. The documenter is where it becomes derived again.
+**The documenter stays in, repositioned: its value is PR authorship, not feature documentation.** The human's briefing is mechanically derived rather than whatever the terminal package happens to contain, and under §4.12 it is what a reviewer reads during the veto window.
+
+> **Superseded in part by §4.12.** This paragraph originally argued that dropping auto-merge was right and that the human merge mattered *more* here than in the pack. That was reasoned under two conditions since removed — a sensitive-file list, and a repository where a bad merge is expensive. Neither holds. The claim that the pack's rubric "reads agent-written metadata" was also too broad: it is true of one conjunct of four, and three are re-derivable. See §4.12.
 
 Keep it a distinct step rather than folding it into the finalizer. The pack separated them and the separation earned its keep: a documenter once shipped a clean feature document and silently deleted eleven unrelated story specs in the same commit, and it reached a PR — which is a direct refutation of "the human merge will catch it," the proposition this design leans on hardest. Whichever step is terminal carries the merged-tree gate above; that is what makes the ordering safe rather than the ordering itself.
 
@@ -806,7 +810,7 @@ Every step above states a pass condition. This section states what happens when 
 
 That one-to-one mapping is the reason the output shape is three-valued rather than two. A reviewer restricted to refute-or-absence, when blocked, must either fabricate a rejection or emit a clean report — and the clean report is the likelier and the worse. The third state is what makes "back to the worker" mean a real finding rather than a reader who could not look.
 
-The same edge on the other steps. **Tester:** gate red returns to the worker with the failing output. **Finalizer:** a red gate on the merged tree, or a scope reconciliation that fails against the planner's declared list, returns to the worker. **Planner:** not-plannable is a typed park, never a bounce, because there is nothing upstream of it.
+The same edge on the other steps. **Tester:** gate red returns to the worker with the failing output. **Finalizer:** a red gate on the merged tree, a scope reconciliation that fails against the planner's declared list, or a source-set integrity failure returns to the worker; everything green reaches `merge_ok` (§4.12) rather than parking for the operator. **Planner:** not-plannable is a typed park, never a bounce, because there is nothing upstream of it.
 
 **Triage before bouncing, because not every red is the worker's fault.** Three causes must be separated: a *worker fault* (return and fix), an *environment fault* (the check could not run — park, never bounce, since a worker cannot fix an absent `node_modules`), and a *stale baseline* (main moved — re-integrate, then re-derive). Returning an environment fault to the worker is how a chain spends a night failing to repair something that was never broken.
 
@@ -858,6 +862,32 @@ So the repo declares only what is *available* and how to extract units from it; 
 
 **No source at all is a VOID, not a pass.** If the profile declares no sources, or the declared ones resolve to nothing, the check reports that it examined nothing and the chain records a completeness verdict it did not obtain. A silent green here is the failure this document is most repetitively about: a check that could not run reading identically to one that passed.
 
+### 4.12 `merge_ok` — when the chain merges without asking
+
+Elder's chain had three tiers: `glance_merge` merged at once, `review_encouraged` parked then auto-merged after 24h unless a human objected in the PR comments, `human_required` parked indefinitely. The operator's own envelope sat on top and overrode the tier: auto-merge when code lines ≤ ~700 (excluding plan and registry files — *count what carries risk, not length*), mergeable CLEAN, CI green, `review_verdict=pass`, no sensitive file touched, and no architectural signal.
+
+**Its sharpest lesson was that the tier is not the gate.** The chain bumped to `human_required` on size alone above 100 added lines, so a blanket "human_required escalates" rule escalated nearly every PR and the 700-line envelope never fired. The fix was to split by cause: size-only escalation auto-merges, for-cause escalation does not.
+
+**Here the two merging tiers collapse into one `merge_ok` state**, for a reason specific to this repository class rather than a general preference. Elder's capital floor existed because it traded live: a bad merge moved money, and revert does not un-place a trade. A library and a platform have no such floor — revert genuinely restores the prior state — and the sensitive-file list that carried the distinction is gone by operator decision (§4.9).
+
+**Three of Elder's four conjuncts survive as checks, and the fourth changes character.**
+
+| Conjunct | Status here |
+|---|---|
+| mergeable CLEAN, CI green | git and CI facts — re-derived |
+| the gate green **on the merged tree** | §4.9's first fix, now carrying real weight |
+| scope reconciliation against the planner's declared paths | re-derived from the cumulative diff |
+| **source-set integrity** (§4.11, and the handoff) | re-derived; new, and mandatory once merging is unattended |
+| review verdict / signals | the one testimony conjunct — fails closed |
+| size | **no longer a gate.** It was a proxy for risk; with no capital floor and cheap revert it carries no information the operator lacks. Report it, do not branch on it |
+
+**What still escalates** is small and nearly all re-derivable: a red gate on the merged tree, scope reconciliation failing, a reviewer refutation not disposed, **reviewer could-not-inspect**, a check that could not run, or the bounce budget exhausted.
+
+**A short veto window is a property of `merge_ok`, not a second tier.** It is what `review_encouraged` actually bought, it costs nothing when nobody is watching, and it gives the documenter's briefing (§4.9) something to be read *during*.
+
+**Where "we can always revert" stops being true**, stated now so nobody discovers it later: anything pushed to a public remote, where caches and forks outlive a revert; a tagged artifact someone has consumed; and a change to the formal core documents, where revert restores the bytes but not a conformance decision made against the wrong bytes in between. None applies on day one. All three are reachable.
+
+**One dependency this creates.** Unattended merging makes the finalizer's merged-tree gate the only thing standing between a story and `main`. It was already the first thing to build; it is now the single unchecked artifact that ships *by itself*.
 ---
 
 ## 5. The per-language plug points

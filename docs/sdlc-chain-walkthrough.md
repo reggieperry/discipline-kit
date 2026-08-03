@@ -329,18 +329,23 @@ doc and silently deleted eleven unrelated story specs in the same commit, and it
 
 ### D7 · Finalizer
 
-Subagent. Integrates and packages; **does not merge to main**.
+Subagent. Integrates and packages, then hands to `merge_ok` or escalates (§4.12).
 
 **Completion — and this is the design's weakest joint until it is built.** Fetch main and integrate
-first, then run the full gate **on the merged tree** with a base-provided examiner, plus cumulative
-scope reconciliation against the planner's declared path list, with a **per-conjunct receipt** so a
-check that could not run never renders as green.
+first, then on the **merged tree**, with a base-provided examiner: the full gate, cumulative scope
+reconciliation against the planner's declared path list, and **source-set integrity**
+(`sha256sum -c` against the vendored manifest, from the set's own directory). Each with a
+**per-conjunct receipt**, so a check that could not run never renders as green.
 
 The merged tree exists nowhere else in the chain: the worker's gate ran on the worker's tree, the
 tester's on the tester's. And hooks cannot cover it — git fires `pre-merge-commit` for an
 auto-committed merge, and the repo ships only `pre-commit` and `post-commit`.
 
-**NOT BUILT. This is the first thing to build**, because it fails on green runs rather than bad ones.
+**NOT BUILT, and it is the first thing to build.** It was already the only unchecked artifact in the
+chain; under §4.12 it is the only unchecked artifact that **ships by itself**, since a green finalizer
+now merges without asking. The source-set conjunct is there for the same reason — unattended merging
+is what makes a story that corrupts the documents the rest of the chain is verified against something
+no human sees first.
 
 ---
 
@@ -363,14 +368,23 @@ default; then a typed park.
 
 ---
 
-## Stage E — The human merge
+## Stage E — Merge
 
-### E1 · Read the package
+Formerly "the human merge". Under §4.12 the common path is unattended; the human is a *vetoer* rather
+than a gate, and the escalation path is what their judgement is reserved for.
 
-The finalizer's output plus the documenter's briefing. This is the decision point, and everything
-above it is instrumentation for the person making it.
+### E1 · The verdict
 
-### E2 · Merge
+Every conjunct green — CI, the merged-tree gate, scope reconciliation, source-set integrity — and the
+one testimony conjunct (no undisposed refutation) satisfied, is **`merge_ok`**. Anything else
+escalates: a red conjunct, a reviewer that **could not inspect**, a check that could not run, or the
+bounce budget exhausted. Size is reported, never branched on.
+
+### E2 · The veto window, then merge
+
+The documenter's briefing is posted and a short window opens. An objection during it stops the merge;
+silence proceeds. The window is a property of `merge_ok`, not a second tier — it is what Elder's
+`review_encouraged` actually bought, and it costs nothing when nobody is watching.
 
 ```
 $ chain-graph merge STORY-0041
@@ -380,6 +394,11 @@ $ chain-graph merge STORY-0041
 carries a merge commit (a story branch that merged a sibling), if the terminal phase ref is missing,
 or if HEAD is not `main`. A forgotten `--no-ff` stalls loudly instead of releasing silently, which is
 the direction allowed to be wrong.
+
+**The safety argument is now revert, not review**, and it holds because this repository class has no
+irreversible action — no capital, no live trade. It stops holding at three reachable points named in
+§4.12: a push to a public remote, a consumed tag, and a change to the formal core documents. Until one
+of those is in play, a bad merge costs a `git revert`.
 
 ### E3 · Archive
 
@@ -407,7 +426,8 @@ Satisfaction is now witnessed on trunk, so `chain-graph ready` returns the next 
 - **Reverse coverage is one bit per decision.** It sees a decision with no story; never a decision
   that decomposed into four stories of which two were written.
 - **Every check here is a drift detector, not a tamper barrier.** The phase agents hold Bash. The
-  guards catch accident, crash and confusion — which is what actually happens — and the human merge
-  is the only real backstop.
+  guards catch accident, crash and confusion — which is what actually happens — and under §4.12 the
+  backstop is **revert**, not review. That is sound for this repository class and it expires at three
+  named points: a public push, a consumed tag, and a change to the formal core documents.
 - **Depth costs one merge cycle per level.** A four-deep set is a four-day set if the operator merges
   once a day.
