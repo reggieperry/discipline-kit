@@ -1,10 +1,11 @@
 # The SDLC chain, end to end
 
-**Status: none of this is built.** `docs/sdlc-chain-design.md` carries the reasoning and §6 of it
-carries the build order; this document is the operational walk that design implies, written so the
-gaps are visible as gaps. Every step below names who runs it, what it reads, what it writes, and —
-where it matters — the predicate that decides it happened. Steps marked **NOT BUILT** have no
-implementation at all; steps marked **PARTIAL** have a piece that exists.
+**Status: almost none of this is built** — see the build-state table below, which covers all 21 steps
+and is checked against kit `main`. `docs/sdlc-chain-design.md` carries the reasoning; §6.1 of it
+carries the principle that orders the work, and §6.2 the items that pay with no chain at all. This
+document is the operational walk that design implies, written so the gaps are visible as gaps. Every
+step names who runs it, what it reads, what it writes, and — where it matters — the predicate that
+decides it happened.
 
 Read `sdlc-chain-design.md` §3.10 (the story graph), §4.8 (the substrate), §4.9 (what the pack was
 buying), §4.10 (the failure edge), and §4.11 (the completeness chain) for why any of it is shaped
@@ -27,6 +28,43 @@ Everything below happens on one of four, and which one matters more than it look
 The rule that follows from the table: **the main loop drives.** A workflow cannot sequence the
 phases, because it runs to completion before returning and a re-derived verdict is needed *between*
 them.
+
+---
+
+## Build state — all 21 steps
+
+Checked against kit `main`, not recalled. **2 operator actions, 4 partial, 15 not built.** Any step
+not in this table is a step this document forgot; the count is written down so it cannot quietly
+shrink.
+
+| Step | State | What exists |
+|---|---|---|
+| A1 design doc | operator | — |
+| A2 write the ADR | **partial** | `harness/templates/ADR-template.md`; still cites the retired ledger's `clm-NNNN` |
+| A3 index it | **partial** | registry table in `docs/adrs/README.md`; **zero ADRs registered** |
+| A4 decompose into stories | not built | no template, no schema, no parser |
+| A5 commit-path integrity checks | not built | no `chain-graph` |
+| B1 `propose` | not built | |
+| B2 fix the coverage gap | not built | needs B1 |
+| B3 `agree` | not built | |
+| C1 `ready` | not built | |
+| C2 take the first READY story | not built | needs C1 |
+| D1 planner | not built | 0 chain agents on `main`; the five exist only on tag `archive/kit-chain` |
+| D2 worker | not built | as above |
+| D3 completeness check, plan→code | not built | |
+| D4 tester | **partial** | the differential exists — `reference/sdlc-gate.py`, 1619 lines, Checks A/B/D, suppressions and skip markers — and is wired into no phase |
+| D5 reviewer | not built | |
+| D6 documenter | not built | |
+| D7 finalizer | not built | **build this first** |
+| E1 read the package | operator | — |
+| E2 merge | **partial** | `git merge --no-ff` works; the refusing wrapper and the `Merged-Story:` trailer convention do not exist |
+| E3 archive | not built | |
+| E4 next `ready` unblocks dependents | not built | needs C1 |
+
+Two things the table makes visible that prose hid. **The ADR machinery is the most nearly-complete
+part and has zero instances** — a template and a registry with nothing in them, which is a scaffold
+rather than a practice. And **the one substantial piece of working code, the differential gate, is
+attached to nothing**; it is 1619 lines of exactly the check D4 needs, sitting unwired.
 
 ---
 
@@ -96,6 +134,12 @@ and send the operator to different remedies) · cycles · unresolvable `adr:`/`d
 every non-superseded Decision must be cited by a story or carry `Covered-by: none — <reason>`, and
 **an ADR yielding zero parsed decisions is an error**, because a zero-decision parse is otherwise
 indistinguishable from full coverage.
+
+**Every one of these checks is pinned by two fixtures — a known-good returning 0 and a known-bad
+returning non-zero — and the pinning is not polish.** A predicate that always fails and a driver that
+always halts are externally indistinguishable from a working fence; the kit's own archived
+`postcondition.py` was exactly that for a month without anyone noticing. A check whose failing case
+has never been demonstrated is not a check.
 
 **NOT BUILT.** No `chain-graph` script exists.
 
@@ -195,6 +239,11 @@ Two conditions hold on every main-loop verdict:
 - **Take the examiner from the base, not the judged branch.** A check script that resolves itself
   relative to its own path runs the *worktree's* copy — letting the judged party supply its own
   examiner. `git checkout $BASE -- scripts .githooks build.sbt` into the scratch tree first.
+- **Pin the verdict against a phase that could not act, before trusting it.** Run a phase with every
+  write path withheld and assert the main loop reports FAILURE. This is not optional and it is not
+  defensive: measured, such a phase reports `subtype: "success"`, `is_error: false`, an empty
+  `permission_denials`, and exit 0 while doing nothing at all. A verdict without this test is
+  verified only by never having been given a phase that could not act.
 
 ### D1 · Planner
 

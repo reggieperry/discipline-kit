@@ -917,41 +917,53 @@ Two constraints on any roster, both from §4.9. The **terminal** step — whiche
 
 ## 6. Build order
 
-Each step is useful standalone. Nothing later is required for anything earlier to pay.
+**The inventory now lives in `sdlc-chain-walkthrough.md`**, where every step carries its build state.
+This section is only what a runtime walk cannot express: the principle that orders the work, and the
+items that are not chain steps at all.
 
-**1. The phase runner, with a git-derived verdict.** A single shell function wrapping `claude -p --output-format stream-json --verbose`, appending to a per-phase `.jsonl`, and deciding the phase from a postcondition the runner evaluates itself (§4.4) — never from the stream fields. Stream fields are logged for diagnosis. Plus the pinning test, which is not optional: run a phase with every write path withheld and assert the runner reports FAILURE. Measured, that phase reports `subtype: "success"`, `is_error: false`, empty `permission_denials`, and exit 0 while doing nothing, so a runner without this test is verified only by never having been given a phase that could not act. *Standalone value:* anyone running headless Claude in CI gets a success predicate that is about the work rather than about the harness.
+An earlier version of this section was a fourteen-step sequence written around a `claude -p` bash
+driver. That driver is gone (§4.8), and re-numbering the list would have carried its assumptions
+forward under new labels.
 
-**2. Git-derived phase markers and the driver event log.** Phase refs (`chain/<story>/phase-<n>`), the resume path that asks git rather than the log, and the append-only log with `about` / `supersedes` / `discharged_by` / cost / wall time. *Standalone value:* an audit trail and a resumable position for any multi-step automation, chain or not.
+### 6.1 The ordering principle
 
-**3. The predicate set, rebuilt over git.** Recover `postcondition.py` from `archive/kit-chain`, delete the module-scope `import model`, restore `tester-clean` (pure git already — `git rev-parse`, `git diff --name-only`, a removed-line scan), and re-express `worker-complete` and `no-open-refutation` over git-derivable state, since the obligation edges they folded over now live on the driver's log. Driver branches on `rc != 0`, never `rc == 2`. **Each predicate pinned by both a known-good fixture returning 0 and a known-bad fixture returning non-zero** — a predicate that always fails and a driver that always halts are externally indistinguishable from a working fence. *Standalone value:* runnable checks the operator can call by hand today.
+**A build order is not the runtime order, and confusing the two is the trap.** The chain *runs*
+planner-first; you would never *build* the planner first. Two rules put the work in order instead:
 
-**4. The language profile plus the existing gate.** `profile.toml`, and wire `sdlc-gate.py --toolchain <x>` in as the gate predicate. *Standalone value:* the gate already works; this makes it callable uniformly.
+**Build the verifier before the thing it verifies.** The predicate that decides a phase must exist,
+and must have been shown capable of failing, before the phase whose output it grades. Otherwise the
+first thing built is an actor with nothing watching it, and every later step is added on the word of
+an instrument nobody has tested.
 
-**5. Red-proof, reinstated.** Git-only, `--test-cmd` from the profile, exit 0/2. *Standalone value:* a detection-power check for any TDD slice, chain or not.
+**Build so you can stop anywhere.** Each step earns its keep alone, so an abandoned build leaves
+working tools rather than half a chain. This is not tidiness — it is the only honest hedge on a
+design where nothing is yet built, and it is why the independent items below are worth doing first if
+the chain itself is ever deferred.
 
-**6. The five agents and their phase prompts.** Recovered from `archive/kit-chain` with every ledger and claim reference stripped, warrant language kept, and the frontmatter honesty fix applied: the `tools:` list is a runtime allowlist for *tool* calls (**DOCUMENTED**) and is not containment for a Bash holder (**VERIFIED**) — say so in the brief. `isolation: worktree` plus `worktree.baseRef: "head"` on tester and reviewer.
+### 6.2 What pays with no chain at all
 
-**7. The fence hooks.** PreToolUse on `Bash` and `Write|Edit`, keyed on `agent_type`, with the corrected pattern set, each bounding its own subprocess with `timeout`. Header comment states plainly that this is friction. *Standalone value:* catches accidental `--no-verify` and accidental grader edits from day one.
+These need no phase, no driver, and no story graph. Several address where this build's defects
+actually came from (§3.4), which makes them the highest-value-per-line work in the document.
 
-**8. Cron start and the concurrency lock, in one change.** `flock` per story, atomic `git branch chain/<story>`, cron entry, stall SLO on total phase wall-clock, `CLAUDE_CODE_RETRY_WATCHDOG=1`. Never ship 8 without the lock.
-
-**9. The machine hardening checklist.** Not code — an `INSTALL-HARDENING.md` the operator applies: remove passwordless sudo and re-measure with `sudo -n true`; install `/etc/claude-code/managed-settings.json` root-owned with `disableBypassPermissionsMode: "disable"` and `allowManagedPermissionRulesOnly`; move predicate scripts to a root-owned path with an absolute root-owned interpreter; attempt the bubblewrap sandbox and record whether it works. Each step has a measurement that says whether it took.
-
-**10. A Go toolchain for the gate.** Independent of everything above.
-
-**11. The `test-kind` registry column, and its two checks.** A column recording the kind of test a
-row requires, plus: `bundle` rows must resolve to a `checkAll(` call, and `witness` rows must not.
-*Standalone value:* the cheapest item in this document, needing no prompting at all — it catches a
-row discharged by hand when a stock law suite was available, which happened twice in one build even
-though the plan stated the rule (§3.8).
-
-**12. The citation checker.** Extract every `§N.M` from the sources, confirm the cited document has that section, and confirm the cited section's text still contains the term the scaladoc claims. *Standalone value:* closes source drift (§3.5) mechanically, where twelve stale citations were previously corrected by hand and the correcting slice introduced three more.
-
-**13. The negative-space checklist.** Extract the qualifier-bearing sentences from each cited section and require the registry to account for each. Fourteen in the whole calculus, so this is small. *Standalone value:* a review checklist grounded in the document rather than in memory.
-
-**14. Blind re-derivation as a reviewer phase.** Two prompts, not one, per §3.8: plan-vs-specification and code-vs-plan have different reference points and different blind spots. Two forms, per §3.6 and §3.7: derive the test from the row statement, and derive the row statements from the document section. *Standalone value:* neither needs the chain to run; both are workflows an operator can invoke on a slice today.
-
-Steps 1–3 are the chain's central property. Steps 4–6 make it do work. Steps 7–9 make it run unattended. Step 10 closes the language axis. Steps 11–14 are the drift instruments, and they are the ones that address where this build's defects actually came from (§3.4).
+- **A `test-kind` registry column, and its two checks.** A column recording the kind of test a row
+  requires: `bundle` rows must resolve to a `checkAll(` call, `witness` rows must not. The cheapest
+  item here, needing no prompting — it catches a row discharged by hand when a stock law suite was
+  available, which happened twice in one build even though the plan stated the rule (§3.8).
+- **The citation checker.** Extract every `§N.M` from the sources, confirm the cited document has
+  that section, and confirm the cited section's text still contains the term the citation claims.
+  Closes source drift (§3.5) mechanically, where twelve stale citations were corrected by hand and
+  the correcting slice introduced three more.
+- **The negative-space checklist.** Extract the qualifier-bearing sentences from each cited section
+  and require the registry to account for each. Fourteen in the whole calculus, so it is small.
+- **Blind re-derivation, as a workflow rather than a phase.** Two prompts, not one (§3.8):
+  plan-versus-specification and code-versus-plan have different reference points and different blind
+  spots. Two forms (§3.6, §3.7): derive the test from the row statement, and derive the row
+  statements from the document section. An operator can invoke either on a slice today.
+- **Red-proof, reinstated.** Git-only, `--test-cmd` from the profile, exit 0 or 2. A detection-power
+  check for any TDD slice, chain or not.
+- **A Go toolchain for the gate**, which closes the language axis (§5) and depends on nothing here.
+- **The machine hardening checklist** (§4.3). Not code — an `INSTALL-HARDENING.md` the operator
+  applies, each step carrying the measurement that says whether it took.
 
 ---
 
