@@ -30,6 +30,9 @@ Cases:
   numbered-in-doc  numbered lines inside a `/** */` block          -> 0 (never fires on doc)
   short-banner     a bare rule at the 8-character threshold        -> 1
   contentful-rule  dashes WITH text between them                   -> 0 (not a position marker)
+  history          a doc comment narrating the code's own past      -> 1
+  history-first-cut  the other alternation branch, in an interior     -> 1
+  constraint-not-history  the same fact as a live constraint        -> 0
   empty-dir        the directory exists but holds no source        -> 2 (never a pass)
   missing-dir      the directory does not exist                    -> 2 (never a pass)
 
@@ -95,6 +98,33 @@ object Thing:
   def run(x: Int): Int = x
 """
 
+HISTORY = """\
+object Thing:
+  /** Six positions, and `α` is one of them.
+    *
+    * An earlier cut carried seven, having lifted the digest out — so a claim could not name the
+    * term that produced it.
+    */
+  def run(x: Int): Int = x
+"""
+
+HISTORY_FIRST_CUT = """\
+object Thing:
+  def step(x: Int): Int =
+    // The first cut matched on the event alone, so three cases collapsed to one.
+    x + 1
+"""
+
+CONSTRAINT_NOT_HISTORY = """\
+object Thing:
+  /** Six positions, and `α` is one of them.
+    *
+    * Lifting the digest out gives seven and leaves a claim unable to name the term that
+    * produced it. The schema version is checked at the boundary.
+    */
+  def run(x: Int): Int = x
+"""
+
 NUMBERED_IN_DOC = """\
 object Thing:
   /** The gate's conjuncts, for the reader:
@@ -142,6 +172,9 @@ def main() -> int:
         case("numbered-in-doc", 0, NUMBERED_IN_DOC),
         case("short-banner", 1, SHORT_BANNER),
         case("contentful-rule", 0, CONTENTFUL_RULE),
+        case("history", 1, HISTORY),
+        case("history-first-cut", 1, HISTORY_FIRST_CUT),
+        case("constraint-not-history", 0, CONSTRAINT_NOT_HISTORY),
         case("empty-dir", 2, None),
         case("missing-dir", 2, None),
     ]

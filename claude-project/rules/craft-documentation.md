@@ -79,10 +79,21 @@ one module measured 51% comment overall, which is alarming until it splits into 
 (earning its place) and 3% interior (defensible), with the entire problem concentrated in one file.
 Split the two before drawing any conclusion.
 
-Two shapes are always wrong and are checked mechanically by `harness/comment_shape.py`. A
-**numbered-label run** — three or more interior comments numbered in sequence — is the comment
+**A comment states the constraint; git holds the history.** "An earlier cut carried seven", "the
+first cut matched on the event alone" — every instance of this measured had the same shape, a live
+constraint followed by an anecdote proving it. Keep the constraint and drop the anecdote: stated
+directly it is shorter, and it warns the next reader who is about to make the mistake rather than
+reporting on someone who already did.
+
+The exception is a TEST, and it is a real one. "A first version asserted only that the digests
+differ, and a mutation survived it" is not history — it is that test's record of its own
+discriminating power, and deleting it invites the next reader to weaken the assertion back.
+
+Three shapes are always wrong in source and are checked mechanically by `harness/comment_shape.py`.
+A **numbered-label run** — three or more interior comments numbered in sequence — is the comment
 carrying a label the code never gave; the repair is named predicates. A **bare banner**, a comment
-line that is only a rule of dashes, is a position marker. Where a banner frames real rationale, the
+line that is only a rule of dashes, is a position marker. **Historical narration** is the shape
+above; the repair is a reframe, never a deletion. Where a banner frames real rationale, the
 rationale stays and the frame goes.
 
 ## Red flags (stop and fix the cause)

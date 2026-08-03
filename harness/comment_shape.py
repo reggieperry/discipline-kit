@@ -20,6 +20,18 @@ shut up. So it checks two unambiguous shapes and reports the rest as unexamined.
   is structural: named predicates in an ordered list, after which the names are the labels and
   the ordering is data rather than indentation. It is never an edit to the comment.
 
+  HISTORY NOT CONSTRAINT — a comment narrating the code's own past: "an earlier cut carried
+  seven", "the first cut matched on the event alone". Git holds the history; a doc comment holds
+  the constraint. Every instance measured had the same shape — a live constraint followed by an
+  anecdote proving it — and stating the constraint directly is both shorter and more useful than
+  leaving a reader to infer it from a story about getting it wrong.
+
+  SCOPED TO SOURCE, NOT TESTS, and the exclusion is the finding rather than a convenience. In a
+  test, "a first version asserted only that the digests differ, and a mutation SURVIVED it" is not
+  history: it is that test's record of its own discriminating power, and deleting it invites the
+  next reader to weaken the assertion back. Measured: 13 of 25 hits across three repositories were
+  in test sources and were that shape. Pass test paths to --exclude.
+
   BARE BANNER — a comment line that is nothing but a run of dashes, equals or asterisks. A
   position marker, which the craft-documentation catalog lists as delete-on-sight. Where one
   frames a genuine rationale block, the rationale stays and only the frame goes.
@@ -48,6 +60,12 @@ INTERIOR = re.compile(r"^\s+(//|#)\s?(.*)$")
 BANNER = re.compile(r"^\s+(//|#)\s*[-=*_]{8,}\s*$")
 # `1 ·`, `2.`, `3)`, `4:` — a label where a name belonged.
 NUMBERED = re.compile(r"^\s+(//|#)\s*\d+([.):·]|\s+(and|·))")
+# A comment narrating the code's own past rather than stating its present.
+HISTORY = re.compile(
+    r"\b(an earlier (cut|version|draft)|the first cut|a first version|this replaces"
+    r"|used to be|previously (carried|read|had|was|were))\b",
+    re.I,
+)
 NUMBERED_RUN_MIN = 3
 
 
@@ -55,15 +73,16 @@ def findings_for(path: Path) -> list[tuple[int, str, str]]:
     """Return (line number, shape, text) for every hit in one file."""
     out: list[tuple[int, str, str]] = []
     numbered: list[tuple[int, str]] = []
-    # A scaladoc continuation begins `*`, so neither pattern below can match inside a doc block
-    # and no exemption is needed. An earlier cut carried one; a mutant that deleted it changed
-    # nothing, which is how dead code announces itself.
+    # A scaladoc continuation begins `*`, so neither pattern below can match inside a doc block:
+    # no doc-position exemption is needed, and one would be dead code.
     for n, line in enumerate(path.read_text(errors="replace").splitlines(), start=1):
         if BANNER.match(line):
             out.append((n, "bare-banner", line.strip()[:70]))
             continue
         if NUMBERED.match(line) and INTERIOR.match(line):
             numbered.append((n, line.strip()[:70]))
+        if HISTORY.search(line) and (INTERIOR.match(line) or line.lstrip().startswith(("*", "/*", "#"))):
+            out.append((n, "history-not-constraint", line.strip()[:70]))
     if len(numbered) >= NUMBERED_RUN_MIN:
         out += [(n, "numbered-label-run", t) for n, t in numbered]
     return out
@@ -103,9 +122,10 @@ def main() -> int:
     hits = [(f, n, shape, text) for f in files for (n, shape, text) in findings_for(f)]
     banners = sum(1 for h in hits if h[2] == "bare-banner")
     labels = sum(1 for h in hits if h[2] == "numbered-label-run")
+    history = sum(1 for h in hits if h[2] == "history-not-constraint")
     print(
         f"comment-shape: {len(files)} file(s) examined, {banners} bare banner(s), "
-        f"{labels} numbered label(s) in runs"
+        f"{labels} numbered label(s) in runs, {history} historical narration(s)"
     )
     if not hits:
         return 0
