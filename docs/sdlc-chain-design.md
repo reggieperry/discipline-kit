@@ -72,7 +72,9 @@ The prior design tried to buy containment from the harness's configuration surfa
 
 Stated briefly because it survives intact.
 
-**Five phases, one warrant each.** planner (park the plan), worker (build through the gate, **then audit its own diff and fix what the audit returns before handing off** — §3.9), tester (attest only, never touches production code), reviewer (refute or report absence, never approves), finalizer (package and park for the operator's merge). The archived agent files carry this vocabulary already and it is good. What changes is that the warrant is no longer claimed to be *enforced* by the frontmatter — see §4.
+**Five agents, one warrant each, and a main-loop merge stage.** planner (park the plan), worker (build through the gate, **then audit its own diff and fix what the audit returns before handing off** — §3.9), tester (attest only, never touches production code), reviewer (refute, report absence with a coverage receipt, or declare it could not inspect — never approves), documenter (the briefing, the feature doc, and the trigger entry that makes it findable — §4.9). Then the **main loop** integrates, re-derives the merged-tree conjuncts, and merges or escalates (§4.12).
+
+Two changes from the archived agent files, both recorded where they were argued. The warrant is no longer claimed to be *enforced* by the frontmatter (§4). And **the finalizer is not an agent** — its warrant was *package and park for operator merge*, and with parking retired, the briefing moved to the documenter, and verdicts belonging to the main loop by §4.2(a), what was left was integration plus predicates (§4.12).
 
 **~~The human merge is the transition-grade backstop.~~ RETIRED by §4.12 — and this entry is kept rather than deleted, because it was the load-bearing claim of the whole design and its removal should be visible.** It read: the chain is autonomous up to a merge-ready branch and no further; the finalizer does not merge; what reaches `main` rests on the human merge or a server-side gate, never on the local gate alone.
 
@@ -788,7 +790,13 @@ What survives is the habit, not the phase. `craft-tdd.md` beat 3 — perturb the
 
 Two residues now have no owner at all, and both were previously covered by the agents just removed. **Test quality has no reader**: an implementation-mirroring test parrots the production algorithm, and with the slop rubric gone and mutation gone, nothing detects it — the attest-only tester judged on "gate green" has an incentive pointing straight at it. And **no step reads the finished code as code** against the project's own standards; every remaining reading step is defined by a different pairing. Neither needs an agent to fix. Both need someone to decide they are acceptable, which is a different act from not noticing them.
 
-**The documenter stays in, repositioned: its value is PR authorship, not feature documentation.** The human's briefing is mechanically derived rather than whatever the terminal package happens to contain, and under §4.12 it is what a reviewer reads during the veto window.
+**The documenter stays in, and it keeps its own job while gaining one.** An earlier draft of this paragraph said its value was "PR authorship, not feature documentation." That was wrong on both halves, and reading the pack's own prompt is what showed it: that documenter states plainly *"You do not open the PR or merge the branch… The finalizer handles the PR and the merge gate after you"*, so PR authorship was never its job — and the documentation it writes is the thing this design was missing.
+
+It writes **four** things. The **feature doc**. The **conditional-docs trigger entry** — *"the trigger registry future planners read to know when to load this feature's full doc"* — which is what makes accumulated documentation findable instead of a growing pile nobody opens, and which had no counterpart here at all. The **briefing** that §4.12's veto window is read against, of which a PR body is one rendering; that distinction matters in a repo with no remote, where "PR authorship" has no object but a briefing always does. And it carries the **two-step scope gate**: stage exactly its own outputs, then refuse to commit if `git status --porcelain` shows anything else.
+
+It keeps the **trivial-change short-circuit** too — under a threshold, record that documentation was skipped rather than manufacture prose about a typo fix.
+
+> **One overlap left open deliberately.** There are now two write-forward records: this feature doc plus its trigger entry, and §3.10's `stories/_archive/` closing record with `deviations` and `lessons`. They are not redundant — the archive record is *per story, what happened*; the feature doc is *per feature, what exists* — but nobody has decided to have both, and two documentation systems is how each ends up half-maintained.
 
 > **Superseded in part by §4.12.** This paragraph originally argued that dropping auto-merge was right and that the human merge mattered *more* here than in the pack. That was reasoned under two conditions since removed — a sensitive-file list, and a repository where a bad merge is expensive. Neither holds. The claim that the pack's rubric "reads agent-written metadata" was also too broad: it is true of one conjunct of four, and three are re-derivable. See §4.12.
 
@@ -810,7 +818,7 @@ Every step above states a pass condition. This section states what happens when 
 
 That one-to-one mapping is the reason the output shape is three-valued rather than two. A reviewer restricted to refute-or-absence, when blocked, must either fabricate a rejection or emit a clean report — and the clean report is the likelier and the worse. The third state is what makes "back to the worker" mean a real finding rather than a reader who could not look.
 
-The same edge on the other steps. **Tester:** gate red returns to the worker with the failing output. **Finalizer:** a red gate on the merged tree, a scope reconciliation that fails against the planner's declared list, or a source-set integrity failure returns to the worker; everything green reaches `merge_ok` (§4.12) rather than parking for the operator. **Planner:** not-plannable is a typed park, never a bounce, because there is nothing upstream of it.
+The same edge on the other steps. **Tester:** gate red returns to the worker with the failing output. **The merge stage:** a red gate on the merged tree, a failed scope reconciliation, or a source-set integrity failure returns to the worker; a **trusted-base touch parks regardless of green** and a moved head aborts (§4.12); everything else reaches `merge_ok`. **Planner:** not-plannable is a typed park, never a bounce, because there is nothing upstream of it.
 
 **Triage before bouncing, because not every red is the worker's fault.** Three causes must be separated: a *worker fault* (return and fix), an *environment fault* (the check could not run — park, never bounce, since a worker cannot fix an absent `node_modules`), and a *stale baseline* (main moved — re-integrate, then re-derive). Returning an environment fault to the worker is how a chain spends a night failing to repair something that was never broken.
 
@@ -883,11 +891,23 @@ Elder's chain had three tiers: `glance_merge` merged at once, `review_encouraged
 
 **What still escalates** is small and nearly all re-derivable: a red gate on the merged tree, scope reconciliation failing, a reviewer refutation not disposed, **reviewer could-not-inspect**, a check that could not run, or the bounce budget exhausted.
 
+#### Two conditions without which `merge_ok` is unsound
+
+Both come from the archived `chain-finalizer.md`, which parked rather than merged and wrote down what would have to hold before autonomous merge was ever switched on. This design switched it on; these are the conditions it owes.
+
+**Trusted-base exclusion.** A diff touching the chain's own judge **parks regardless of green**. The prompt's phrasing is the argument: *"a merger that can merge changes to its own judge is self-signing with a scheduler."* Without it, a story that edits `.githooks/pre-commit` or the gate script merges itself on the verdict of the thing it just edited — the exact failure the rest of this document is written against. Match by **path prefix, with symlinks resolved and moves-out blocked**; a rename out of the protected set is the obvious evasion. The path list is per-repo and lives in `profile.toml` (§5), because the kit ships the mechanism and the repo names its own judge.
+
+**Sha pinning.** Re-read the branch head immediately before merging and abort if it moved. Every conjunct was computed against a specific tree; merging a different one signs work nothing examined. This costs one `git rev-parse` and closes the whole window between verdict and merge.
+
+A third condition from that prompt is already carried: the adversarial pass **may add a veto but its silence never confers authority** — which is §4.10's three-valued reviewer output, where absence is a coverage receipt rather than an approval.
+
 **A short veto window is a property of `merge_ok`, not a second tier.** It is what `review_encouraged` actually bought, it costs nothing when nobody is watching, and it gives the documenter's briefing (§4.9) something to be read *during*.
 
 **Where "we can always revert" stops being true**, stated now so nobody discovers it later: anything pushed to a public remote, where caches and forks outlive a revert; a tagged artifact someone has consumed; and a change to the formal core documents, where revert restores the bytes but not a conformance decision made against the wrong bytes in between. None applies on day one. All three are reachable.
 
-**One dependency this creates.** Unattended merging makes the finalizer's merged-tree gate the only thing standing between a story and `main`. It was already the first thing to build; it is now the single unchecked artifact that ships *by itself*.
+**One dependency this creates.** Unattended merging makes the merged-tree gate the only thing standing between a story and `main`. It was already the first thing to build; it is now the single unchecked artifact that ships *by itself*.
+
+**And it collapses the finalizer.** That step's warrant was *package and park for operator merge* — with the parking retired here, the briefing moved to the documenter (§4.9), and every verdict belonging to the main loop by §4.2(a), what remained was integration plus predicates. An agent there is a shallow module that converts mechanical facts into testimony on the way past, and the one genuinely non-mechanical case — a merge conflict — is already a stale-baseline escalation under §4.10. So the chain is **five agents and a main-loop merge stage**, and the contradiction of a step whose warrant said *park* while §4.12 says *merge* does not arise.
 ---
 
 ## 5. The per-language plug points
@@ -904,7 +924,8 @@ The runtime names no language. A per-repo profile does, and the kit already has 
 | `gate_toolchain` | forced toolchain for the differential gate | `scala` |
 | `rules_glob` | which rule family injects | `scala-*.md` |
 | `red_proof` | how to build old-impl-against-new-tests | (see below) |
-| `phases` | which steps are installed, in order | `["planner","worker","tester","reviewer","documenter","finalizer"]` |
+| `phases` | which agent steps are installed, in order (the merge stage is the main loop's, not a phase) | `["planner","worker","tester","reviewer","documenter"]` |
+| `trusted_base` | paths whose modification parks a story regardless of green (§4.12) | `[".githooks/", "scripts/", ".claude/rules/", ".claude/workflows/"]` |
 | `sources` | the corpus available to the planner's completeness check, and how to extract units from each (§4.11) | see below |
 
 **The profile declares availability and extraction. It does not declare the mode** — that is derived per work item from what the item cites, by the main loop, before the planner starts (§4.11). A repo produces all three modes across its stories, so pinning one here would be at the wrong granularity.
@@ -929,7 +950,9 @@ unit = '^- \[ \] '
 
 A source with no `unit` pattern can never reach `enumerable`; that is the honest ceiling of a corpus with nothing countable in it, and it should be visible in the profile rather than discovered at run time.
 
-**The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. A repo that ships through pull requests installs the documenter, because that is where PR authorship lives (§4.9); a repo whose only remote is a local bare path has nothing for it to write and leaves it out.
+**The phase roster is per-repo, and that is an operator decision rather than a property of the chain.** The runtime sequences whatever `phases` lists; it holds no opinion about which steps exist. The documenter's briefing renders as a PR body where a remote takes PRs and as a plain report where it does not, so the step earns its place either way (§4.9).
+
+**`trusted_base` is the one entry with no safe default.** It names the paths that hold the chain's own judge, and it is repo-specific by nature — the kit cannot know where a given repo keeps its hooks, its gate, or its predicates. An empty or absent list means every path is mergeable including the checks themselves, so the mechanism must **fail closed on an unset list** rather than treating it as "nothing protected." That is the difference between a fence and a fence-shaped configuration key.
 
 Two constraints on any roster, both from §4.9. The **terminal** step — whichever one `phases` ends with — carries the re-derived completion criterion on the merged tree, so removing a step must never orphan that check. And a roster is not a menu of independent items: dropping the documenter also drops the terminal scope gate it happened to carry, so the profile's own documentation has to say what each step is holding besides its name.
 

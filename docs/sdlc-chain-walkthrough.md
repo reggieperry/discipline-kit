@@ -33,7 +33,7 @@ them.
 
 ## Build state — all 21 steps
 
-Checked against kit `main`, not recalled. **2 operator actions, 4 partial, 15 not built.** Any step
+Checked against kit `main`, not recalled. **1 operator action, 4 partial, 16 not built.** Any step
 not in this table is a step this document forgot; the count is written down so it cannot quietly
 shrink.
 
@@ -55,9 +55,9 @@ shrink.
 | D4 tester | **partial** | the differential exists — `reference/sdlc-gate.py`, 1619 lines, Checks A/B/D, suppressions and skip markers — and is wired into no phase |
 | D5 reviewer | not built | |
 | D6 documenter | not built | |
-| D7 finalizer | not built | **build this first** |
-| E1 read the package | operator | — |
-| E2 merge | **partial** | `git merge --no-ff` works; the refusing wrapper and the `Merged-Story:` trailer convention do not exist |
+| D7 merge stage (main loop, not an agent) | not built | **build this first** — incl. trusted-base exclusion and sha pinning |
+| E1 the verdict | not built | the conjunct set of §4.12 |
+| E2 veto window, then merge | **partial** | `git merge --no-ff` works; the refusing wrapper, the `Merged-Story:` trailer, and the window do not exist |
 | E3 archive | not built | |
 | E4 next `ready` unblocks dependents | not built | needs C1 |
 
@@ -207,7 +207,7 @@ census: 1 READY | 0 IN-FLIGHT | 4 BLOCKED | 0 SATISFIED | 0 UNRECORDED
 
 **Satisfied means:** `origin/main` holds a merge commit carrying the trailer `Merged-Story: <ID>`
 whose second parent is the story branch tip. Not a phase ref. Not a branch existing. Not a file the
-finalizer wrote. Chosen because a finalizer-written record can go true by accident — an ordinary
+merge stage wrote. Chosen because a chain-written record can go true by accident — an ordinary
 `--ours` conflict resolution merges the record while dropping the code — and a content predicate can
 go false by routine maintenance, since a `git mv` would un-land a merged story.
 
@@ -226,7 +226,7 @@ The main loop spawns phase 1. Stage D runs once per story.
 
 ## Stage D — One story through the chain
 
-Six phases. The pattern is identical each time and is the design's central property: **the main loop
+Five agent phases, then a main-loop merge stage. The pattern is identical each time and is the design's central property: **the main loop
 spawns the subagent, the subagent returns, the main loop cuts its own scratch worktree from that
 phase's ref and evaluates the predicate itself, then spawns the next.** No agent computes whether the
 chain advances.
@@ -324,28 +324,36 @@ Subagent. Writes the PR body and the operator's briefing — the derived brief t
 auto-merge was dropped, and which matters *more* here than in the pack, since the pack could
 auto-merge its glance tier and this chain never can.
 
-Kept as its own step rather than folded into the finalizer: a documenter once shipped a clean feature
+Kept as its own step rather than folded into the merge stage: a documenter once shipped a clean feature
 doc and silently deleted eleven unrelated story specs in the same commit, and it reached a PR.
 
-### D7 · Finalizer
+### D7 · The merge stage — main loop, not an agent
 
-Subagent. Integrates and packages, then hands to `merge_ok` or escalates (§4.12).
+**No subagent here.** The finalizer's warrant was *package and park for operator merge*; §4.12 retired
+the parking, §4.9 moved the briefing to the documenter, and every verdict is the main loop's by
+§4.2(a). What was left was integration plus predicates — an agent there is a shallow module that turns
+mechanical facts into testimony on the way past, and the one non-mechanical case, a merge conflict, is
+already a stale-baseline escalation (§4.10).
 
-**Completion — and this is the design's weakest joint until it is built.** Fetch main and integrate
-first, then on the **merged tree**, with a base-provided examiner: the full gate, cumulative scope
-reconciliation against the planner's declared path list, and **source-set integrity**
-(`sha256sum -c` against the vendored manifest, from the set's own directory). Each with a
-**per-conjunct receipt**, so a check that could not run never renders as green.
+Fetch main and integrate, then on the **merged tree**, with a base-provided examiner:
 
-The merged tree exists nowhere else in the chain: the worker's gate ran on the worker's tree, the
-tester's on the tester's. And hooks cannot cover it — git fires `pre-merge-commit` for an
-auto-committed merge, and the repo ships only `pre-commit` and `post-commit`.
+| Conjunct | Why |
+|---|---|
+| the full gate | the merged tree exists nowhere else — the worker's gate ran on the worker's tree, the tester's on the tester's |
+| cumulative scope reconciliation | against the planner's declared path list |
+| source-set integrity | `sha256sum -c` against the vendored manifest, from the set's own directory |
+| **trusted-base exclusion** | a diff touching `trusted_base` **parks regardless of green** — *a merger that can merge changes to its own judge is self-signing with a scheduler*. Path-prefix, symlinks resolved, moves-out blocked |
+| **sha pinning** | re-read the head immediately before merging; abort if it moved, because every conjunct above was computed against a specific tree |
+
+Each with a **per-conjunct receipt**, so a check that could not run never renders as green.
+
+Hooks cannot cover any of it — git fires `pre-merge-commit` for an auto-committed merge, and the repo
+ships only `pre-commit` and `post-commit`.
 
 **NOT BUILT, and it is the first thing to build.** It was already the only unchecked artifact in the
-chain; under §4.12 it is the only unchecked artifact that **ships by itself**, since a green finalizer
-now merges without asking. The source-set conjunct is there for the same reason — unattended merging
-is what makes a story that corrupts the documents the rest of the chain is verified against something
-no human sees first.
+chain; under §4.12 it is the only unchecked artifact that **ships by itself**. The last two conjuncts
+are the conditions the archived `chain-finalizer.md` said autonomous merge would owe — written down
+when merging was still deferred, and owed the moment it wasn't.
 
 ---
 
