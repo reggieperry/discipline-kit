@@ -60,6 +60,25 @@ Load, in priority order, whatever exists:
 
 **Honor each rule's `paths:` glob** — apply a rule only to the changed files its glob covers. `go-llm.md` is scoped to LLM-call sites (globs like `*llm*`, `*schema*`), so it bites on an LLM-call file but not a plain helper. Rules auto-load by glob only when *editing*; during a review you are reading a diff, so load them explicitly here and match each to the files it governs. If the repo has no `.claude/rules/`, fall back to the embedded baselines at the end of this file and say so in the output.
 
+**Then read each rule's enforcement grade, and let it decide where your attention goes.** Every rule
+opens with `**Enforcement grade:**` and one of three tokens. The grade is not commentary — it says
+whether anything other than you will ever catch a violation:
+
+- **`review and convention`** — nothing mechanical checks this. If you do not catch it, nothing
+  does. This is where review earns its keep, and it deserves most of the reading time.
+- **`partly mechanical`** — the build refuses part of what the rule says, and the grade paragraph
+  names which part. Review the remainder, and **say which part you treated as already covered**. A
+  finding the compiler already rejects cannot reach main; reporting it spends the reader's
+  attention on something that has an owner.
+- **`mechanically enforced`** — the build catches this. Skip it, and record that you skipped it.
+
+The distribution is usually lopsided and worth knowing before you start: in one 26-rule repo it was
+13 review-and-convention, 11 partly mechanical, 2 mechanical. Half the discipline had no instrument
+but a reader.
+
+If a rule carries no grade, treat it as `review and convention` and say so — an ungraded rule is one
+whose enforcement nobody has established, which is not the same as one that is enforced.
+
 ## Step 5 — Apply the language-neutral review core (embedded below)
 
 Run the diff against the neutral core: the defensive habits, the security subset, claims-need-tests, idempotency-invariant naming, and the craft lens. These hold in any language.
@@ -77,6 +96,11 @@ Structured, severity-tiered, evidence-cited:
 - Each finding: `file:line` · what · why it matters · a one-line suggested fix.
 - **Verify before asserting** — re-read the lines you cite; do not cite a line number from memory. Quote only what you read. Do not invent identifiers.
 - Separate "this is wrong" from "I'd prefer" — label preferences as such.
+- **Close with the denominator**, so a clean review cannot read as a thorough one: how many rules
+  applied to these files, how many you actually read the diff against, which you skipped as
+  mechanically enforced, and which matched no changed file. A rule whose glob caught nothing and a
+  rule you did not reach both produce no findings, and so does a rule that found none — those are
+  three different facts and the reader needs them separated.
 
 ---
 
