@@ -133,6 +133,27 @@ Structured, severity-tiered, evidence-cited:
 - **Smells** (Fowler): duplication, long function, feature envy, primitive obsession, shotgun surgery — name the smell, propose the move.
 - Define errors out of existence where you can; most scattered `try/except` (or swallowed errors) is an abdication.
 
+**Simplification lens** (the elaboration read). The smells above hunt defects. This asks a different
+question — *is an idea expressed more elaborately than it needs to be?* — and a change can violate
+no smell on the list while still saying one thing three ways. Four questions:
+
+- **Is any idea computed or recorded twice?** Two functions that must agree, two records of one
+  fact, a value derived in parallel rather than projected from the thing that already decided it.
+  Where two computations must agree, ask what establishes it — if the answer is an argument across
+  several files rather than a shared line, that is the finding.
+- **Is an ordering encoded in more than one place?** A sequence whose order lives in indentation
+  while comments number the steps; a priority the specification fixes but the code leaves implicit.
+  An order that is data can be checked; an order that is layout cannot.
+- **Is anything stated N times that could be stated once?** A notation decoded per file instead of
+  per package, a convention restated per call site, a citation repeated where a pointer would do.
+- **Does anything force a re-read?** A sentence past roughly forty words, an `else` far enough from
+  its `if` that the reader must scroll to pair them, a nesting depth they have to count. These cost
+  a human and cost a machine reader nothing, which is why they survive review by anything that
+  reads the way a machine does.
+
+Each is a question, not a rule: the answer may well be that the elaboration is earned. Say so when
+it is, and name what earns it.
+
 ## Embedded Go baseline (used only if the repo ships no `go-*.md`)
 
 - Every goroutine has a clear, owned stop — no leak; a `context` is propagated and its cancellation honored.
