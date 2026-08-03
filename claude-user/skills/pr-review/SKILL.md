@@ -54,7 +54,7 @@ ls "$ROOT/.claude/rules/" "$ROOT/.claude/rules/project/" 2>/dev/null
 
 Load, in priority order, whatever exists:
 
-1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, `java-*.md`, and `ts-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` and `java-*` carry `*-concurrency` for their effect/virtual-thread boundary). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
+1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, `java-*.md`, `ts-*.md`, and `shell-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` and `java-*` carry `*-concurrency` for their effect/virtual-thread boundary; `shell-*` is four files — style, errors, security, testing — because shell has no type system, no model boundary, and no module system beyond `source`). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. A repo installed before the shell layer shipped may still have none — check, and fall back to the embedded shell baseline below when it is absent.
 2. **Craft-core rules** — `craft-*.md` (complexity / abstraction / tdd / refactoring / domain-modeling). These are language-neutral and glob across `**/*.go`, `**/*.sh`, and `**/*.py`, so they apply to every changed file regardless of language. If the repo ships none, the embedded craft lens below covers it.
 3. **Rig-specific rules** — the *reviewed project's own* domain, architecture, security, and review rules (`*-<project>.md`, `architecture.toml`, `review-*.md`, `security-*.md`, a slop rubric). When reviewing a cloned target repo, this layer is the **target's** rules, not the reviewer's; the reviewing repo may ship none. These bind hardest: a repo may *specialize* the general discipline but never *weaken* it.
 
@@ -173,7 +173,7 @@ it is, and name what earns it.
 - Translate library exceptions at your module boundary — don't let `openpyxl.KeyError` escape a public function.
 - `list.count(x)` inside a comprehension over the same list is O(n²) — use `Counter`/`set`.
 
-## Embedded Shell baseline (no dedicated shell rule layer — pair with the craft core)
+## Embedded Shell baseline (used only if the repo ships no `shell-*.md`)
 
 - `set -euo pipefail` at the top; a failed command, a broken pipe, or an unset variable must not pass silently.
 - Quote every expansion (`"$var"`, `"${arr[@]}"`) — unquoted word-splitting and globbing is the most common shell bug.
