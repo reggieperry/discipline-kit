@@ -46,7 +46,7 @@ trap 'rm -rf "$work"' EXIT
 ## Secrets
 
 - **Never pass a secret as a command-line argument.** Every process's argv is readable from `/proc/<pid>/cmdline` by any process of the same user, and it lands in the shell history and in any `ps` output an operator pastes into a ticket. Pass secrets in the environment or on stdin.
-- **Read a secret from a file or the environment at the point of use, and do not echo it.** `export ANTHROPIC_API_KEY` from a `0600` file outside the repository is the pattern this machine uses; a key in the script, in a committed config, or in a test fixture is a defect regardless of the repository's visibility.
+- **Read a secret from a file or the environment at the point of use, and do not echo it.** Export it from an owner-readable file held outside the repository, or take it from a secret manager at the point of use; a key in the script, in a committed config, or in a test fixture is a defect regardless of the repository's visibility.
 - **`set -x` prints every expanded argument, so it prints secrets.** If a script traces, disable it around the call that carries the credential (`set +x` … `set -x`) and remember that the restore is what leaks if the call fails in between — under `set -e`, put the restore in a trap.
 - **Redact before logging, not after.** A log line assembled with the secret in it has already been written by the time a filter sees it.
 

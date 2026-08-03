@@ -8,7 +8,7 @@ paths:
 
 # Shell testing
 
-**Enforcement grade:** review and convention, entirely. `scripts/check.sh` runs `shellcheck`, which reads a script's syntax and never runs it, so nothing here is mechanical: no shell test suite executes on the commit path, and a script whose failure branch has never been taken passes every check the kit applies. `bats` 1.10.0 is installed on this machine and wired into nothing. Read this as the discipline to follow by hand, and treat "wire a bats suite into `check.sh`" as work that would move this grade.
+**Enforcement grade:** review and convention, entirely. `scripts/check.sh` runs `shellcheck`, which reads a script's syntax and never runs it, so nothing here is mechanical: the kit ships no shell test suite and `check.sh` invokes no shell test runner, which means a script whose failure branch has never been taken passes every check the kit applies. Read this as the discipline to follow by hand, and treat "wire a bats suite into `check.sh`" as work that would move this grade.
 
 Shell scripts in this kit are instruments — they decide whether a commit lands. An instrument that has only ever been observed passing is the exact defect `craft-measurement.md` is about, and it is more likely in shell than anywhere else, because a script's failure branches are the ones that never run during development. Sources: the bats-core documentation (`@test`, `run`, `$status`, `$output`, `setup`/`teardown`, `bats_load_library`); the GNU Bash Reference Manual for the exit-status semantics being asserted; and the kit's own Python fixture suites (`harness/fixtures/*_test.py`), which are the shape to copy where a script's logic has already moved into Python.
 
