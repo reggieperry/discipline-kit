@@ -304,26 +304,33 @@ absolute gate greener.
 A **workflow inside the phase** — one subagent per lens, each committing its own findings to its own
 branch. The main loop unions from refs, never from the workflow's return string.
 
-**The lenses are `/pr-review` steps 4 to 6, and they are computed rather than chosen.** The kit
-already ships a seven-step review that loads the reviewed repo's own rules, targets them by the
-enforcement grade each declares, and applies the neutral core and the simplification lens. The chain
-consumes that rather than inventing a second definition of what a review looks at — one place says
-what gets read, and the chain reads it.
+**The lenses are computed rather than chosen, from the repo's own rules.** The lens list is the
+grade-partitioned rule set: one subagent per `review and convention` rule, because nothing else will
+ever check those; one per `partly mechanical` rule, pointed at the remainder and required to state
+which part it treated as covered; `mechanically enforced` rules skipped and recorded as skipped.
+Then the language-neutral core, the craft lens and the simplification lens over the same files.
 
-So the lens list is the grade-partitioned rule set: one subagent per `review and convention` rule,
-because nothing else will ever check those; one per `partly mechanical` rule, pointed at the
-remainder and required to state which part it treated as covered; `mechanically enforced` rules
-skipped and recorded as skipped.
+**The chain does not invoke `/pr-review`, and should not.** That skill does the same derivation for
+an operator at a terminal, and the overlap is deliberate — but it is USER-scoped, installed to
+`~/.claude/skills/`, while the chain is repo-scoped. A phase defined by reference to a user-installed
+skill fails on a machine where that skill is absent, which is the same self-containment rule that
+keeps a repo from reaching into the kit at run time.
 
-Steps 1 to 3 are not skipped, they are already done. Scope is supplied — the reviewer is handed the
-branch and the base. Language detection happens inside step 4's glob matching. And **the gate is
-READ, not re-run**: the tester already gated this same tree with this same script, so a third run is
-the duplication §4.9 warns about rather than re-derivation. The reviewer cites the tester's receipt
-and moves on; a gate result it did not obtain is still a gate result it must report.
+What the two share is not a call but a SOURCE: both derive their lenses from `.claude/rules/` and
+the enforcement grade each rule declares about itself. Neither depends on the other; both depend on
+the rules, which is the artifact that actually travels with the repo. If the two ever disagree about
+what a review looks at, the rules decide.
 
-Step 7's content is unchanged and its shape is not. The findings still carry `file:line`, still
-verify before asserting, still separate "wrong" from "I'd prefer" — but severity routes to
-disposition instead of to prose.
+Three things the interactive review does that this phase does not repeat. Scope is **supplied** —
+the reviewer is handed the branch and the base rather than deriving them. Language detection happens
+inside the glob matching. And **the gate is READ, not re-run**: the tester already gated this same
+tree with this same script, so a third run is the duplication §4.9 warns about rather than
+re-derivation — but a gate result the reviewer did not obtain is still one it must report, so it
+cites the tester's receipt.
+
+Findings carry `file:line`, verify before asserting, and separate "wrong" from "I'd prefer", exactly
+as an interactive review would. What differs is where they go: severity routes to disposition rather
+than to prose.
 
 Reads the specification against the code. **Never approves.** Three outputs, and they map one-to-one
 onto three dispositions:
