@@ -12,5 +12,7 @@ bash scrub-gate.sh
 python3 harness/rule_grades.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py
+python3 harness/fixtures/comment_shape_test.py
+python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
 python3 harness/algebra/validate_note.py

@@ -60,6 +60,31 @@ The discipline of recording what the code cannot say — the designer's intent, 
 
 - **Write the interface comment before the body and use it as a design tool — a hard-to-write comment is a design signal, not a chore.** If the public description won't come out crisply and implementation-independently, the abstraction is shallow or muddled — redesign before writing the code (the test-first parallel of `craft-tdd.md`, and the canary `craft-complexity.md` names). The diagnostic is the value.
 
+## Verbosity is positional, not absolute
+
+**Above a declaration, a comment may be as long as the decision it records.** It becomes
+documentation; a full account of the choice, the alternative rejected, and the citation earns its
+place there and is read by someone deciding whether to call the thing.
+
+**Between statements, a comment is a smell** unless the algorithm is genuinely complicated or unique
+in a way no naming can dissolve. The reader is already inside the body, where a name or a structure
+would have served better — and unlike a comment, a name cannot drift from the code it describes.
+
+So the repair for an interior comment is almost never editorial. Extract a named predicate. Name the
+intermediate value. Turn a numbered sequence into an ordered list of named steps. Only when all three
+fail is the comment the right tool, and then it explains *why the obvious structure does not work*.
+
+**Measuring an aggregate comment ratio will not find this.** It conflates the asset with the smell:
+one module measured 51% comment overall, which is alarming until it splits into 48% doc-position
+(earning its place) and 3% interior (defensible), with the entire problem concentrated in one file.
+Split the two before drawing any conclusion.
+
+Two shapes are always wrong and are checked mechanically by `harness/comment_shape.py`. A
+**numbered-label run** — three or more interior comments numbered in sequence — is the comment
+carrying a label the code never gave; the repair is named predicates. A **bare banner**, a comment
+line that is only a rule of dashes, is a position marker. Where a banner frames real rationale, the
+rationale stays and the frame goes.
+
 ## Red flags (stop and fix the cause)
 
 Comment repeats code · implementation detail in an interface comment · a comment compensating for a bad name · commented-out code · a changelog kept in comments · a hard-to-write interface comment (a shallow abstraction) · a comment written to sound deep (an epigram or an erudite synonym where the plain word fits). Each names a different fix — rewrite the code, move the detail into the body, rename, delete, or redesign — never an edit to the comment in place.
