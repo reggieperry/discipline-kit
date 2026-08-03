@@ -6,7 +6,7 @@ paths:
 
 # Go LLM boundary (structured output)
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned, and no scanner anywhere in the kit reads a model boundary.
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, and no scanner anywhere in the kit reads a model boundary.
 
 The typed contract between your code and the model — the single place this boundary's reliability is bought. Sources: the model provider's Go SDK, `invopop/jsonschema`, `go-playground/validator`, and `encoding/json`. The model is called through its official Go SDK; the model id is configured per call site.
 

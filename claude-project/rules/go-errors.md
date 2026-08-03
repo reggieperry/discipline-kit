@@ -5,7 +5,7 @@ paths:
 
 # Go errors as values
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. Wrapping with `%w`, `errors.Is`, and the ban on swallowed errors would need `errcheck`/`golangci-lint` wired as a Check A scanner.
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned. Wrapping with `%w`, `errors.Is`, and the ban on swallowed errors would need `errcheck`/`golangci-lint` wired as a Check A scanner.
 
 Errors are ordinary values in Go; handling them well is the heart of a program's reliability. Sources: Go Code Review Comments, the Go blog "Working with Errors in Go 1.13" (go.dev/blog/go1.13-errors), the Google and Uber style guides, Dave Cheney, and *100 Go Mistakes*. The design principle behind several of these rules — define errors out of existence — comes from `craft-complexity.md`.
 

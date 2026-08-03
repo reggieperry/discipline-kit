@@ -10,6 +10,7 @@ through their pure helpers here exactly as the existing scanners are.
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 
@@ -389,6 +390,164 @@ class JavaSpotBugsFailClosedTests(unittest.TestCase):
             root = Path(td)
             with mock.patch.object(gate, "_spotbugs_tool_present", return_value=False):
                 self.assertEqual(gate.run_spotbugs(root), gate.Counter())
+
+
+# --- TypeScript toolchain -----------------------------------------------------
+# Every format asserted below was captured from the installed tool before this was written:
+# `eslint -f json` on a forced violation, `tsc --noEmit -p tsconfig.json` on a type error,
+# and istanbul's coverage-final.json from a real vitest --coverage run.
+
+class TypeScriptDetectTests(unittest.TestCase):
+    def test_package_json_detects(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "package.json").write_text("{}")
+            self.assertTrue(gate.TypeScriptToolchain().detect(Path(td)))
+
+    def test_tsconfig_alone_detects(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "tsconfig.json").write_text("{}")
+            self.assertTrue(gate.TypeScriptToolchain().detect(Path(td)))
+
+    def test_no_marker_no_detect(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(gate.TypeScriptToolchain().detect(Path(td)))
+
+    def test_scala_wins_over_package_json(self):
+        """A polyglot repo with both markers must not be claimed by TypeScript: the sbt build
+        is the one carrying the sources, and package.json is routinely a frontend subdirectory."""
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "build.sbt").write_text("")
+            (Path(td) / "package.json").write_text("{}")
+            self.assertIsInstance(gate.select_toolchain(Path(td), None), gate.ScalaToolchain)
+
+    def test_override_selects_typescript(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIsInstance(
+                gate.select_toolchain(Path(td), "typescript"), gate.TypeScriptToolchain)
+
+
+class EslintParseTests(unittest.TestCase):
+    def test_findings_keyed_file_and_rule(self):
+        root = Path("/repo")
+        payload = json.dumps([{
+            "filePath": "/repo/src/a.ts",
+            "messages": [
+                {"ruleId": "@typescript-eslint/no-unused-vars", "severity": 2, "line": 2},
+                {"ruleId": "@typescript-eslint/no-unused-vars", "severity": 2, "line": 9},
+                {"ruleId": "no-console", "severity": 1, "line": 4},
+            ],
+        }])
+        self.assertEqual(gate._parse_eslint_json(payload, root), gate.Counter({
+            ("src/a.ts", "@typescript-eslint/no-unused-vars"): 2,
+            ("src/a.ts", "no-console"): 1,
+        }))
+
+    def test_null_ruleid_kept_not_dropped(self):
+        """eslint emits ruleId null for directive-level findings ('Unused eslint-disable
+        directive') — captured from the real tool. Dropping them loses a real finding class."""
+        payload = json.dumps([{"filePath": "/repo/src/a.ts",
+                               "messages": [{"ruleId": None, "severity": 1, "line": 1}]}])
+        self.assertEqual(gate._parse_eslint_json(payload, Path("/repo")),
+                         gate.Counter({("src/a.ts", "(core)"): 1}))
+
+    def test_empty_and_malformed_are_empty_not_crash(self):
+        self.assertEqual(gate._parse_eslint_json("", Path("/repo")), gate.Counter())
+        self.assertEqual(gate._parse_eslint_json("not json", Path("/repo")), gate.Counter())
+
+
+class TscParseTests(unittest.TestCase):
+    def test_real_error_format(self):
+        out = ("src/zz.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n"
+               "src/zz.ts(2,14): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+               "src/b.tsx(7,3): error TS2345: Argument of type 'X' is not assignable.\n")
+        self.assertEqual(gate._parse_tsc_output(out), gate.Counter({
+            ("src/zz.ts", "TS2322"): 2,
+            ("src/b.tsx", "TS2345"): 1,
+        }))
+
+    def test_non_error_lines_ignored(self):
+        self.assertEqual(gate._parse_tsc_output("Version 5.4.2\nFound 0 errors.\n"), gate.Counter())
+
+
+class TypeScriptSuppressionScanTests(unittest.TestCase):
+    def test_all_directive_families_caught_as_distinct_keys(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            (root / "src" / "a.ts").write_text(
+                "// eslint-disable-next-line no-console\n"
+                "console.log(1);\n"
+                "/* eslint-disable no-shadow */\n"
+                "// @ts-ignore\n"
+                "const a = 1;\n"
+                "// @ts-expect-error\n"
+                "const b = 2;\n"
+            )
+            (root / "src" / "b.ts").write_text("// @ts-nocheck\nexport const c = 3;\n")
+            got = gate.scan_ts_suppressions(root)
+            self.assertEqual(got[("src/a.ts", "eslint-disable-next-line")], 1)
+            self.assertEqual(got[("src/a.ts", "eslint-disable")], 1)
+            self.assertEqual(got[("src/a.ts", "ts-ignore")], 1)
+            self.assertEqual(got[("src/a.ts", "ts-expect-error")], 1)
+            self.assertEqual(got[("src/b.ts", "ts-nocheck")], 1)
+
+    def test_node_modules_never_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "node_modules" / "pkg").mkdir(parents=True)
+            (root / "node_modules" / "pkg" / "x.ts").write_text("// @ts-ignore\n")
+            self.assertEqual(gate.scan_ts_suppressions(root), gate.Counter())
+
+
+class TypeScriptTestWeakeningScanTests(unittest.TestCase):
+    def test_skip_only_todo_and_assert_counts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            (root / "src" / "a.test.ts").write_text(
+                "describe.skip('x', () => {\n"
+                "  it.only('y', () => { expect(1).toBe(1); });\n"
+                "  it.todo('z');\n"
+                "  xit('w', () => { expect(2).toBe(2); });\n"
+                "});\n"
+            )
+            got = gate.scan_ts_test_weakening(root)
+            # .only narrows the run — it disables every sibling — so it belongs with the skips.
+            self.assertEqual(got["skips"]["src/a.test.ts"], 4)
+            self.assertEqual(got["asserts"]["src/a.test.ts"], 2)
+
+    def test_non_test_file_not_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            (root / "src" / "app.ts").write_text("it.skip('x', () => {});\n")
+            self.assertEqual(gate.scan_ts_test_weakening(root)["skips"], {})
+
+    def test_spec_and_tests_dir_both_recognised(self):
+        for rel in ("src/a.test.ts", "src/a.spec.tsx", "src/__tests__/a.ts"):
+            self.assertTrue(gate._ts_is_test_file(rel), rel)
+        self.assertFalse(gate._ts_is_test_file("src/a.ts"))
+
+
+class TypeScriptCoverageTests(unittest.TestCase):
+    def test_istanbul_statement_coverage_per_directory(self):
+        payload = json.dumps({
+            "/repo/src/a.ts": {"path": "/repo/src/a.ts", "s": {"0": 1, "1": 0, "2": 3}},
+            "/repo/src/b.ts": {"path": "/repo/src/b.ts", "s": {"0": 1}},
+            "/repo/lib/c.ts": {"path": "/repo/lib/c.ts", "s": {"0": 0, "1": 0}},
+        })
+        got = gate.parse_istanbul(payload, Path("/repo"))
+        self.assertAlmostEqual(got["src"], 75.0)     # 3 of 4 statements hit
+        self.assertAlmostEqual(got["lib"], 0.0)
+
+    def test_zero_statement_file_never_minted_as_100(self):
+        payload = json.dumps({"/repo/src/empty.ts": {"path": "/repo/src/empty.ts", "s": {}}})
+        self.assertEqual(gate.parse_istanbul(payload, Path("/repo")), {})
+
+    def test_missing_report_is_operational_not_empty(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(gate.CoverageOperationalError):
+                gate.run_istanbul_coverage(Path(td))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ paths:
 
 # Go concurrency
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned, and the sharpest tool here (`go test -race`) is not among them. Goroutine lifetime and context propagation are review.
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, and the sharpest tool here (`go test -race`) is not among them. Goroutine lifetime and context propagation are review.
 
 Context propagation, goroutine lifecycle, and channel ownership for a program that shells out to external commands (`git`, a linter, and similar) and calls an LLM API. Sources: the Go blog on context (go.dev/blog/context-and-structs), pipelines (go.dev/blog/pipelines), the `errgroup` package, the race-detector blog, and the Uber/Google style guides.
 

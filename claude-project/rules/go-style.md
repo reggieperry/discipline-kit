@@ -5,7 +5,7 @@ paths:
 
 # Go style and idioms
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned. `gofmt` and `golangci-lint` are canon here, not a live finding surface.
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned. `gofmt` and `golangci-lint` are canon here, not a live finding surface.
 
 The base layer of Go discipline: naming, control flow, and the value/pointer/slice/map idioms. Sources: Effective Go, Go Code Review Comments (go.dev/wiki/CodeReviewComments), the Google Go Style Guide, the Uber Go Style Guide, Dave Cheney's *Practical Go*, and *100 Go Mistakes*. Where the major guides disagree, the disagreement is named with a stated default.
 

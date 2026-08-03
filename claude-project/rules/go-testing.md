@@ -5,7 +5,7 @@ paths:
 
 # Go testing
 
-**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java), so nothing here is scanned, so the anti-weakening section below describes what a differential gate WOULD forbid for Go, not what this one does. A deleted test, a new `t.Skip`, or a dropped assertion passes.
+**Enforcement grade:** review and convention — the gate registers no Go toolchain (`_TOOLCHAINS` holds python, scala, java, typescript), so nothing here is scanned, so the anti-weakening section below describes what a differential gate WOULD forbid for Go, not what this one does. A deleted test, a new `t.Skip`, or a dropped assertion passes.
 
 How to write Go tests: table-driven structure, the standard assertion idioms, test doubles, fuzzing, and property-based testing. Sources: the `testing` package docs, the Go blog (subtests, fuzzing), the Go Test Comments wiki (go.dev/wiki/TestComments), the Google style guide, `google/go-cmp`, and `pgregory.net/rapid`. The TDD cadence and design discipline are in `craft-tdd.md`; this rule is the Go mechanics.
 
