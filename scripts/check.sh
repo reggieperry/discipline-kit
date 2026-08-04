@@ -10,6 +10,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 bash scrub-gate.sh
 bash harness/shellcheck_all.sh
+
+# The em-dash rule this kit's own writing-style.md states. It was spaced here until 2026-08-03 and
+# is now closed, matching the voicing canon; existing prose is grandfathered by
+# scripts/em-dash-exempt.txt rather than rewritten. Without this the rule would be a preference in
+# the one repository that authors it, which is how it drifted from the canon in the first place.
+bash scripts/em-dash-check.sh
 python3 harness/rule_grades.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py

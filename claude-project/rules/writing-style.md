@@ -8,15 +8,15 @@ paths:
 ---
 # Writing register
 
-**Enforcement grade:** partly mechanical, and only for leakage rather than register — `scrub-gate.sh` fails the build if a private identifier survives anywhere in the kit (TIER-1 infra/PII, TIER-2 chain vocabulary in the scrubbed surfaces, TIER-3 upstream project names). The register itself — plain words over erudite ones, no profundity epigrams, no coined abstract nouns — is review and convention; nothing greps for a bad sentence.
+**Enforcement grade:** partly mechanical, and only for leakage rather than register—`scrub-gate.sh` fails the build if a private identifier survives anywhere in the kit (TIER-1 infra/PII, TIER-2 chain vocabulary in the scrubbed surfaces, TIER-3 upstream project names). The register itself—plain words over erudite ones, no profundity epigrams, no coined abstract nouns—is review and convention; nothing greps for a bad sentence.
 
 These documents are read by senior and junior practitioners in the relevant field. Write closer to a senior IC's design doc than to a consultative chat: direct, position-taking, structurally argued, spare on tone-markers.
 
 ## Voice
 
-"The team" rather than "your team" — the writer is part of the team. "We" for recommendations and joint conclusions. First-person singular ("I") is reserved for specific self-corrections where it earns its place — flagging that a prior position was wrong, naming a mistake, or distinguishing personal judgment from team consensus.
+"The team" rather than "your team"—the writer is part of the team. "We" for recommendations and joint conclusions. First-person singular ("I") is reserved for specific self-corrections where it earns its place—flagging that a prior position was wrong, naming a mistake, or distinguishing personal judgment from team consensus.
 
-When writing for a specific external audience (a customer, a stakeholder group), prefer impersonal phrasing — "the firm's infrastructure," "the operations team" — over us/them framing.
+When writing for a specific external audience (a customer, a stakeholder group), prefer impersonal phrasing—"the firm's infrastructure," "the operations team"—over us/them framing.
 
 ## Tone markers
 
@@ -26,11 +26,11 @@ Avoid these as filler:
 - Phrases that gesture at confidence rather than demonstrating it: "trust me," "the real answer is," "what this really means," "I want to flag that..."
 - Marketing intensifiers: "substantially," "seamlessly," "robust," "powerful," "comprehensive," "best-in-class," "cutting-edge," "industry-leading"
 - Throat-clearing: "It's worth noting that," "A few things to call out," "I want to point out"
-- Overused metaphors that read as an AI tell — chiefly "load-bearing" ("the load-bearing point," "X is load-bearing"). Fine once in a literal structural sense (as decoupling.md defines the term), but as a recurring marker of "this is the important one" it is a giveaway. Say what matters plainly: "the central point," "what the argument rests on," or "the part that has to hold."
+- Overused metaphors that read as an AI tell—chiefly "load-bearing" ("the load-bearing point," "X is load-bearing"). Fine once in a literal structural sense (as decoupling.md defines the term), but as a recurring marker of "this is the important one" it is a giveaway. Say what matters plainly: "the central point," "what the argument rests on," or "the part that has to hold."
 
-When candor is genuinely needed — flagging a self-correction, naming a position that deviates from a default, or acknowledging a mistake — do the work in the structure of the argument: present the default, name why it doesn't fit, then arrive at the deviation. The reader does not need to be told the answer is honest; they should be able to see that it is by how it is supported.
+When candor is genuinely needed—flagging a self-correction, naming a position that deviates from a default, or acknowledging a mistake—do the work in the structure of the argument: present the default, name why it doesn't fit, then arrive at the deviation. The reader does not need to be told the answer is honest; they should be able to see that it is by how it is supported.
 
-Hedge only where genuine uncertainty exists. Confidence is shown by taking a position and supporting it, not by adding "I think" before every claim. Uncertainty is named explicitly when it matters: "I don't know," "this needs verification," "the source is silent on X." Words like "essentially," "largely," and "roughly" are filler when they soften a claim out of habit, but are doing real work when they mark a real approximation ("the two schemas are essentially identical" ≠ identical) — keep those.
+Hedge only where genuine uncertainty exists. Confidence is shown by taking a position and supporting it, not by adding "I think" before every claim. Uncertainty is named explicitly when it matters: "I don't know," "this needs verification," "the source is silent on X." Words like "essentially," "largely," and "roughly" are filler when they soften a claim out of habit, but are doing real work when they mark a real approximation ("the two schemas are essentially identical" ≠ identical)—keep those.
 
 ## Plain words over fancy ones
 
@@ -38,8 +38,8 @@ Prefer the plain modern word to the erudite or theoretical synonym when they mea
 
 Two habits catch most of it:
 
-- **The profundity aphorism.** An "X is Y" epigram — "the interface is the utterance," echoing "the medium is the message" — has to earn its place by carrying an argument the plain sentence can't. Otherwise it reads as reaching to sound deep; default to the plain statement.
-- **The coined abstract noun.** Turning a plain idea into a capital-T Thing with a definite article — "the utterance," "the ask," "the why" — is a tell. Use the verb or the ordinary noun.
+- **The profundity aphorism.** An "X is Y" epigram—"the interface is the utterance," echoing "the medium is the message"—has to earn its place by carrying an argument the plain sentence can't. Otherwise it reads as reaching to sound deep; default to the plain statement.
+- **The coined abstract noun.** Turning a plain idea into a capital-T Thing with a definite article—"the utterance," "the ask," "the why"—is a tell. Use the verb or the ordinary noun.
 
 The test: would a sharp senior engineer say this out loud to a colleague, or is it written to be admired? Noticing that you are pleased with how a phrase rings is the signal to swap in the plain version. Clear beats clever; the point should land without the reader stopping to appreciate the wording.
 
@@ -51,9 +51,9 @@ En dashes (–) for numeric and date ranges: "8–10 deals," "2010–2015," "pag
 
 Serial (Oxford) comma in lists of three or more: "credit agreements, structure charts, and funds flow."
 
-Em dashes (—) with surrounding spaces for parenthetical breaks: "the system — including its audit trail — runs on Azure." Reserve em dashes for genuine breaks in thought; commas or parentheses suffice for tighter asides. **The AI tell is DENSITY, not the dash** — keep it under roughly one per paragraph, and never two in a single sentence. That part holds whichever spacing a repo sets.
+Em dashes (—) set **closed**, with no space on either side: "the system—including its audit trail—runs on Azure" (CMOS 17th ed. §6.85; the spaced form is a British convention). Reserve them for genuine breaks in thought; commas or parentheses suffice for tighter asides. **The AI tell is DENSITY, not the dash**—keep it under roughly one per paragraph, and never two in a single sentence.
 
-> **Open: the spacing itself.** This file derives from a shared voicing canon that sets em dashes CLOSED and cites its authority (CMOS 17th ed. §6.85, calling the spaced form a British convention). This file sets them spaced. The divergence has been treated as two deliberate lineages rather than drift, and it is recorded here rather than resolved because nothing in the kit establishes which it is — and a consuming repo may enforce either mechanically. Any repo whose gate fails on one form should say so in its own copy.
+This was spaced until 2026-08-03 and is now closed, matching the voicing canon this file derives from rather than diverging from it. The divergence had been recorded as two deliberate lineages; it was settled as drift and closed. `scripts/em-dash-check.sh` enforces it here going forward, and a consuming repo that installs this rule should wire the same check rather than trusting the convention to hold on its own.
 
 Introduce abbreviations on first use: "material nonpublic information (MNPI)," then use the abbreviation thereafter.
 
@@ -74,7 +74,7 @@ Code in fenced blocks with language identifiers. API identifiers preserved in th
 This file's `paths` frontmatter doesn't fire on these surfaces, but the same register applies. Apply explicitly:
 
 - Lead with what changed and why; lean on the diff for the how. Compact bullets over essays. Trim adjective ladders ("complete and robust and durable" → say what it does).
-- Cite only artifacts a reviewer can actually open: files in this repo, sibling PRs, issue numbers. Do not reference session-local artifacts (a plan memo you wrote during the session, an analysis you didn't commit, a design note that lives only in your scratch directory) — those produce dead links and force readers to take claims on faith.
+- Cite only artifacts a reviewer can actually open: files in this repo, sibling PRs, issue numbers. Do not reference session-local artifacts (a plan memo you wrote during the session, an analysis you didn't commit, a design note that lives only in your scratch directory)—those produce dead links and force readers to take claims on faith.
 - Stable IDs survive the prose: include them where they help (story IDs, issue numbers), but don't fabricate them. If unsure of an identifier, verify it via tool call before citing.
-- Checkboxes (`- [ ]`) are for tracked items that will be checked off. Non-tracked lists use plain bullets — checkboxes drift to "abandoned" when nobody owns the checking.
+- Checkboxes (`- [ ]`) are for tracked items that will be checked off. Non-tracked lists use plain bullets—checkboxes drift to "abandoned" when nobody owns the checking.
 - For commit messages: symptom + cause + fix + validation, in that order. The "why" earns its keep in the body; the title states the change. Closes/Fixes footers use the issue number, not a paraphrase.
