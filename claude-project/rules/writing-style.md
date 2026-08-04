@@ -23,14 +23,14 @@ When writing for a specific external audience (a customer, a stakeholder group),
 Avoid these as filler:
 
 - "honest answer," "honestly," "the honest truth," "to be candid," "let me be straight," "frankly," "in all candor," "real talk"
-- Phrases that gesture at confidence rather than demonstrating it: "trust me," "the real answer is," "I want to flag that..."
-- Marketing intensifiers: "substantially," "seamlessly," "robust," "powerful," "best-in-class," "cutting-edge," "industry-leading"
+- Phrases that gesture at confidence rather than demonstrating it: "trust me," "the real answer is," "what this really means," "I want to flag that..."
+- Marketing intensifiers: "substantially," "seamlessly," "robust," "powerful," "comprehensive," "best-in-class," "cutting-edge," "industry-leading"
 - Throat-clearing: "It's worth noting that," "A few things to call out," "I want to point out"
 - Overused metaphors that read as an AI tell — chiefly "load-bearing" ("the load-bearing point," "X is load-bearing"). Fine once in a literal structural sense (as decoupling.md defines the term), but as a recurring marker of "this is the important one" it is a giveaway. Say what matters plainly: "the central point," "what the argument rests on," or "the part that has to hold."
 
 When candor is genuinely needed — flagging a self-correction, naming a position that deviates from a default, or acknowledging a mistake — do the work in the structure of the argument: present the default, name why it doesn't fit, then arrive at the deviation. The reader does not need to be told the answer is honest; they should be able to see that it is by how it is supported.
 
-Hedge only where genuine uncertainty exists. Confidence is shown by taking a position and supporting it, not by adding "I think" before every claim. Uncertainty is named explicitly when it matters: "I don't know," "this needs verification," "the source is silent on X."
+Hedge only where genuine uncertainty exists. Confidence is shown by taking a position and supporting it, not by adding "I think" before every claim. Uncertainty is named explicitly when it matters: "I don't know," "this needs verification," "the source is silent on X." Words like "essentially," "largely," and "roughly" are filler when they soften a claim out of habit, but are doing real work when they mark a real approximation ("the two schemas are essentially identical" ≠ identical) — keep those.
 
 ## Plain words over fancy ones
 
@@ -51,7 +51,9 @@ En dashes (–) for numeric and date ranges: "8–10 deals," "2010–2015," "pag
 
 Serial (Oxford) comma in lists of three or more: "credit agreements, structure charts, and funds flow."
 
-Em dashes (—) with surrounding spaces for parenthetical breaks: "the system — including its audit trail — runs on Azure." Reserve em dashes for genuine breaks in thought; commas or parentheses suffice for tighter asides.
+Em dashes (—) with surrounding spaces for parenthetical breaks: "the system — including its audit trail — runs on Azure." Reserve em dashes for genuine breaks in thought; commas or parentheses suffice for tighter asides. **The AI tell is DENSITY, not the dash** — keep it under roughly one per paragraph, and never two in a single sentence. That part holds whichever spacing a repo sets.
+
+> **Open: the spacing itself.** This file derives from a shared voicing canon that sets em dashes CLOSED and cites its authority (CMOS 17th ed. §6.85, calling the spaced form a British convention). This file sets them spaced. The divergence has been treated as two deliberate lineages rather than drift, and it is recorded here rather than resolved because nothing in the kit establishes which it is — and a consuming repo may enforce either mechanically. Any repo whose gate fails on one form should say so in its own copy.
 
 Introduce abbreviations on first use: "material nonpublic information (MNPI)," then use the abbreviation thereafter.
 
