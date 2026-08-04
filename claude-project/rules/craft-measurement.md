@@ -137,3 +137,47 @@ what the harness must never do — allocate per sample beyond a known bound, bou
 by its own workload, use a statistic whose assumptions are unchecked, filter its own tool
 output — and keep that list where the harness lives, because a list nobody can find is a
 list nobody applies.
+
+## A requirement that cannot fail is the same defect as a gauge that cannot move
+
+The instruments above watch code. This one watches the *checklist* — and a checklist is written by
+the same person, in the same sitting, as the tests it is supposed to audit, so it inherits their
+blind spots rather than correcting them.
+
+- **A row naming a family discharges the whole family on one mapping.** "Bilattice laws" was one row
+  in a conformance registry, mapped to two suites, counted as covered — while it stood for roughly
+  fifty distinct laws, of which four De Morgan identities and one closure property were tested
+  nowhere. Nothing could notice: the row was already green. Require a row to state its proposition
+  **in words**, and treat a plural family noun with no count as a bucket that must be decomposed. The
+  distinguishing question is not whether the statement is plural — it is whether the family's **size
+  is pinned**, because a counted family cannot silently shrink and an uncounted one can.
+- **Assert the MEMBERS, not the count.** A count survives a reordering, and for a priority-ordered
+  vocabulary the order *is* the semantics — a rejection enum whose declaration order fixes which
+  reason is reported first will answer the wrong reason after a swap that a cardinality assertion
+  waves through. Assert the member list against a literal, and you pin names, order and size at once.
+  Measured: on a corpus of 26 closed sets, a reorder was the only mutation that both compiled and
+  discriminated, and it was killed by the list assertion and invisible to a count.
+- **Deletion is usually the compiler's job, not the test's.** Removing a referenced member fails at
+  every use site before any test runs, which is why deletion mutations are a poor way to validate
+  this kind of assertion. What the test buys is the case the compiler cannot see: a rename, a
+  reorder, or the removal of a member nothing referenced — which is exactly the "shipped but unread"
+  symbol that started this.
+- **The shape of the set decides what can pin it.** Where the language gives a members list, assert
+  it. Where it does not — a sum type with parameterised cases often has none — the only mechanism
+  left is exhaustive matching with no wildcard, and that guards *addition* while saying nothing about
+  deletion. Say which of the two you have rather than recording the set as covered.
+- **An opaque row id hides collectivity.** `LAWTABLE/row1` is unreadable, so no reviewer can see what
+  it absorbs. If a row cannot be stated, its coverage cannot be judged.
+- **Beware the check that reads the plausible signal instead of the real one.** A first cut flagged
+  any statement containing " and ", and over-fired five times in seven: a biconditional with a
+  conjunctive right-hand side is one obligation, not two. Run a new check against the existing corpus
+  before wiring it in, and count the false positives — a check that cries wolf is one somebody
+  eventually edits to shut up. A second worked example, measured the same way: "every closed set must
+  have its size pinned" fires on 16 of 26 with 13 of those noise — 81%, the same class as a query
+  already demoted for it — while the narrower "every set **whose own doc declares a count** must have
+  it pinned" fires on 3 and all 3 are real. Same idea, two orders of magnitude apart in usefulness,
+  and only measurement tells them apart.
+- **Instruments have this failure in both directions.** One reads propositions and is blind to a type
+  that was never written; another reads a promise list and is blind to a promise made only in a
+  comment. Neither silence means nothing is wrong. Ask of any completeness instrument: what class of
+  omission is invisible to it by construction, and print that count on every run.
