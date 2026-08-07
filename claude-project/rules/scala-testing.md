@@ -55,6 +55,14 @@ store.test("records an entry and counts it") { store =>
 - **The pure core is pure — test it directly, with no IO runtime.** The value types, the combiner, and the ADT operations return values; assert on the values. This is most of the suite and must stay the fast, hermetic majority.
 - **Where a unit returns `cats.effect.IO`, run it through munit-cats-effect, never `unsafeRunSync()` scattered in test bodies.** Return the `IO[Unit]` from the test and let the integration evaluate it. Do not bridge an `IO` to a `Future` or block on it to "make the assertion fit" — that mixing is the fragmentation `scala-concurrency.md` bans. Keep effectful suites few; push logic into the pure core so it can be example- and property-tested without a runtime.
 
+## Resources under test — the release path
+
+Trusting `Resource.make`'s contract is right — do not re-test the library. Trusting your own release lambda is not: a swapped argument or a wrong path in it passes every test that only exercises acquire and use. The rule was paid for by a scratch-worktree `Resource` whose suite proved the checked-out tree was correct *during* `use` and asserted nothing after it — so an acquire-path leak and a silently discarded release failure both survived every green run until a source-reading review found them (`scala-concurrency.md` carries the defect pair).
+
+- **For every `Resource` the repo authors, at least one test asserts the resource is gone after `use` completes** — the file deleted, the process reaped, the handle closed — not merely that it existed during `use`. Snapshot-compare against pre-existing state where the environment is shared (diff a temp dir's matching entries before and after, so stale leftovers from other runs cancel out of the assertion).
+- **A failed acquire gets its own test: nothing leaks.** Drive the acquire to fail (a nonexistent ref, an unreachable port) and assert the world is as it was before. This is the test that goes red against a multi-step acquire inside one `make` (`scala-concurrency.md`).
+- **A nontrivial release earns an erroring-release case** pinning where the failure surfaces, per the decision the release site wrote down — and, where interleavings matter, the leak-counter property: a counter incremented on acquire and decremented on release, asserted to read zero after generated nestings and early terminations (fs2's `BracketSuite` idiom).
+
 ## Property-based testing — the default for lawful code (ScalaCheck)
 
 Property tests assert an invariant over a large generated input space and **shrink** any failure to a minimal counterexample, so they catch the cases you would never enumerate by hand. ScalaCheck is the house engine — the Scala equivalent of Go's `rapid` and Python's Hypothesis. For a type-class instance or a lawful combiner, **the laws are the specification**, so a property is the primary test of a combiner and an example test is the regression pin beside it.

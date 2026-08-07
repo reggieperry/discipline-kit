@@ -45,6 +45,21 @@ val program: IO[Unit] = rig.use(pipeline => pipeline.runAllNodes(input))
 ```
 
 - **Compose resources, don't nest `use` calls.** Build one `Resource` for the rig by combining the parts (`flatMap`, `parTupled`, a `for`-comprehension in `Resource`), then a single `.use` at the top. Nested `.use` blocks invert acquisition and release order by hand and make the lifetime hard to read; one composed `Resource` releases in the correct reverse order for free.
+- **One acquisition step per `Resource.make`; a multi-step acquisition is composed Resources.** `make` registers the finalizer only when the whole acquire succeeds, so when a second step fails after a first step succeeded, the first leaks — no finalizer existed yet. Give each acquired thing its own `Resource` and compose them in a `for`-comprehension: everything partially acquired already has its finalizer installed before the next step runs, and release runs in reverse for free. A real leak paid for this rule: a scratch-worktree `Resource` created a temp directory and then ran `git worktree add` inside one acquire, and a failed `add` leaked the directory on every bad ref — stale temp dirs on the machine were the defect firing in practice, found by a source-reading review rather than by any test.
+
+```scala
+// One Resource per acquired thing. A failed second step releases the directory it
+// would otherwise have leaked, because the directory's finalizer is already registered.
+def workspace(cfg: Cfg): Resource[IO, Index] =
+  for
+    dir <- Resource.make(IO.blocking(Files.createTempDirectory("ws")))(p =>
+      IO.blocking(Files.deleteIfExists(p)).void
+    )
+    index <- Resource.make(openIndex(dir, cfg))(closeIndex)
+  yield index
+```
+
+- **A release failure goes somewhere deliberate — never discarded silently.** Decide, per release, where its failure surfaces, and write the decision at the site; discarding a release's failure signal (`.void` on an exit code, a swallowed exception in a finalizer) is allowed only with a comment naming why silence is correct there. Anything bracket-shaped you write should match the three per-path contracts `Resource`/`guaranteeCase` already give a release: on the success path a release error propagates to the caller; on the error path it is suppressed so the primary error wins; on cancellation it goes to a side channel, never to the program. An API that hands the release obligation to the caller (the `allocated` shape — a value plus a detached finalizer) must state that obligation and the leak mode in its doc, as cats-effect's own `allocated` scaladoc does. The companion defect to the leak above: the same worktree release `.void`ed the exit code of `git worktree remove --force`, so a failed removal was invisible until a later `deleteIfExists` threw a bare `DirectoryNotEmptyException` naming the directory, not the git failure.
 
 ## Shared state — Ref and Deferred, never a `var`
 
