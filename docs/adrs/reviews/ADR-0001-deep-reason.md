@@ -65,9 +65,15 @@ match its check. Acceptance was flipped only after this verdict arrived.
 
 ## Follow-ups this gate created (not part of the ADR's commit)
 
-1. Rewrite `harness/skills/adr-write/SKILL.md` off the retired clm- apparatus (six sites,
-   including a worked example and the scar paragraph), and fix the walkthrough's
-   misattribution of the stale citation to the template.
+1. Re-author the authoring surface off the retired clm- apparatus. Widened by the 2026-08-07
+   latent-assumption audit from adr-write alone to three artifacts, in priority order:
+   `harness/skills/story-intake/SKILL.md` first (its declared handoff is a set of parked
+   claims citing a board id—unexecutable since the ledger's deletion, and the artifact a
+   chain would consume), then `harness/skills/adr-write/SKILL.md` (six sites, including the
+   worked example and the scar paragraph), then `harness/templates/story-template.md` (whose
+   guidance comments teach the park step). The walkthrough's misattribution of the stale
+   citation to the ADR template was fixed directly—the template was already scrubbed in
+   `60d9ee8`.
 2. Fix `harness/templates/ADR-template.md`'s prescribed status-line and heading forms, which
    trip the em-dash check for every non-exempt ADR authored from them.
 3. Restore a structural guard for ADR shape: `authoring_artifacts_test.py` was deleted with

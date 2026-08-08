@@ -84,7 +84,7 @@ That held while the design assumed a sensitive-file list and a repository where 
 
 **The operator writes the plan and the stories.** The chain does not decide what to build.
 
-**No signing apparatus.** The dev-ledger is not coming back. Its obligation edges — `about`, `supersedes`, `discharged_by` — return as plain fields on a driver-written event log (§4.5). No claims, no hashes, no signatures, no `.hook-signed` forgery root.
+**No signing apparatus.** The dev-ledger is not coming back. No claims, no hashes, no signatures, no `.hook-signed` forgery root — and no obligation edges returning under other names: an event-log field earns its place by a named consumer, never by inheritance from the ledger's schema (§4.5).
 
 **The two axes stay orthogonal.** Runtime (§4) names no language. Language (§5) supplies commands and scanners to a runtime that does not know what they are.
 
@@ -705,14 +705,14 @@ The prior design's park rule (an unpaired start record means the phase died) is 
 
 The unpaired-start rule stays as a secondary in-phase liveness alarm, and it now has a positive form: a `.jsonl` with events and no `result` line is in-phase death, detected rather than inferred.
 
-**The event log** is driver-written, append-only, one record per phase transition, at an absolute path outside the repo working tree. Fields carry the ledger's obligation edges without its apparatus:
+**The event log** is driver-written, append-only, one record per phase transition, at an absolute path outside the repo working tree:
 
 ```
 { ts, story, phase, event, sha, session_id, wall_ms, total_cost_usd,
-  retry_count, about, supersedes, discharged_by, predicate, verdict }
+  retry_count, predicate, verdict }
 ```
 
-`about` names what the record concerns (a story, a phase, a predicate). `supersedes` points at a record this one replaces. `discharged_by` names the check that settled an obligation. No claims, no hashes, no signing. Agents never write it — the driver does, between invocations. Backstop with a PreToolUse hook denying any tool input naming the store path, and understand that the backstop is friction (§4.1).
+`predicate` names the check the driver ran; `verdict` is what it returned. An earlier version of this schema carried the ledger's obligation edges (`about`, `supersedes`, `discharged_by`) as plain fields, and the 2026-08-07 latent-assumption audit removed them: nothing anywhere read them, `story`/`phase`/`predicate`/`verdict` already carry the mechanical content, and a claim-shaped field with no consumer is the exact pattern the ledger was retired for — ADR-0001/D5 rules the log out of every decision regardless. A field returns only in the same commit as its consumer. No claims, no hashes, no signing. Agents never write it — the driver does, between invocations. Backstop with a PreToolUse hook denying any tool input naming the store path, and understand that the backstop is friction (§4.1).
 
 Two cost facts, both **VERIFIED**, one of them a trap: `total_cost_usd` **does** aggregate nested subagent spend, while the `usage` token counts do **not**. A phase that spawned an Explore subagent reported $0.0340 against a `usage` block pricing to about $0.0050 — roughly one seventh. A driver estimating spend by summing `usage.output_tokens` undercounts fan-out by close to an order of magnitude. `total_cost_usd` is the only correct field, and on a trivial run it matched hand-computed API pricing to within a rounding step, so it is real pricing rather than an estimate. Keep wall time and cost as separate columns; wall time includes retry backoff and a blended number would confound provider capacity with work done.
 
