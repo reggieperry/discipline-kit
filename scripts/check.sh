@@ -17,6 +17,11 @@ bash harness/shellcheck_all.sh
 # the one repository that authors it, which is how it drifted from the canon in the first place.
 bash scripts/em-dash-check.sh
 
+# ADR-0002's live courts: the revert premise proven per commit, and a chain profile
+# enabling autonomous merge without push = "never" fails the build.
+bash scripts/revert-sufficiency-check.sh
+bash scripts/merge-posture-check.sh
+
 # ADR-0001/D1's edge court: refs/chain/* is per-instance run state; a remote refspec or
 # mirror covering it silently resets or publishes in-flight chains. Live from the day the
 # ADR landed, sequencer or not.

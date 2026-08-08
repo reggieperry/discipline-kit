@@ -490,7 +490,7 @@ reviewer as a candidate row rather than as a reviewer success.
 ```
 docs/design/<subject>.md      what the system is to do
         ↓   decided by
-docs/adr/ADR-NNNN-*.md        numbered Decisions D1, D2, …
+docs/adrs/ADR-NNNN-*.md       numbered Decisions D1, D2, …
         ↓   discharged by
 stories/STORY-NNNN-*.md       adr: + decisions: + deps:
 ```

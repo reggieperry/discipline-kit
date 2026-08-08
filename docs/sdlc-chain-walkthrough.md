@@ -80,7 +80,7 @@ the planner's completeness check reads.
 
 ### A2 · At a fork, write an ADR
 
-A verdict-shaped, hard-to-reverse choice — a schema, a protocol, a fail posture. `docs/adr/ADR-NNNN-<slug>.md`,
+A verdict-shaped, hard-to-reverse choice — a schema, a protocol, a fail posture. `docs/adrs/ADR-NNNN-<slug>.md`,
 id stable and never renumbered, with the fixed section order: **Context**, numbered **Decisions**
 (D1, D2, …), **Consequences**, **Alternatives**, **Falsification condition**, **Cross-references**.
 
@@ -91,7 +91,7 @@ banner naming its successor and what it **retains**.
 
 ### A3 · Index it in the same commit
 
-One line in `docs/adr/README.md`'s registry. Committed with the ADR, so the file and its
+One line in `docs/adrs/README.md`'s registry. Committed with the ADR, so the file and its
 discoverability cannot drift apart.
 
 ### A4 · Decompose each Decision into stories
