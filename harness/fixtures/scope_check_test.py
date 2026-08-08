@@ -32,6 +32,7 @@ Run: python3 harness/fixtures/scope_check_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,19 @@ title: A worked example
 """
 
 
+def clean_env() -> dict[str, str]:
+    """The environment with git's own variables dropped.
+
+    A `pre-commit` hook runs with `GIT_DIR` and `GIT_INDEX_FILE` exported, and a subprocess
+    inherits them, so `git -C <throwaway> commit` writes into the REAL repository's index
+    instead of the fixture's. In an ordinary checkout `GIT_DIR` is the relative `.git`, which
+    `-C` accidentally re-resolves onto the throwaway; in a LINKED WORKTREE it is absolute and
+    the fixture dies. The chain's phases commit from worktrees, so the accident is not a
+    footing to stand on.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def git(repo: Path, *args: str) -> str:
     """Run git in `repo`, returning stdout. Raises on non-zero so a broken fixture is loud."""
     out = subprocess.run(
@@ -89,6 +103,7 @@ def git(repo: Path, *args: str) -> str:
         capture_output=True,
         text=True,
         check=True,
+        env=clean_env(),
     )
     return out.stdout
 
@@ -131,6 +146,7 @@ def run_tool(repo: Path, story: str = "STORY-0001.md") -> subprocess.CompletedPr
         [sys.executable, str(TOOL), "--story", story, "--base", "main", "--repo", str(repo)],
         capture_output=True,
         text=True,
+        env=clean_env(),
     )
 
 
@@ -142,6 +158,40 @@ def case(name: str, want: int, build, story: str | None = STORY) -> bool:
         got = run_tool(repo)
         ok = got.returncode == want
         print(f"  {'ok  ' if ok else 'FAIL'} {name}: want exit {want}, got {got.returncode}")
+        if not ok:
+            print(f"       stdout: {got.stdout.strip()[:300]}")
+            print(f"       stderr: {got.stderr.strip()[:300]}")
+        return ok
+
+
+def hostile_env_case() -> bool:
+    """The tool must read the repo it was POINTED at, not the one the environment names.
+
+    Every case above scrubs `GIT_*` before invoking the tool, which is right for isolating the
+    fixture and wrong as the only coverage: it means the suite cannot see whether the TOOL
+    scrubs. It did not, and the fixture's own scrub is what hid that. Here the tool is invoked
+    with `GIT_DIR` and `GIT_INDEX_FILE` pointing at a DECOY repository, exactly as a hook or a
+    phase seam would export them, and the verdict must be the drift the target repo actually
+    contains.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        repo = new_repo(Path(td), STORY)
+        build_drift(repo)
+        decoy = Path(td) / "decoy"
+        decoy.mkdir()
+        git(decoy, "init", "-q", "-b", "main", ".")
+        env = clean_env()
+        env["GIT_DIR"] = str(decoy / ".git")
+        env["GIT_INDEX_FILE"] = str(decoy / ".git" / "index")
+        got = subprocess.run(
+            [sys.executable, str(TOOL), "--story", "STORY-0001.md", "--base", "main",
+             "--repo", str(repo)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        ok = got.returncode == 1
+        print(f"  {'ok  ' if ok else 'FAIL'} hostile-env: want exit 1 (the drift in --repo), got {got.returncode}")
         if not ok:
             print(f"       stdout: {got.stdout.strip()[:300]}")
             print(f"       stderr: {got.stderr.strip()[:300]}")
@@ -226,6 +276,7 @@ def main() -> int:
         case("empty-diff", 0, build_empty_diff),
         case("prefix-boundary", 1, build_prefix_boundary),
         case("story-only-on-branch", 2, build_story_on_branch, story=None),
+        hostile_env_case(),
     ]
     failed = results.count(False)
     print(f"scope_check_test: {len(results) - failed}/{len(results)} cases pass")

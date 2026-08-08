@@ -31,6 +31,7 @@ produces.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -42,9 +43,22 @@ BOLD = re.compile(r"^\*\*")
 BACKTICKED = re.compile(r"`([^`]+)`")
 
 
+def clean_env() -> dict[str, str]:
+    """The environment with git's own variables dropped.
+
+    THIS TOOL IS RUN FROM HOOKS AND FROM PHASE SEAMS, both of which export `GIT_DIR` and
+    `GIT_INDEX_FILE`. A subprocess inherits them, and `git -C <other repo>` then reads and
+    writes the EXPORTING repository's gitdir and index while appearing to operate on the repo
+    named by `-C`. The scope check is a read, so the visible symptom is a verdict computed
+    against the wrong tree rather than corruption; the fixture beside it, which writes, took
+    the corruption. Do not rely on `-C` to re-scope what the environment already decided.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def git(repo: str, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["git", "-C", repo, *args], capture_output=True, text=True
+        ["git", "-C", repo, *args], capture_output=True, text=True, env=clean_env()
     )
 
 
