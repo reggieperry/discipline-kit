@@ -32,6 +32,7 @@ Run: python3 harness/fixtures/scope_check_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,19 @@ title: A worked example
 """
 
 
+def clean_env() -> dict[str, str]:
+    """The environment with git's own variables dropped.
+
+    A `pre-commit` hook runs with `GIT_DIR` and `GIT_INDEX_FILE` exported, and a subprocess
+    inherits them, so `git -C <throwaway> commit` writes into the REAL repository's index
+    instead of the fixture's. In an ordinary checkout `GIT_DIR` is the relative `.git`, which
+    `-C` accidentally re-resolves onto the throwaway; in a LINKED WORKTREE it is absolute and
+    the fixture dies. The chain's phases commit from worktrees, so the accident is not a
+    footing to stand on.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def git(repo: Path, *args: str) -> str:
     """Run git in `repo`, returning stdout. Raises on non-zero so a broken fixture is loud."""
     out = subprocess.run(
@@ -89,6 +103,7 @@ def git(repo: Path, *args: str) -> str:
         capture_output=True,
         text=True,
         check=True,
+        env=clean_env(),
     )
     return out.stdout
 
@@ -131,6 +146,7 @@ def run_tool(repo: Path, story: str = "STORY-0001.md") -> subprocess.CompletedPr
         [sys.executable, str(TOOL), "--story", story, "--base", "main", "--repo", str(repo)],
         capture_output=True,
         text=True,
+        env=clean_env(),
     )
 
 
