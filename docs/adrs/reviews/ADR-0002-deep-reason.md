@@ -73,6 +73,47 @@ have shipped the fail-open court versions—staged before commit. Two residual o
 wideings taken (the D3.2 and D4 falsifier courts now match their decisions' width). The
 record lands as Proposed; acceptance is the operator's.
 
+## Amendment (operator-directed), 2026-08-08
+
+The operator directed the posture the record had put aside: the chain's terminal act should
+be able to open a PR, with the trunk crossing governed by the PR-merge rules the operator
+runs with their interactive instance. Amended before acceptance (the record was Proposed, so
+this is a redraft, not a supersession): D1 became a per-repository terminal act—`open-pr`
+(sequencer pushes the story branch and opens the PR, documenter's briefing as body) or
+`merge-local` (the prior posture, kept for repositories with no forge)—with one invariant
+under both: the chain never pushes `main`, anywhere. D6's veto window is done properly by
+the PR surface where one exists; D5's blast radius under `open-pr` is an unearned PR, never
+a trunk advance; `merge_ok` now gates the terminal act, evaluated against the trial merge of
+the pinned sha. The finalizer does NOT return as an agent—PR-opening is mechanical and stays
+the sequencer's, per the eleven-deleted-specs scar. `merge-posture-check.sh` reschematized:
+each declared terminal act must pair with its push scope (`open-pr`/`branches-only`,
+`merge-local`/`never`); unknown terminals fail. A fourth gate pass attacked the amended
+record; its verdict is recorded below the pass-3 entry.
+
+## Pass 4 (amendment attack), 2026-08-08: REVISE, two blockers, all findings taken
+
+The same adversary, against the amended record; nineteen court cases probed in scratch,
+eighteen correct. BL1: the court crashed on a `[chain.terminal]` table-valued key
+(`TypeError`, exiting 1 by accident and mislabeling a crash as a finding)—fixed with a type
+guard, so a non-string terminal is a named FAIL. BL2: satisfaction under `open-pr` had no
+mechanism—the forge's default merge message carries no `Merged-Story:` trailer, so every PR
+merge would have read unrecorded and dependents never unblocked; the consequence now names
+the trailer's author (the operator-side merge rules, via a merge template or the forge merge
+call's body) and defers the per-posture witness mechanics to the sequencer build. Should-fixes
+taken: D6 no longer contradicts D1 on veto timers (silence merges nothing *by a chain act*);
+the CI consequence and Alternatives entry rewritten in two-posture, temporal form (the
+conjunct would wait on a signal its own act creates); D7 gained its `open-pr` arm; the
+Context paragraph now states plainly that `open-pr` crosses expiry condition one for branch
+content and scopes the backstop claim to the trunk; and the guard's opt-in-by-guarded-key
+shape is disclosed, with the sequencer's refuse-to-run-without-a-terminal obligation named.
+
+## Pass 5 (fix confirmation), 2026-08-08: CLEAN-TO-PRESENT
+
+BL1 re-probed in scratch: a table-valued, integer, and list terminal each return a named FAIL
+with no traceback; nine regression cases hold. BL2 and the four should-fixes confirmed
+present. All checks green on the staged tree with nothing left unstaged. The amended record
+is sound to land as Proposed for the operator's read.
+
 ## Follow-ups this gate created
 
 1. Upstream path citations corrected in this slice: `docs/adr/` → `docs/adrs/` at the two
