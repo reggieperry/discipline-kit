@@ -22,6 +22,8 @@ bash scripts/em-dash-check.sh
 # ADR landed, sequencer or not.
 bash scripts/chain-refspec-check.sh
 python3 harness/rule_grades.py
+python3 harness/fixtures/authoring_artifacts_test.py
+python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py
 python3 harness/fixtures/comment_shape_test.py

@@ -8,7 +8,7 @@ labels: enhancement
 <!--
   A feature request is a story authored from outside: you describe an outcome that should hold, and
   the condition under which you would agree it does. The maintainer turns a good one into a story
-  whose acceptance criteria pre-register a claim — so the more precisely you name the done-condition,
+  whose acceptance criteria each name the check that settles them — so the more precisely you name the done-condition,
   the faster it becomes work. Delete these guidance comments as you fill the two fields.
 -->
 

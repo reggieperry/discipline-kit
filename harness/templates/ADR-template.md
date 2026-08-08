@@ -3,7 +3,7 @@
 <!--
   Copy this file to docs/adrs/ADR-NNNN-<slug>.md and fill it in.
   - NNNN is the next free integer, zero-padded to four digits. Ids are stable and
-    never renumbered — once ADR-0007 exists it is ADR-0007 forever, even after it is
+    never renumbered—once ADR-0007 exists it is ADR-0007 forever, even after it is
     superseded. Gaps are fine; reuse is not. The next id is one past the highest in
     docs/adrs/README.md's registry table.
   - <slug> is a few kebab-case words naming the subject, e.g. billing-idempotency.
@@ -12,12 +12,12 @@
     section reads "None." rather than being deleted.
 -->
 
-**Status:** Proposed | Accepted | Superseded-in-part | Superseded | Deprecated — <date>.
-Acceptance gate: <deep-reason | committee> pass — <link to the review>.
+**Status:** Proposed | Accepted | Superseded-in-part | Superseded | Deprecated (<date>).
+Acceptance gate: <deep-reason | committee> pass (<link to the review>).
 
 <!--
   The Status line records the ADR's state and cites the verdict that admitted it. An
-  acceptance-gate pass — a deep-reason adversary or a committee review — is *testimony*:
+  acceptance-gate pass—a deep-reason adversary or a committee review—is *testimony*:
   a reader looked and found nothing, which is not the same as a check having run. Link
   the review so the claim is followable; a verdict asserted in prose is not.
 
@@ -29,7 +29,7 @@ Acceptance gate: <deep-reason | committee> pass — <link to the review>.
 
 <!--
   The forces in play: the problem being decided, the constraints that bound it, and
-  what was true when the decision was made. State the situation, not the answer — a
+  what was true when the decision was made. State the situation, not the answer—a
   reader who disagrees with the Decisions should still accept the Context. Keep it to
   what a future maintainer needs to reconstruct why this was a live question.
 -->
@@ -39,28 +39,28 @@ _<Describe the problem, the constraints, and the state of the world that forces 
 ## Decisions
 
 <!--
-  Each Decision is numbered and stands on its own — D1, D2, D3, … within this ADR. A
+  Each Decision is numbered and stands on its own—D1, D2, D3, … within this ADR. A
   Decision can be superseded individually, in whole or in part, by a later ADR; you
   never delete a Decision or renumber its siblings. A superseded Decision keeps its
   text and gains a "superseded-in-part" banner (see the example below) naming the
-  successor and, explicitly, what it *retains* — the parts that still govern.
+  successor and, explicitly, what it *retains*—the parts that still govern.
 
   Write each Decision as a claim in the present tense: "The service does X," not "We
   should consider X."
 -->
 
-### D1 — <the decision, stated as a claim>
+### D1: <the decision, stated as a claim>
 
-_<One or two sentences stating exactly what is decided — precise enough that a reviewer
+_<One or two sentences stating exactly what is decided—precise enough that a reviewer
 can tell whether an implementation conforms.>_
 
 <!-- Repeat as D2, D3, … Record only the Decisions this ADR actually makes. -->
 
 ---
 
-<!-- ILLUSTRATIVE EXAMPLE — delete this block in a real ADR. -->
+<!-- ILLUSTRATIVE EXAMPLE—delete this block in a real ADR. -->
 
-### D-example — Idempotency keys are client-supplied UUIDs
+### D-example: Idempotency keys are client-supplied UUIDs
 
 The billing service requires every write request to carry a client-supplied `Idempotency-Key`
 header holding a version-4 UUID; the service stores the key with its result and replays the
@@ -75,7 +75,7 @@ stored result on any retry inside the 24-hour retention window.
 ## Consequences
 
 <!--
-  What follows from the Decisions — the costs accepted, the constraints imposed, the
+  What follows from the Decisions—the costs accepted, the constraints imposed, the
   follow-on work created, and the second-order effects. Include the ones that hurt; a
   Consequences section with no downside is not finished. Separate "what is now true"
   from "what we must still do."
@@ -96,11 +96,11 @@ _<For each option not taken: what it was, and the specific reason it lost.>_
 ## Falsification condition
 
 <!--
-  NON-NEGOTIABLE. State the condition under which this decision would be shown wrong —
+  NON-NEGOTIABLE. State the condition under which this decision would be shown wrong—
   the observation, measurement, or event that would defeat it. A decision you cannot
   imagine being wrong is a preference, not a decision.
 
-  Wherever the condition is mechanically checkable, name the check that would fire it —
+  Wherever the condition is mechanically checkable, name the check that would fire it—
   so the falsifier has something that can actually convene, rather than resting on
   someone remembering to look. Where no mechanical check is possible, say so plainly and
   name the standing human observation that stands in; a check is preferred, and an
@@ -108,7 +108,7 @@ _<For each option not taken: what it was, and the specific reason it lost.>_
 -->
 
 _<The condition that would defeat this ADR.>_ Watched by `<check-name>`; <or: not
-mechanically checkable — the standing observation is …>.
+mechanically checkable—the standing observation is …>.
 
 ## Cross-references
 

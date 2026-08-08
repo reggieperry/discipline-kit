@@ -95,11 +95,8 @@ harness/rule_grades.py
 harness/rules_manifest.py
 harness/scope_check.py
 harness/shellcheck_all.sh
-harness/skills/adr-write/SKILL.md
-harness/skills/story-intake/SKILL.md
 harness/skills/story-tighten/SKILL.md
 harness/skills/story-write/SKILL.md
-harness/templates/ADR-template.md
 harness/templates/CLAUDE-harness-section.md
 harness/templates/.github-issue-templates/bug.md
 harness/templates/.github-issue-templates/feature.md

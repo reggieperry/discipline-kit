@@ -65,6 +65,18 @@ match its check. Acceptance was flipped only after this verdict arrived.
 
 ## Follow-ups this gate created (not part of the ADR's commit)
 
+All three were taken on 2026-08-07, one commit after acceptance, as the chain build's phase
+zero: the authoring surface rewritten off the apparatus (story-intake's handoff is now the
+criterion list bound to named checks; adr-write teaches named-check courts and the
+link-the-review status form; story-template's comments teach settlement, not parking), the
+ADR template's status-line and heading forms converted so authored ADRs pass the em-dash
+check, and the structural guard restored as `harness/fixtures/authoring_artifacts_test.py`
+on the commit path—observed red against the pre-rewrite tree (24 findings under the shipped
+patterns, independently reproduced), green after, with its own red-proof fixture
+demonstrating all three exits. The slice's adversarial verify then found and closed a
+survivor the first scan missed (the installed issue templates, a directory below the
+non-recursive glob) and a seventh adr-write site. The original list, kept for the record:
+
 1. Re-author the authoring surface off the retired clm- apparatus. Widened by the 2026-08-07
    latent-assumption audit from adr-write alone to three artifacts, in priority order:
    `harness/skills/story-intake/SKILL.md` first (its declared handoff is a set of parked

@@ -40,7 +40,7 @@ shrink.
 | Step | State | What exists |
 |---|---|---|
 | A1 design doc | operator | — |
-| A2 write the ADR | **partial** | `harness/templates/ADR-template.md` (its `clm-NNNN` citation was scrubbed in `60d9ee8`; the template's spaced-dash forms still trip the em-dash check for non-exempt ADRs) |
+| A2 write the ADR | built | `harness/templates/ADR-template.md`, apparatus-free and dash-conformant; ADR-0001 authored against it; shape guarded by `authoring_artifacts_test.py` on the commit path |
 | A3 index it | **partial** | registry table in `docs/adrs/README.md`; ADR-0001 registered 2026-08-07 |
 | A4 decompose into stories | not built | no template, no schema, no parser |
 | A5 commit-path integrity checks | not built | no `chain-graph` |

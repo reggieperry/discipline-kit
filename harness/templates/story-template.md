@@ -8,7 +8,7 @@ status: draft         # draft | ready | handed-off | closed
 ---
 
 <!--
-  A story is a work spec: the prose parent of the claim its acceptance criteria will pre-register.
+  A story is a work spec: the prose parent of its acceptance criteria and the checks that settle them.
   Fill in every section. Delete the guidance comments as you go; leave no <...> placeholder behind.
   Score the finished spec against the tightness rubric before you move status to `ready` — a story
   that names its files, its out-of-scope boundary, and atomic acceptance criteria costs the
@@ -62,10 +62,10 @@ Out of scope:
 # Acceptance criteria
 
 <!--
-  These criteria become the pre-registered claim the loop parks before any code is written, so each
+  These criteria are fixed before any code is written, so each
   one must be atomic and verifiable: a named test, an observable assertion, a file shape, a command
   that passes. Vague criteria ("should work correctly") let the implementer invent what counts as
-  done. Name the check that discharges each criterion; a criterion no check can recompute is a
+  done. Name the check that settles each criterion; a criterion no check can recompute is a
   design error, and catching it here — before the work — is the point of writing the story first.
 -->
 
