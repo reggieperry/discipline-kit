@@ -34,9 +34,9 @@ than being dropped. The template is authoritative on the shape.
 A Status line near the top records the ADR's state — Proposed, Accepted, Superseded-in-part,
 Superseded, or Deprecated — and cites the verdict that admitted it. An acceptance-gate pass, a
 deep-reason adversary or a committee review, is *testimony*; testimony
-attests but never signs, so the Status line cites the testimony's `clm-NNNN` rather than
-reporting the pass in prose. A verdict cited by id is receipted and checkable; a verdict
-asserted in prose is neither.
+attests but never signs, so the Status line links the recorded review (under `reviews/`) rather
+than reporting the pass in prose. A verdict linked to its record is followable and checkable; a
+verdict asserted in prose is neither.
 
 ## Per-Decision supersession
 
@@ -51,24 +51,23 @@ that names the old one, not an edit that erases the fact that the decision chang
 value is in the diff — a maintainer must be able to see what was decided, what replaced it, and
 what survived.
 
-## The falsifier registers as a claim
+## The falsifier names its court
 
 The **Falsification condition** is non-negotiable: every ADR states the condition under which
 its decision would be shown wrong. That condition is not allowed to live only in the ADR's
-prose. Wherever it is mechanically checkable, it registers as a check — an
-`unverified` assertion parked under the check that would fire it — and the ADR cites the
-`clm-NNNN`. As the design maxim holds, *a falsifier living only in prose is a court nobody
-convenes*: a condition with no court is a sentence nobody can act on, while a condition
-registered as a claim has a docket, a check, and a date it could lose in. Where no mechanical
-check is possible the ADR says so plainly and names the standing human observation that stands
-in — but a check is preferred.
+prose. Wherever it is mechanically checkable, it is wired as a named check on the commit path
+(`scripts/check.sh`) and the ADR cites the check by name. As the design maxim holds, *a
+falsifier living only in prose is a court nobody convenes*: a condition with no check is a
+sentence nobody can act on, while a condition wired as a check has a court and a date it could
+lose in. Where no mechanical check is possible the ADR says so plainly and names the standing
+human observation that stands in — but a check is preferred, and an unwatched condition must
+read as unwatched.
 
 ## The registry
 
 Every ADR is registered here in the same commit that adds it. The next free id is one past the
 highest `ADR-NNNN` in the table.
 
-| ADR | Title | Status | Falsifier (clm) | Supersession | Date |
+| ADR | Title | Status | Falsifier (court) | Supersession | Date |
 |-----|-------|--------|-----------------|--------------|------|
-
-_No ADRs registered yet._
+| [ADR-0001](ADR-0001-advancement-re-derived.md) | Advancement is re-derived, never reported | Accepted | `chain-refspec-check.sh` (D1 edge, live); remaining courts future, named per decision | None | 2026-08-07 |

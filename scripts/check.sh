@@ -16,6 +16,11 @@ bash harness/shellcheck_all.sh
 # scripts/em-dash-exempt.txt rather than rewritten. Without this the rule would be a preference in
 # the one repository that authors it, which is how it drifted from the canon in the first place.
 bash scripts/em-dash-check.sh
+
+# ADR-0001/D1's edge court: refs/chain/* is per-instance run state; a remote refspec or
+# mirror covering it silently resets or publishes in-flight chains. Live from the day the
+# ADR landed, sequencer or not.
+bash scripts/chain-refspec-check.sh
 python3 harness/rule_grades.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py
