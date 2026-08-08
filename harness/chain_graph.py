@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""chain-graph — the story graph's six commit-path integrity checks (walkthrough A5).
+"""chain-graph — the story graph's six integrity checks (walkthrough A5).
 
 Stories under `stories/` declare their own edges in frontmatter; the graph is derived from
 those files and never declared centrally (design §3.10). This reads every story and every
@@ -12,8 +12,18 @@ nothing" and "looked at nothing" are the same green otherwise:
   2 dangling deps     a `deps:` id no story file declares
   3 cycles            the Kahn residual, over the edges that resolve
   4 adr references    `adr:` naming no registered ADR, `decisions:` naming no such D
-  5 orphan ratio      how many stories claim the ADR-0000 escape hatch, printed EVERY run
+  5 orphan ratio      how many stories claim the ADR-0000 escape hatch, printed on every run
+                      that REACHES it, which a parse failure does not: check 1 returns early
   6 reverse coverage  every non-superseded Decision cited by a story or waived in the ADR
+
+THIS TOOL IS NOT YET ON THE COMMIT PATH, and saying otherwise would be the exact defect the
+kit's own rule-grade vocabulary exists to prevent. A5 wants these checks running per commit;
+against this repository the checker exits 1, because 18 of its 19 live Decisions have no
+story. That is the true state of the decomposition rather than a defect in the checks, and
+wiring a check that always fails teaches everyone to bypass the hook. WHAT IS on the commit
+path is `harness/fixtures/chain_graph_test.py`, so the checker cannot rot unobserved while it
+waits. The checker itself wires when the decision-coverage gap closes, which is the triage
+slice's job.
 
 THE SCOPE IS EVERY STORY AND EVERY ADR, not the agreed set: a cycle inside an unagreed ADR
 is still a cycle.
@@ -21,14 +31,17 @@ is still a cycle.
 EXIT CODES, AND THE ONE PLACE THIS DEPARTS FROM THE WALKTHROUGH. The contract is the kit's
 canonical three: 0 clean, 1 findings, 2 could-not-run, with 2 never readable as a pass. A5
 asks for dangling ids to carry "its own exit code, separate from cycles", because the two
-produce the same Kahn residual and send the operator to different remedies. A fourth exit
-code cannot be spent here: ADR-0003/D2 closes the vocabulary a sequencer may consume at
-0/1/2 and reads ANY other code as could-not-run, so an exit 3 would report a real graph
-defect as a broken instrument. The requirement is met inside exit 1 instead, as named finding
-CLASSES: `DANGLING-DEP` and `CYCLE ` print under separate headings with separate remedies,
-the summary line carries a per-class count (`dangling=2 cycle=0`), and a dangling edge is
-dropped from the graph before Kahn runs so one defect cannot be reported as the other. What
-the operator reads to choose a remedy is the class, not the code.
+produce the same Kahn residual and send the operator to different remedies. This tool spends
+no fourth code, and the reason is convention rather than obligation: ADR-0003/D2 governs the
+PINNED ADVANCE SCRIPTS a sequencer consumes at a phase seam, and this is not one of those, so
+D2 does not reach it. What D2 does establish is the vocabulary every check in this kit already
+speaks, and an operator who learns one contract reads every instrument. A tool that spent
+exit 3 here would also be misread the moment anything did consume it programmatically, since
+D2's readers treat an unknown code as could-not-run. So the requirement is met inside exit 1,
+as named finding CLASSES: `DANGLING-DEP` and `CYCLE ` print under separate headings with
+separate remedies, the summary line carries a per-class count (`dangling=2 cycle=0`), and a
+dangling edge is dropped from the graph before Kahn runs so one defect cannot be reported as
+the other. What the operator reads to choose a remedy is the class, not the code.
 
 COULD-NOT-RUN IS EVERY EMPTY DENOMINATOR, and that is the honest reading rather than a
 lenient one. A run with no stories and no registered ADRs has nothing to check, and reporting
@@ -55,6 +68,26 @@ what §3.10's admission rule forbids. Supported:
   anchor, alias or tag (`&`, `*`, `!`), a nested flow collection, an unclosed flow sequence,
   a sequence item belonging to no key, a line with no colon, a list where a scalar belongs
   or a scalar where a list belongs, and a missing `id:` or `title:`.
+
+  A flow sequence splits on the commas OUTSIDE quoted items, so `["a, b", c]` is two items
+  rather than three. Splitting on every comma is invisible to every check downstream, which
+  is why `--dump` exists and why a fixture asserts the read rather than the verdict.
+
+WHERE THIS ACCEPTS WHAT YAML REJECTS. Three divergences are known and deliberate, and all
+three run the same direction: this parser admits a line a YAML loader would refuse, never the
+reverse, so no story that parses here fails there for a reason this tool hid.
+
+  - a bare colon inside a plain scalar (`title: Fix: the thing`) is kept whole; YAML wants it
+    quoted. Story titles carry colons constantly and rejecting them would buy nothing.
+  - `key:value` with no space parses as a key and a value; YAML reads the whole token as a
+    plain scalar and would then fail the line for other reasons.
+  - an unbalanced quote opens a span that runs to end of line rather than erroring, so a `#`
+    after it is kept as content instead of starting a comment.
+
+  Each bites only if PyYAML is ever adopted here, at which point a file that parsed under this
+  subset could fail under the loader. That is the migration's problem to enumerate, and it is
+  written down here so the migration finds it stated rather than discovering it one story at
+  a time.
 
 THE KEY LIST IS CLOSED (§3.10: an unknown key is a typo that silently does nothing, so it is
 fatal). `id`, `title`, `deps`, `labels`, `sensitive_files` and `status` are the kit's plain
@@ -85,13 +118,17 @@ archived story reads as dangling.
 
 Usage:
     python3 harness/chain_graph.py [--root DIR]
+    python3 harness/chain_graph.py --dump FILE
 
 With no argument the root is the directory above this script, which is the kit layout
-(`<root>/harness/chain_graph.py`); `--root` points it at any other tree.
+(`<root>/harness/chain_graph.py`); `--root` points it at any other tree. `--dump` parses one
+file's frontmatter and prints the READ as JSON, which is how a fixture asserts what the parser
+understood rather than what a check concluded downstream of it.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -107,6 +144,7 @@ ORPHAN_ADR = "ADR-0000"
 DECISION_HEADING = re.compile(r"(?m)^###\s+(D\d+)\s*:")
 NEXT_HEADING = re.compile(r"(?m)^#{1,3}\s+")
 REGISTRY_HEADING = re.compile(r"(?m)^## The registry\s*$")
+SECTION_HEADING = re.compile(r"(?m)^#{1,2}\s+")
 REGISTRY_ROW = re.compile(r"\[(ADR-\d{4})\]\(([^)]+)\)")
 SUPERSEDED = re.compile(r"supersed(?:ed|es)(?:-in-part)?\s+by\s+\[?ADR-\d{4}", re.I)
 WAIVER = re.compile(r"(?m)^\s*>?\s*Covered-by:\s*none\b(.*)$")
@@ -144,6 +182,34 @@ def unquote(value: str) -> str:
     return value
 
 
+def split_flow_items(inner: str) -> list[str]:
+    """Split a flow sequence on the commas OUTSIDE quoted items.
+
+    A quote opens a span only where an item begins, matching `unquote`, which quotes an item
+    whole or not at all. Splitting on every comma tears `["a, b"]` into two items and leaves a
+    dangling quote character on each, which no later check can notice: the graph stays clean
+    and the label is silently wrong.
+    """
+    items: list[str] = []
+    buf = ""
+    quote = ""
+    for ch in inner:
+        if quote:
+            buf += ch
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'" and not buf.strip():
+            quote = ch
+            buf += ch
+        elif ch == ",":
+            items.append(buf)
+            buf = ""
+        else:
+            buf += ch
+    items.append(buf)
+    return items
+
+
 def parse_flow(value: str, where: str, errors: list[str]) -> list[str] | None:
     if not value.endswith("]"):
         errors.append(f"{where}: flow sequence is not closed by ']'")
@@ -152,7 +218,7 @@ def parse_flow(value: str, where: str, errors: list[str]) -> list[str] | None:
     if not inner:
         return []
     items = []
-    for raw in inner.split(","):
+    for raw in split_flow_items(inner):
         item = unquote(raw.strip())
         if not item:
             errors.append(f"{where}: empty item in the flow sequence")
@@ -297,6 +363,17 @@ def parse_decisions(text: str, adr: str) -> list[Decision]:
     return out
 
 
+def registry_section(text: str, start: int) -> str:
+    """The registry table's own text: from its heading to the next `## `, not to end of file.
+
+    Reading to EOF makes every ADR link BELOW the registry a registration. A "Superseded
+    records" or "Index of reviews" section added later would silently enrol its links, and the
+    reverse-coverage denominator would grow without anyone registering anything.
+    """
+    following = SECTION_HEADING.search(text, start)
+    return text[start: following.start() if following else len(text)]
+
+
 def kahn_residual(nodes: list[str], edges: dict[str, list[str]]) -> list[str]:
     """The nodes left when no further node has all its dependencies removed."""
     remaining = set(nodes)
@@ -307,13 +384,39 @@ def kahn_residual(nodes: list[str], edges: dict[str, list[str]]) -> list[str]:
         remaining -= ready
 
 
-def resolve_root(argv: list[str]) -> Path:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="the story graph's integrity checks")
     parser.add_argument("--root", default=None, help="the repository root to read")
-    args = parser.parse_args(argv)
+    parser.add_argument(
+        "--dump",
+        default=None,
+        metavar="FILE",
+        help="parse one file's frontmatter, print it as JSON, and exit; the seam that lets a "
+        "fixture assert what the parser READ rather than what a check concluded from it",
+    )
+    return parser.parse_args(argv)
+
+
+def resolve_root(args: argparse.Namespace) -> Path:
     if args.root:
         return Path(args.root).resolve()
     return Path(__file__).resolve().parent.parent
+
+
+def dump(path: Path) -> int:
+    """Print one file's parsed frontmatter as JSON.
+
+    A check's exit code says a conclusion held; it never says the parser read the value the
+    conclusion was drawn from, and a wrong read that happens not to change a verdict is
+    invisible through the checks alone. This prints the read itself, so a fixture can assert
+    that `["a, b"]` is ONE item and that a `#` inside quotes survives.
+    """
+    if not path.is_file():
+        print(f"chain-graph: VOID, no such file: {path}; never a pass")
+        return 2
+    fields, errors = parse_frontmatter(path.read_text(encoding="utf-8"))
+    print(json.dumps({"fields": fields, "errors": errors}, sort_keys=True))
+    return 1 if errors else 0
 
 
 def void(reasons: list[str]) -> int:
@@ -331,7 +434,10 @@ def void(reasons: list[str]) -> int:
 
 
 def main(argv: list[str]) -> int:
-    root = resolve_root(argv)
+    args = parse_args(argv)
+    if args.dump:
+        return dump(Path(args.dump))
+    root = resolve_root(args)
     stories_dir = root / "stories"
     adr_dir = root / "docs" / "adrs"
 
@@ -351,7 +457,7 @@ def main(argv: list[str]) -> int:
         if not heading:
             registry_problem = "docs/adrs/README.md carries no '## The registry' heading"
         else:
-            registry = dict(REGISTRY_ROW.findall(text[heading.end():]))
+            registry = dict(REGISTRY_ROW.findall(registry_section(text, heading.end())))
             if not registry:
                 registry_problem = "docs/adrs/README.md registers no ADR"
 

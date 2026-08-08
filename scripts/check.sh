@@ -28,6 +28,9 @@ bash scripts/merge-posture-check.sh
 bash scripts/chain-refspec-check.sh
 python3 harness/rule_grades.py
 python3 harness/fixtures/authoring_artifacts_test.py
+# The story graph's checker is not wired here: it exits 1 against this tree, where 18 of 19 live
+# Decisions have no story. Its FIXTURE is, so the checker cannot rot while that gap closes.
+python3 harness/fixtures/chain_graph_test.py
 python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py

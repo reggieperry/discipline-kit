@@ -32,6 +32,7 @@ Run: python3 harness/fixtures/chain_graph_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -216,12 +217,48 @@ def case(
         return ok
 
 
+def dump_case(name: str, frontmatter: str, want_fields: dict[str, object]) -> bool:
+    """Assert what the parser READ, through `--dump`, rather than what a check concluded.
+
+    A check's exit code cannot distinguish a value parsed correctly from one parsed wrongly in
+    a way that happens not to change the verdict: `labels: ["a, b"]` split into two items
+    still yields a clean graph. These cases read the parse itself.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "story.md"
+        path.write_text(frontmatter, encoding="utf-8")
+        p = subprocess.run(
+            [sys.executable, str(TOOL), "--dump", str(path)], capture_output=True, text=True
+        )
+        problems = []
+        try:
+            got = json.loads(p.stdout)
+        except json.JSONDecodeError:
+            print(f"  FAIL {name}: --dump printed no JSON (exit {p.returncode})")
+            print("\n".join(f"        | {line}" for line in (p.stdout + p.stderr).strip().splitlines()))
+            return False
+        if got.get("errors"):
+            problems.append(f"unexpected parse error(s): {got['errors']}")
+        for key, value in want_fields.items():
+            if got["fields"].get(key) != value:
+                problems.append(f"{key}: want {value!r}, read {got['fields'].get(key)!r}")
+        ok = not problems
+        print(f"  {'ok  ' if ok else 'FAIL'} {name}: {'; '.join(problems) if problems else 'parsed as specified'}")
+        return ok
+
+
 def default_root_case() -> bool:
     """The checker must find its inputs with NO argument, from the kit layout.
 
     Every case above passes `--root`, which bypasses discovery entirely, so all of them would
     stay green while the default root pointed at the wrong directory. This one copies the
     checker into `<repo>/harness/` and runs it with no argument.
+
+    DISCLOSED: this case does NOT discriminate against an always-pass stub, and it was
+    measured green against one. What it pins is narrower than an exit code suggests: that root
+    discovery reaches a conforming tree from the installed depth. It is kept because nothing
+    else covers discovery at all, and because the failure it catches is silent in the other
+    direction: a wrong root finds no stories, which every `--root` case hides.
     """
     with tempfile.TemporaryDirectory() as td:
         root = Path(td) / "repo"
@@ -246,6 +283,12 @@ def template_schema_case() -> bool:
     The template is the schema's only human-facing statement and the checker is its only
     machine-facing one. Nothing else compares them, so a key added to one and not the other
     would be found by the first story that used it, in a repository, months later.
+
+    DISCLOSED: this case does NOT discriminate against an always-pass stub either, and for a
+    sharper reason than the one above: it imports the module rather than running it, so a stub
+    whose `CHAIN_KEYS` and `KNOWN_KEYS` are empty satisfies both set comparisons VACUOUSLY.
+    Measured green against exactly that stub. It pins drift between two real artifacts, which
+    is worth keeping, and it pins nothing about the checker's behavior.
     """
     sys.path.insert(0, str(TOOL.parent))
     import chain_graph
@@ -442,9 +485,33 @@ def main() -> int:
             1,
             expect=("ZERO-DECISIONS",),
         ),
+        case(
+            "registry-bounded",
+            {"STORY-0001-first.md": story(
+                id="STORY-0001", title="First", adr="ADR-0101", decisions="[D1, D2]"
+            )},
+            CLEAN_ADRS,
+            0,
+            expect=("1 registered ADR(s)",),
+            forbid=("ADR-0777",),
+            registry=registry_for(CLEAN_ADRS) + (
+                "\n## Superseded records\n\n"
+                "| [ADR-0777](ADR-0777-retired.md) | Retired | Superseded | none | None | 2026-01-01 |\n"
+            ),
+        ),
         case("void-nothing", None, None, 2, expect=("VOID",)),
         case("void-no-stories", {}, CLEAN_ADRS, 2, expect=("VOID",)),
         case("void-no-registry", CLEAN_STORIES, None, 2, expect=("VOID",)),
+        dump_case(
+            "dump-quoted-comma",
+            '---\nid: STORY-0001\ntitle: First\nlabels: ["a, b", c]\n---\n',
+            {"labels": ["a, b", "c"]},
+        ),
+        dump_case(
+            "dump-quoted-hash",
+            '---\nid: STORY-0001\ntitle: "a # b"\nmilestone: "v1 # rc2"\n---\n',
+            {"title": "a # b", "milestone": "v1 # rc2"},
+        ),
         default_root_case(),
         template_schema_case(),
     ]

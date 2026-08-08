@@ -164,6 +164,40 @@ def case(name: str, want: int, build, story: str | None = STORY) -> bool:
         return ok
 
 
+def hostile_env_case() -> bool:
+    """The tool must read the repo it was POINTED at, not the one the environment names.
+
+    Every case above scrubs `GIT_*` before invoking the tool, which is right for isolating the
+    fixture and wrong as the only coverage: it means the suite cannot see whether the TOOL
+    scrubs. It did not, and the fixture's own scrub is what hid that. Here the tool is invoked
+    with `GIT_DIR` and `GIT_INDEX_FILE` pointing at a DECOY repository, exactly as a hook or a
+    phase seam would export them, and the verdict must be the drift the target repo actually
+    contains.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        repo = new_repo(Path(td), STORY)
+        build_drift(repo)
+        decoy = Path(td) / "decoy"
+        decoy.mkdir()
+        git(decoy, "init", "-q", "-b", "main", ".")
+        env = clean_env()
+        env["GIT_DIR"] = str(decoy / ".git")
+        env["GIT_INDEX_FILE"] = str(decoy / ".git" / "index")
+        got = subprocess.run(
+            [sys.executable, str(TOOL), "--story", "STORY-0001.md", "--base", "main",
+             "--repo", str(repo)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        ok = got.returncode == 1
+        print(f"  {'ok  ' if ok else 'FAIL'} hostile-env: want exit 1 (the drift in --repo), got {got.returncode}")
+        if not ok:
+            print(f"       stdout: {got.stdout.strip()[:300]}")
+            print(f"       stderr: {got.stderr.strip()[:300]}")
+        return ok
+
+
 def build_in_scope(repo: Path) -> None:
     (repo / "src" / "a.py").write_text("changed\n")
     (repo / "docs" / "note.md").write_text("changed\n")
@@ -242,6 +276,7 @@ def main() -> int:
         case("empty-diff", 0, build_empty_diff),
         case("prefix-boundary", 1, build_prefix_boundary),
         case("story-only-on-branch", 2, build_story_on_branch, story=None),
+        hostile_env_case(),
     ]
     failed = results.count(False)
     print(f"scope_check_test: {len(results) - failed}/{len(results)} cases pass")

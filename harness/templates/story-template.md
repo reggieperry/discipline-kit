@@ -22,12 +22,14 @@ cites:                # the sources the work is checked against; their depth dec
 
   THE LAST FIVE FRONTMATTER KEYS ARE OPTIONAL, and they are what makes a story a node in the chain's
   graph rather than a standalone spec. Delete all five for a plain story; carry them when the story
-  discharges a numbered Decision. A story that carries them is checked on the commit path by
-  `harness/chain_graph.py`: `adr:` must name a registered ADR and `decisions:` its actual Decisions,
-  `deps:` must name story ids that exist and must not close a cycle, and every non-superseded
-  Decision must be cited by some story or waived in its own ADR. The key list is CLOSED, so an
-  unknown key is a parse error rather than a field nothing reads. Acceptance criteria live in the
-  body as checkboxes, never in the frontmatter.
+  discharges a numbered Decision. A story that carries them is read by `harness/chain_graph.py`,
+  which is run ON DEMAND rather than on the commit path today: `adr:` must name a registered ADR and
+  `decisions:` its actual Decisions, `deps:` must name story ids that exist and must not close a
+  cycle, and every non-superseded Decision must be cited by some story or waived in its own ADR.
+  The checker reports uncovered Decisions, of which this repository currently has many, so it is
+  wired into `scripts/check.sh` only when that gap closes; its fixture is wired now, so the checker
+  is guarded meanwhile. The key list is CLOSED, so an unknown key is a parse error rather than a
+  field nothing reads. Acceptance criteria live in the body as checkboxes, never in the frontmatter.
 -->
 
 # Problem / Context
