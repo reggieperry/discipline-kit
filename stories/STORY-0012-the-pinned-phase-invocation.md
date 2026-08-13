@@ -151,6 +151,23 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   demonstrates the finding fires; the clean cases carry the discrimination.
 - `ci.yml` is untouched (its partial mirror of `check.sh` is a recorded follow-up under
   STORY-0003's entry); the new fixture rides `check.sh` only.
+- The adversarial merge review's three findings are closed red-first: a COMMITTED
+  `.claude/settings.local.json` is a tree-supplied project-scope settings source porcelain
+  never names (tracked files read clean), refused from the filesystem before each phase like
+  the agents directory (`settings-local-known-bad-2`); a `--version` printing invalid UTF-8
+  escaped as an exception and exited 1, the one verdict-shaped code this layer must not
+  produce, now read with replacement and pinned (`version-invalid-utf8-2`); and `seam-close`
+  over a still-live fence destroyed the tamper evidence `seam-check` exists to name, now a
+  `seam-not-checked` refusal with the worktree and fence preserved (`seam-close-unchecked-2`).
+- The driver story must inherit ADR-0004/D4's letter explicitly—a dead phase is re-run under a
+  NEW attempt—so this module's ability to re-invoke at the same attempt path is capability,
+  not license: the driver decides the attempt number, and nothing here writes one.
+- Follow-up recorded rather than taken (reviewer-recommended, optional): relocate phase
+  worktrees OUT of `pinned_root` via an optional profile key with a sibling default, since the
+  phase's cwd currently sits inside the pinned root's subtree with the examiner at `../../..`.
+  Taking it properly means documenting the new key in the profile's schema block, which is
+  beyond this story's containment (invoke.py and its fixtures), so it is recorded here for the
+  driver or a hygiene slice.
 - Recorded by STORY-0005's merge review, and owed here: the seam reads `git status --porcelain` in
   the ONE repository it was pointed at, and under ADR-0004/D2 an attest-only phase runs in a
   sequencer-owned worktree while the primary tree carries the story's commits. Both trees are live

@@ -21,6 +21,12 @@ grounded in those retained records before it was written). The prefix is deliber
 than `task_started` alone: a truncated transcript can carry a notification without its start,
 and any task event in a phase transcript means a task ran.
 
+WHAT IT DOES NOT CATCH, stated so it is not mistaken for caught: a spawn ATTEMPT that never
+starts — killed before `task_started`, or denied by the settings fence — leaves no `task_`
+record and reads clean here. The audit sees tasks that ran, not attempts; the denial itself is
+the fence's job, and the attempt's trace, if any, is the phase's own tool-use record, which
+this court does not read.
+
 THE DENOMINATORS PRINT ON EVERY RUN, for the reason the whole kit exists: a clean report over
 an empty corpus and a clean report over a real one look identical from outside. No transcripts
 at all reads could-not-run rather than clean — a batch that ran phases wrote streams, so an

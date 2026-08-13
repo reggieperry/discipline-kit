@@ -23,12 +23,16 @@ ADR-0003/D6 read at both trees (porcelain empty in the parent AND the phase work
   version-mismatch-2        the stub reports a newer version        -> 2, harness-version-mismatch
   version-unpinned-2        a profile with no harness_version       -> 2, harness-version-unpinned
   version-unreadable-2      a --version with no number in it        -> 2, harness-version-unread
+  version-invalid-utf8-2    a --version that is not UTF-8           -> 2, harness-version-unread,
+                                                                       never the verdict-shaped 1
 
   THE COMPOSED PROMPT (ADR-0004/D1, D3)
   prompt-byte-identical     the composed prompt vs the pinned brief -> 0, byte-for-byte equal
   brief-absent-2            no pinned brief of that name            -> 2, brief-absent
   brief-symlink-out-2       a brief symlinked out of the root       -> 2, outside the pinned root
-  agents-dir-known-bad-2    .claude/agents/ in the judged tree      -> 2, agents-directory
+  agents-dir-known-bad-2    .claude/agents/ in the judged tree      -> 2, agents-directory,
+                                                                       the judged tree's path named
+  settings-local-known-bad-2 a COMMITTED settings.local.json        -> 2, settings-local
 
   THE SETTINGS PINNING (ADR-0004/D3): the per-invocation twin of core_test's decoy-user-hook
   settings-pinning-decoy    a decoy user-scope SessionStart hook    -> 0, materialized = pinned
@@ -47,6 +51,8 @@ ADR-0003/D6 read at both trees (porcelain empty in the parent AND the phase work
   settings-tampered-2       the fence edited during the phase       -> 2, settings-tampered
   settings-missing-2        the fence deleted during the phase      -> 2, settings-missing
   seam-close-removes-0      seam-close after a clean seam           -> 0, path gone, unregistered
+  seam-close-unchecked-2    seam-close with the fence still live    -> 2, seam-not-checked, the
+                                                                       evidence preserved
 
   THE FRESH ATTEMPT (ADR-0004/D1, D4)
   phase-death-fresh-attempt a stub that dies mid-phase, then one    -> 2 phase-death, corpse left;
@@ -317,6 +323,21 @@ def version_unreadable_case() -> bool:
         return judge("version-unreadable-2", got, want=2, marker="harness-version-unread")
 
 
+def version_invalid_utf8_case() -> bool:
+    """A --version that is not UTF-8 is a broken instrument, and the contract has no exit 1."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        b = Bench(tmp)
+        bad = tmp / "mojibake"
+        bad.write_bytes(b'#!/usr/bin/env bash\nprintf \'\\xff\\xfe garbled\\n\'\nexit 0\n')
+        bad.chmod(0o755)
+        got = run_tool(INVOKE, "gate", "--root", str(b.kit), "--harness", str(bad))
+        faults = ("exit 1 is a verdict-shaped code and this module has none",) \
+            if got.returncode == 1 else ()
+        return judge("version-invalid-utf8-2", got, want=2, marker="harness-version-unread",
+                     faults=faults)
+
+
 def prompt_byte_identical_case() -> bool:
     """Criterion 1: the composed prompt is the pinned brief, byte for byte, and nothing else."""
     with tempfile.TemporaryDirectory() as td:
@@ -359,7 +380,28 @@ def agents_dir_case() -> bool:
         (b.repo / ".claude" / "agents").mkdir(parents=True)
         (b.repo / ".claude" / "agents" / "phase-worker.md").write_text("a competing source\n")
         got = b.compose()
-        return judge("agents-dir-known-bad-2", got, want=2, marker="agents-directory")
+        return judge("agents-dir-known-bad-2", got, want=2, marker="agents-directory",
+                     present=(str(b.repo / ".claude" / "agents"),))
+
+
+def settings_local_case() -> bool:
+    """F1's known-bad: a COMMITTED settings.local.json is a tree-supplied settings source.
+
+    Committed matters: the file rides the judged tree into the phase's cwd, and porcelain never
+    names a tracked file, so the seam sees nothing — presence must be refused from the
+    filesystem before the phase, exactly like the agents directory.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        b = Bench(Path(td))
+        (b.repo / ".claude").mkdir()
+        (b.repo / ".claude" / "settings.local.json").write_text(json.dumps({
+            "hooks": {"SessionStart": [{"hooks": [
+                {"type": "command", "command": f"echo {DECOY_MARKER}"}]}]}
+        }))
+        git(b.repo, "add", "-A")
+        git(b.repo, "commit", "-qm", "plant a tree-supplied settings source")
+        got = b.compose()
+        return judge("settings-local-known-bad-2", got, want=2, marker="settings-local")
 
 
 def settings_pinning_decoy_case() -> bool:
@@ -482,7 +524,7 @@ def live_porcelain_case() -> bool:
             faults.append("the worktree act failed, so the case was not constructed")
         if armed.returncode != 0:
             faults.append("the fence was not armed, so the case was not constructed")
-        if said.count("porcelain empty") < 2:
+        if said.count("advance: porcelain empty") < 2:
             faults.append("fewer than two porcelain reads were reported")
         if (b.worktree_path() / ".claude" / "settings.json").exists():
             faults.append("the materialized settings survived the seam")
@@ -560,6 +602,24 @@ def seam_close_case() -> bool:
         if str(path) in git(b.repo, "worktree", "list", "--porcelain"):
             more.append("the worktree is still registered after seam-close")
         return judge("seam-close-removes-0", got, want=0, marker="removed after the seam",
+                     faults=tuple(more))
+
+
+def seam_close_unchecked_case() -> bool:
+    """F3's known-bad: closing over a live fence would destroy the tamper evidence.
+
+    seam-check consumes the fence; a seam-close that finds one still present means the seam was
+    never checked here, and removing the worktree would take the evidence with it.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        b, faults = armed_bench(Path(td))
+        got = b.seam("seam-close")
+        more = list(faults)
+        if not b.worktree_path().is_dir():
+            more.append("the worktree was destroyed with its evidence")
+        elif not (b.worktree_path() / ".claude" / "settings.json").is_file():
+            more.append("the fence evidence did not survive the refusal")
+        return judge("seam-close-unchecked-2", got, want=2, marker="seam-not-checked",
                      faults=tuple(more))
 
 
@@ -687,11 +747,13 @@ def main() -> int:
         version_mismatch_case(),
         version_unpinned_case(),
         version_unreadable_case(),
+        version_invalid_utf8_case(),
 
         prompt_byte_identical_case(),
         brief_absent_case(),
         brief_symlink_out_case(),
         agents_dir_case(),
+        settings_local_case(),
 
         settings_pinning_decoy_case(),
         settings_collision_case(),
@@ -705,6 +767,7 @@ def main() -> int:
         settings_tampered_case(),
         settings_missing_case(),
         seam_close_case(),
+        seam_close_unchecked_case(),
 
         fresh_attempt_case(),
         compaction_death_case(),

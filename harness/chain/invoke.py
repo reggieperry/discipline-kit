@@ -113,6 +113,7 @@ CouldNotRun = loader.CouldNotRun
 BRIEFS = "briefs"
 SETTINGS_DIR = "settings"
 SETTINGS_FILE = "settings.json"
+SETTINGS_LOCAL = "settings.local.json"
 PROJECT_DIR = ".claude"
 AGENTS_DIR = "agents"
 WORKTREES = "worktrees"
@@ -163,8 +164,13 @@ def observed_version(harness: str) -> str:
     fails, or prints no number — is could-not-run, never a match.
     """
     try:
+        # errors="replace" because a --version that is not UTF-8 must read could-not-run, not
+        # crash: an escaped UnicodeDecodeError exits 1, the one code this module must not
+        # produce. The read only regex-searches for digits, so replacement characters cost
+        # nothing.
         done = subprocess.run([harness, "--version"], capture_output=True, text=True,
-                              env=loader.child_env(None), timeout=VERSION_TIMEOUT)
+                              errors="replace", env=loader.child_env(None),
+                              timeout=VERSION_TIMEOUT)
     except subprocess.TimeoutExpired as e:
         raise CouldNotRun(f"harness-version-unread: {harness} --version did not return within "
                           f"{VERSION_TIMEOUT}s") from e
@@ -208,6 +214,28 @@ def refuse_agents_directory(tree: Path) -> None:
             "judged tree to carry no competing definition source at all"
         )
     say(f"invoke: no {PROJECT_DIR}/{AGENTS_DIR}/ in {tree}")
+
+
+def refuse_settings_local(tree: Path) -> None:
+    """ADR-0004/D3's assertion at a second file: no tree-supplied project settings source.
+
+    `materialize_settings` refuses a workspace-supplied `settings.json`; this is the same
+    rationale at the sibling name the harness also reads as project scope. A COMMITTED
+    settings.local.json rides the judged tree into the phase's cwd and porcelain never names a
+    tracked file, so the seam sees nothing — presence is refused from the filesystem before
+    each phase instead. The real harness's precedence for this file is argued from harness
+    knowledge, not measured: the settings-source limb of D5's extended probe covers it.
+    System-scope managed settings are operator-machine material outside any environment
+    repoint — a disclosure rather than a mechanism; the operator checklist owns that surface.
+    """
+    found = tree / PROJECT_DIR / SETTINGS_LOCAL
+    if found.exists():
+        raise CouldNotRun(
+            f"settings-local: {found} exists at phase start, a project-scope settings source "
+            "the tree supplies and the phase can edit; the fence is the pinned settings and "
+            "nothing else (ADR-0004/D3)"
+        )
+    say(f"invoke: no {PROJECT_DIR}/{SETTINGS_LOCAL} in {tree}")
 
 
 def pinned_material(root: Path) -> Path:
@@ -300,6 +328,12 @@ def invocation_env(home: Path) -> dict[str, str]:
     environment that already exports it would otherwise survive the HOME swap and re-point the
     harness at the real user scope. API-key auth rides the surviving environment, which is the
     precedence the probe's stderr recorded.
+
+    This is an inherited-and-patched environment, not a fresh one: whatever else the operator's
+    environment carries — ANTHROPIC_* keys, NODE_OPTIONS, CLAUDE_CODE_* toggles, PATH —
+    survives into the phase. That is operator-hygiene surface, not a judged-party channel: the
+    judged tree cannot write the sequencer's environment, and pinning the operator's own is
+    the machine checklist's ground.
     """
     env = loader.child_env(None)
     env[HOME_VAR] = str(home)
@@ -363,11 +397,13 @@ def build(root: Path, repo: Path, workspace: Path, brief_name: str, home: Path,
     version_gate(root, harness)
     repo = attempt.working_tree(repo)
     refuse_agents_directory(repo)
+    refuse_settings_local(repo)
     if not workspace.is_dir():
         raise CouldNotRun(f"the workspace {workspace} is not a directory, so there is nowhere "
                           "to materialize the fence")
     if workspace.resolve() != repo.resolve():
         refuse_agents_directory(workspace)
+        refuse_settings_local(workspace)
     pinned = pinned_material(root)
     return materialized(pinned, workspace, brief_name, owned_home(home), harness)
 
@@ -462,6 +498,11 @@ def seam_check(root: Path, repo: Path, story: str, number: int) -> None:
     does ADR-0003/D6's precondition run, in the parent AND the phase worktree, because
     STORY-0005's seam reads the one repository it is pointed at and cannot know a worktree
     exists that it was not told about. Which trees the seam reads is decided here.
+
+    A consequence worth naming: a refusal AFTER the fence is consumed (parent or worktree
+    dirt) leaves the fence gone, so re-running seam-check reads settings-missing. The recovery
+    route is to re-arm the fence with `compose` against the same worktree once the dirt is
+    resolved, or to take a fresh attempt, which clears and re-materializes everything.
     """
     path, _ = worktree_for(root, repo, story, number)
     if not path.is_dir():
@@ -490,8 +531,21 @@ def seam_check(root: Path, repo: Path, story: str, number: int) -> None:
 
 
 def seam_close(root: Path, repo: Path, story: str, number: int) -> Path:
-    """ADR-0004/D2's last act: the worktree is removed after the seam, by the shared authority."""
-    _, wroot = worktree_for(root, repo, story, number)
+    """ADR-0004/D2's last act: the worktree is removed after the seam, by the shared authority.
+
+    The driver's ordering obligation is bound here rather than trusted: seam-check consumes the
+    fence, so a close that finds the materialized fence still present means the seam was never
+    checked at this worktree — and removing it would destroy the very tamper evidence
+    seam-check exists to name. That reads seam-not-checked, and the worktree stays.
+    """
+    path, wroot = worktree_for(root, repo, story, number)
+    fence = path / PROJECT_DIR / SETTINGS_FILE
+    if fence.exists():
+        raise CouldNotRun(
+            f"seam-not-checked: {fence} still exists, so the seam was never checked at this "
+            "worktree; seam-check consumes the fence and names a tampered one, and closing "
+            "over it would destroy that evidence (ADR-0004/D2, D3)"
+        )
     path = core.clear_owned(repo, wroot, story, number)
     say(f"invoke: worktree at {path} removed after the seam (ADR-0004/D2)")
     return path
@@ -534,10 +588,12 @@ def run_phase(root: Path, repo: Path, story: str, number: int, brief_name: str,
     version_gate(root, harness)
     repo = attempt.working_tree(repo)
     refuse_agents_directory(repo)
+    refuse_settings_local(repo)
     pinned = pinned_material(root)
     wroot = worktree_root(pinned)
     workspace = fresh_worktree(repo, wroot, story, number)
     refuse_agents_directory(workspace)
+    refuse_settings_local(workspace)
     home = owned_home(cleared_home(wroot, story, number))
     inv = materialized(pinned, workspace, brief_name, home, harness)
 

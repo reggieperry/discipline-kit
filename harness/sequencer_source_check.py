@@ -37,7 +37,9 @@ WHAT IT LOOKS FOR, each pattern carrying the decision it serves:
                          result-string and session-resume patterns catch the wrapper's return
                          text and the literal `--resume`, while a sequencer that continues or
                          forks the most recent session has the same unmeasured dependence
-                         under a flag no existing pattern names.
+                         under a flag no existing pattern names. The quoted short forms are
+                         included as argv elements ("-c", "-r"), quote-bounded so a bare -c in
+                         prose or an option like "-C" never fires.
 
 THE ONE ADMITTED READER. ADR-0001/D5 admits session ids and liveness signals, so exactly one
 function may touch a stream: `admitted_signals`. The two stream-shaped patterns are exempt
@@ -122,7 +124,7 @@ PATTERNS = (
             "no phase runs as a subagent on the advancement path (ADR-0004/D1)", False),
     Pattern("session-resume", re.compile(r"--resume\b"),
             "resumption under headless invocation is unmeasured (ADR-0004/D4)", False),
-    Pattern("session-continue", re.compile(r"--continue\b|--fork-session\b"),
+    Pattern("session-continue", re.compile(r"--continue\b|--fork-session\b|[\"']-[cr][\"']"),
             "continuing or forking a session is resumption wearing another flag, the same "
             "unmeasured dependence (ADR-0004/D1, D4)", False),
 )

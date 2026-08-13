@@ -123,8 +123,10 @@ RESULT_RECORD = "result"
 # The compaction marker, matched as a prefix on a record's kind or on a key NAME. ADR-0004/D1
 # reads a compaction event as mid-phase death — the one event that may have lost the composed
 # prompt's constraints — and no probe has driven one at 2.1.224, so the exact record shape is
-# unmeasured and the wide net is the fail-closed reading; D5's extended probe carries the
-# compaction limb that would narrow it.
+# unmeasured and this net is the best available pending D5's probe limb: wide, not closed,
+# because a net that can miss is not fail-closed. The blind spot, named: the scan reads the
+# record's kind and its top-level key names, never the subtype value, which is where the
+# marker most plausibly lives (a compact_boundary-style subtype, unmeasured).
 COMPACT_PREFIX = "compact"
 
 # ADR-0001/D5's allowlist, declared as data so a court can read it: the session id, for

@@ -90,6 +90,8 @@ all. The full invocation audit is STORY-0012's.
   source-session-resume      --resume on an advancement path     -> 1
   source-session-continue    --continue, resumption by another
                              flag, on an advancement path        -> 1
+  source-session-short-flag  a quoted "-r" argv element, the
+                             short resume flag                   -> 1
   source-verdict-in-reader   the reader itself reading is_error  -> 1
   source-widened-allowlist   ADMITTED_KEYS carrying a new key    -> 1
   source-no-allowlist-2      no admitted reader to exempt        -> 2
@@ -805,6 +807,8 @@ PLANTED = {
                              '    return ["claude", "-p", "go", "--resume", sid]\n',
     "source-session-continue": 'def invoke():\n'
                                '    return ["claude", "-p", "go", "--continue"]\n',
+    "source-session-short-flag": 'def invoke(sid):\n'
+                                 '    return ["claude", "-p", "go", "-r", sid]\n',
 }
 
 
