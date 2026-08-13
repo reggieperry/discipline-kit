@@ -43,6 +43,19 @@ done
 # TIER-1: infra hostnames, home paths, personal data, private-store tech.
 tier1='t7920|trane|/home/reggie|/Users/|ghostdogsamurai|fastmail|DU[0-9]{6,}|\bPwC\b|\bCBO\b|gascity|bright-lights|\bdolt\b|msmtp'
 
+# TIER-1, the operator's username in its NON-PATH forms. The pattern above is slash-anchored,
+# and the D7 probe's own audit measured what that misses: the username survived 28 times in the
+# retained raws through the scratch path's SLUG form (`-home-reggie-coding-...`) and through the
+# ownership columns of `ls -l`, on files the gate read as clean. A word-bounded match catches
+# every form, the slash-anchored one included.
+#
+# LICENSE IS EXCLUDED FROM THIS PATTERN AND ONLY THIS ONE. Its copyright line names the
+# copyright holder, which is the license's content rather than a leak, and a licence that cannot
+# say who holds the copyright is not one. The exclusion is narrow on purpose: LICENSE is still
+# scanned by every other TIER-1 token, the path form included, so the carve-out cannot become a
+# quiet hole. Both halves are pinned by cases in harness/fixtures/scrub_gate_test.py.
+tier1user='\breggie\b'
+
 # TIER-3: adw-harness project identifiers (the go-*/python-* rules were sourced
 # from adw-harness). Forbidden in the scrubbed surfaces (memories/, claude-user/,
 # rules/); allowed in guides/ as illustrative teaching examples, the same
@@ -62,8 +75,16 @@ tier2='\belder\b|EL-[0-9]|ADR-[0-9]{3}|ssh t7920|\bsling\b|reconciler|kickoff|\b
 # this gate on the commit path, so without the file exclusion every subagent commit
 # blocks on the gate's own blind spot.
 echo "== TIER-1 (forbidden anywhere) =="
+tier1_hit=0
 if grep -rniE "$tier1" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" \
     --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ ; then
+  tier1_hit=1
+fi
+if grep -rniE "$tier1user" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" \
+    --exclude=LICENSE --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ ; then
+  tier1_hit=1
+fi
+if [[ "$tier1_hit" -ne 0 ]]; then
   echo "  ^^ TIER-1 violations" ; fail=1
 else
   echo "  clean"

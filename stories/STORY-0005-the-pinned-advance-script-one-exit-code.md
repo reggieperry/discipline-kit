@@ -40,6 +40,7 @@ Story-specific criteria—each dischargeable by a named check:
 - [ ] red-proof's native exit 2 reads as fail, not could-not-run—verified by `the adaptation fixture`
 - [ ] a parent repository holding live phase worktrees still reads porcelain-empty at the seam, either because the precondition accounts for the worktree path or because the worktrees are placed outside the parent—verified by `a porcelain-precondition fixture case with a phase worktree materialized and the tree otherwise clean`
 - [ ] the phase invocation pins its settings sources, so a user-scope hook cannot inject into a phase transcript—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from the phase transcript`
+- [ ] a pinned phase type that does not resolve fails the seam closed rather than being substituted—verified by `an invocation fixture naming a phase type absent from the pinned payload, asserting a nonzero exit and no spawned phase`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -56,10 +57,19 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
-- The last two acceptance criteria come from `docs/probe/D7-headless-probe-2026-08-12.md`, which
-  measured both facts rather than predicting them: worktrees materialize under
-  `.claude/worktrees/` INSIDE the parent repository and show up as an untracked directory, and
-  user-scope SessionStart hooks fire in headless runs—the operator's own startup hook injected
-  machine-identity detail into both legs' transcripts. The worktree criterion is written so
-  either remedy discharges it, because that choice belongs to this story's builder and not to
-  the probe.
+- The last three acceptance criteria come from `docs/probe/D7-headless-probe-2026-08-12.md`, read
+  at its correction, which measured all three facts rather than predicting them. Worktrees
+  materialize under `.claude/worktrees/` INSIDE the parent repository, and the audit strengthened
+  the ground: the design's §4.8 VERIFIED mark claiming they are git-excluded is measured FALSE at
+  2.1.224—`.git/info/exclude` is the stock template and the parent's porcelain prints
+  `?? .claude/worktrees/`—so the precondition cannot rely on an exclusion the harness does not
+  write. The worktree criterion is written so either remedy discharges it, because that choice
+  belongs to this story's builder and not to the probe. User-scope SessionStart hooks fire in
+  headless runs: the operator's own startup hook injected machine-identity detail into both legs'
+  transcripts. And leg 1 measured the fail-open the third criterion closes—the wrapper's main
+  agent, meeting a phase type it could not resolve, improvised a substitute brief from the judged
+  tree and carried on, which is ADR-0001/D3's defect reached by initiative inside the wrapper.
+- The third part of that corrected rule is a phase-brief content rule rather than a check, so it
+  is recorded here instead of as a criterion: the invoking prompt carries spawn-by-name only and
+  never phase instructions, because a prompt relaying instruction content can override the pinned
+  definition. STORY-0009 carries the judged-tree half.

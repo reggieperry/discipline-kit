@@ -36,7 +36,7 @@ Out of scope:
 Story-specific criteria—each dischargeable by a named check:
 
 - [ ] a profile omitting the sequencer's definition path fails the profile check—verified by `the extended check's known-bad fixture`
-- [ ] the pinned `--agents` payload is the sole definition source: a repo-level agent definition in the judged tree sharing a name with a pinned phase definition is reported as a finding—verified by `a check case planting a same-named definition under the judged tree's agent directory and asserting the finding`
+- [ ] the pinned `--agents` payload is the sole definition source: the judged tree carries no agent-definition directory at all, asserted from the filesystem rather than inferred, and any definition found there is a finding whether or not it shares a name with a pinned one—verified by `a check case planting a definition under the judged tree's agent directory, both same-named and differently-named, and asserting the finding in each`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -53,8 +53,15 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
-- The one-source rule is `docs/probe/D7-headless-probe-2026-08-12.md`'s leg-2 finding, measured
-  rather than reasoned: with the `--agents` JSON and a same-named repo-level definition both
-  present, the worker received two instruction sources and followed the repo file's. The same
-  probe found the repo-level definition is not registered at all in headless `-p` mode, so the
-  payload is the only route in and a repo-level file beside it can only compete.
+- The one-source rule is `docs/probe/D7-headless-probe-2026-08-12.md`, read at its CORRECTION
+  rather than at its first draft. Leg 2 as first written—two sources, the repo file's followed—was
+  confounded: the repo file and the invoking prompt carried the same instruction, so nothing
+  separated them. Leg 3 discriminates, with the repo definition removed and a neutral prompt: the
+  pinned payload's instruction executed. The corrected rule is three-part, and only the first part
+  is this story's, because only it is a check over the judged tree—the judged tree carries no
+  agent-definition directory at all. The other two are the invocation's: the wrapper fails closed
+  on a missing pinned type, which STORY-0005 carries, and the invoking prompt carries
+  spawn-by-name only and never phase instructions, which is a phase-brief content rule noted
+  there. Same-named is the wrong test on its own: leg 1 measured the wrapper's main agent
+  improvising a substitute brief FROM THE JUDGED TREE when the pinned type did not resolve, so a
+  differently-named definition sitting there is material too.
