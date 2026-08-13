@@ -35,13 +35,13 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] did-nothing FAIL, known-good PASS, tools-disabled could-not-run—verified by `the seam-court fixture's three cases`
+- [x] did-nothing FAIL, known-good PASS, tools-disabled could-not-run—verified by `the seam-court fixture's four cases` (the fourth, a merge-review follow-up, denies the exec at the seam run itself rather than at the demonstration)
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 
