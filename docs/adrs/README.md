@@ -71,5 +71,5 @@ highest `ADR-NNNN` in the table.
 | ADR | Title | Status | Falsifier (court) | Supersession | Date |
 |-----|-------|--------|-----------------|--------------|------|
 | [ADR-0001](ADR-0001-advancement-re-derived.md) | Advancement is re-derived, never reported | Accepted | `chain-refspec-check.sh` (D1 edge, live); remaining courts future, named per decision | None | 2026-08-07 |
-| [ADR-0002](ADR-0002-merge-posture.md) | The merge posture—the chain stops short of the published trunk | Proposed | `revert-sufficiency-check.sh`, `merge-posture-check.sh` (live); remaining courts future, named per decision | None | 2026-08-07 |
+| [ADR-0002](ADR-0002-merge-posture.md) | The merge posture—the chain stops short of the published trunk | Accepted | `revert-sufficiency-check.sh`, `merge-posture-check.sh` (live); remaining courts future, named per decision | None | 2026-08-07 |
 | [ADR-0003](ADR-0003-sequencer-obligations.md) | The sequencer's obligations, with the substrate left open pending one measurement | Accepted | all courts future or unwatched, named per decision | None | 2026-08-08 |

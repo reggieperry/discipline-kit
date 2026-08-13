@@ -1,10 +1,10 @@
 # ADR-0002: The merge posture—the chain stops short of the published trunk
 
-**Status:** Proposed (2026-08-07).
-Acceptance gate: pre-draft and draft deep-reason passes recorded in
-[reviews/ADR-0002-deep-reason.md](reviews/ADR-0002-deep-reason.md). Acceptance is reserved for
-the operator's own read: this record's subject is exactly how much leaves the operator's hands,
-so no adversary pass substitutes for that reading.
+**Status:** Accepted (2026-08-12), on the operator's read of the amended record.
+Acceptance gate: five deep-reason passes recorded in
+[reviews/ADR-0002-deep-reason.md](reviews/ADR-0002-deep-reason.md), and—because this record's
+subject is exactly how much leaves the operator's hands—the operator's own reading, given
+2026-08-12, which no adversary pass substitutes for.
 
 ## Context
 

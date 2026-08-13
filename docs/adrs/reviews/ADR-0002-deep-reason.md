@@ -114,6 +114,12 @@ with no traceback; nine regression cases hold. BL2 and the four should-fixes con
 present. All checks green on the staged tree with nothing left unstaged. The amended record
 is sound to land as Proposed for the operator's read.
 
+## Accepted, 2026-08-12
+
+The operator read the amended record and accepted it as written. The read is the acceptance
+gate this record reserved; the five adversary passes above inform it and substitute for
+nothing.
+
 ## Follow-ups this gate created
 
 1. Upstream path citations corrected in this slice: `docs/adr/` → `docs/adrs/` at the two
