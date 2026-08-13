@@ -32,6 +32,9 @@ ADR-0003/D6 read at both trees (porcelain empty in the parent AND the phase work
   brief-symlink-out-2       a brief symlinked out of the root       -> 2, outside the pinned root
   agents-dir-known-bad-2    .claude/agents/ in the judged tree      -> 2, agents-directory,
                                                                        the judged tree's path named
+  agents-dir-empty-known-bad-2
+                            an EMPTY .claude/agents/ in the judged  -> 2, agents-directory:
+                            tree                                       presence, never content
   settings-local-known-bad-2 a COMMITTED settings.local.json        -> 2, settings-local
 
   THE SETTINGS PINNING (ADR-0004/D3): the per-invocation twin of core_test's decoy-user-hook
@@ -381,6 +384,24 @@ def agents_dir_case() -> bool:
         (b.repo / ".claude" / "agents" / "phase-worker.md").write_text("a competing source\n")
         got = b.compose()
         return judge("agents-dir-known-bad-2", got, want=2, marker="agents-directory",
+                     present=(str(b.repo / ".claude" / "agents"),))
+
+
+def agents_dir_empty_case() -> bool:
+    """STORY-0009's empty arm: an EMPTY .claude/agents/ is the same finding as a populated one.
+
+    The one-source rule (the D7 probe read at its correction) is directory ABSENCE asserted from
+    the filesystem: content is never read, so an empty directory and a populated one are one
+    finding, and name-sharing with a pinned definition is irrelevant. A refusal keyed on
+    contents — `any(iterdir())` instead of `exists()` — admits exactly this tree, and nothing
+    else in the fixture would catch it: the populated known-bad still fires and every clean
+    compose case still passes, which is why this arm needs its own case.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        b = Bench(Path(td))
+        (b.repo / ".claude" / "agents").mkdir(parents=True)
+        got = b.compose()
+        return judge("agents-dir-empty-known-bad-2", got, want=2, marker="agents-directory",
                      present=(str(b.repo / ".claude" / "agents"),))
 
 
@@ -753,6 +774,7 @@ def main() -> int:
         brief_absent_case(),
         brief_symlink_out_case(),
         agents_dir_case(),
+        agents_dir_empty_case(),
         settings_local_case(),
 
         settings_pinning_decoy_case(),

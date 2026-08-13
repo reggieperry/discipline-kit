@@ -205,7 +205,9 @@ def refuse_agents_directory(tree: Path) -> None:
 
     Leg 1 of the probe measured a headless main agent, told its named type was missing,
     improvising a substitute brief from the judged tree. The assertion is on presence, not
-    content: a directory that exists is a source that can be found.
+    content: a directory that exists is a source that can be found. An EMPTY directory is the
+    same finding — content is never read, so what it holds today decides nothing and a phase can
+    populate it — and name-sharing with any pinned definition is irrelevant for the same reason.
     """
     found = tree / PROJECT_DIR / AGENTS_DIR
     if found.exists():

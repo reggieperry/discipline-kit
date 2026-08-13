@@ -104,12 +104,19 @@ REQUIRED_PAIR = {"open-pr": "branches-only", "merge-local": "never"}
 
 # ADR-0003/D4's material, as in-repo paths: the sequencer's own definition and the advance
 # scripts must sit inside the trusted base, or a chain story can edit its own driver and merge.
+# The list is every module of harness/chain/, and `sequencer-sources-complete` in core_test.py
+# holds it to that directory's live listing, because the hand-kept form drifts: two modules
+# shipped without joining it. scripts/profile-check.sh requires the whole directory covered at
+# the commit path; this gate keeps the per-module form so a refusal names exactly what the
+# declared base misses.
 SEQUENCER_SOURCES = (
     "harness/chain/core.py",
     "harness/chain/advance.py",
     "harness/chain/attempt.py",
+    "harness/chain/invoke.py",
     "harness/chain/loader.py",
     "harness/chain/merge.py",
+    "harness/chain/receipt.py",
 )
 
 PHASE_REF = re.compile(r"^refs/chain/[^/]+/attempt-(?P<attempt>[^/]+)/phase-(?P<phase>[^/]+)$")

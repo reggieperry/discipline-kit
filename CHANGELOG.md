@@ -32,6 +32,38 @@ which existed only because the ledger did.
 
 ## Unreleased
 
+- **STORY-0009 built: the sequencer's definition pinned through the profile — the D4 path set on the D3.2
+  court, and the one-source check case closed audit-first.** The pinned home is decided and documented, not
+  keyed: the sequencer's definition and the advance scripts live at `<pinned_root>/sequencer/`, derived under
+  the root by a fixed name exactly as `postconditions/`, `briefs/`, `settings/` and `worktrees/` are — no kind
+  of pinned material has a profile key, so this one does not either, `core.py startup`'s schema validation is
+  untouched, and the layout is documented beside the loader's with its honest status (nothing resolves from it
+  until the hardening checklist creates the root and a driver exists). What the courts watch is D4's in-repo
+  half, its falsification condition verbatim: `scripts/profile-check.sh` now requires `harness/chain/` covered
+  by `trusted_base` — the DIRECTORY rather than a module list, because the hand-kept list measurably drifts —
+  red-first by `missing-sequencer-sources`, whose tree covers every derived requirement exactly and read clean
+  under the unextended court. Auditing the run-time backstop the court extends then found `core.py`'s
+  `SEQUENCER_SOURCES` two modules short of the live directory — `invoke.py` and `receipt.py` shipped without
+  joining it where STORY-0007 had added `merge.py`, so a trusted_base omitting either started the sequencer
+  cleanly — closed red-first with both omissions named in the refusal
+  (`trusted-base-omits-invocation-sources-2`) and the tuple held to the live `harness/chain/*.py` listing so
+  the next module cannot ship outside the gate silently (`sequencer-sources-complete`). The one-source
+  criterion closed audit-first, the STORY-0011 pattern: `invoke.refuse_agents_directory` already asserts
+  PRESENCE from the filesystem on the judged tree and the workspace both, so name-sharing is structurally
+  irrelevant and the populated arm was STORY-0012's known-bad — but the empty arm had no case, and the gap was
+  live: a contents-keyed rewrite (`any(iterdir())` for `exists()`) survived the entire pre-existing suite.
+  `agents-dir-empty-known-bad-2` closes it, asserting an EMPTY `.claude/agents/` in the judged tree is the
+  same named finding with the judged tree's path in the message. Six mutations, six killed, each observed
+  executing: the court's path set dropped from the union and existence-gated (a fail-open rewrite requiring
+  the set only when the tree carries the directory — the fixture trees do not, so only the new case catches
+  it), the agents assertion contents-keyed and inverted, and each of the two recovered modules dropped from
+  the tuple (killed twice over, by the named-omission assertion and by the completeness case). Fixtures at 21,
+  30 and 60; the mapping and the key-shape decision are the story file's discharge record. The merge review
+  (MERGE_SAFE, one should-fix) then found a seventh mutant surviving — the court's set narrowed back to a
+  hand-kept module list passed all 21 cases, since the known-bad's substring marker "harness/chain/" is a
+  prefix of every module path beneath it — killed sole-kill red-first by `sequencer-file-not-directory`, whose
+  tree covers `harness/chain/core.py` by name, omits the directory, and asserts the exact uncovered line with
+  its trailing newline; the profile-check fixture stands at 22.
 - **STORY-0002 built: the installer resolves a release tag, and the D7 court watches consumer paths.**
   `install.sh --refresh-rules` now resolves the newest v-prefixed tag by version sort (or the one named with
   `--tag`) and copies the rules from that tag's tree via `git archive`, never from whatever the checkout's

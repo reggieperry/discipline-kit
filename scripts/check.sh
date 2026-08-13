@@ -25,7 +25,8 @@ bash scripts/merge-posture-check.sh
 # ADR-0002/D3.2's court, named future in that record and live from 2026-08-12: a chain profile
 # whose trusted_base omits its own file, the CI workflows, or any path this file invokes or reads
 # is a cage with a hole in it. The required set is derived from THIS file's invocations rather
-# than hand-kept, so adding a check below adds it to the requirement automatically.
+# than hand-kept, so adding a check below adds it to the requirement automatically. ADR-0003/D4
+# extends the court one path set: the sequencer's own in-repo sources under harness/chain/.
 bash scripts/profile-check.sh
 
 # ADR-0002/D7's court, named future in that record and live from 2026-08-13: a consumer path

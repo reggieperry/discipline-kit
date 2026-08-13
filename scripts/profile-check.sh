@@ -8,6 +8,11 @@
 # self-defeating, and this checks all three: the list's own file, the CI workflows, and any path
 # the commit-path check invokes or reads. The own-file clause is required here as the whole
 # `.claude/` settings root rather than the profile alone; the reason is at ALWAYS below.
+# ADR-0003/D4 extends the court one path set, its named falsification condition: a trusted_base
+# that omits the sequencer's own in-repo sources — the definition and the advance scripts under
+# `harness/chain/` — is a cage the graded story can edit its grader through, so that set is
+# required here too; the reason it is the directory rather than a module list is at
+# SEQUENCER_SOURCES below.
 #
 # THE REQUIRED SET IS DERIVED, NEVER HAND-KEPT. A second list of "what check.sh runs" would drift
 # from check.sh the first time a check is added, and would drift silently, since both lists are
@@ -81,6 +86,14 @@ CHECK = "scripts/check.sh"
 
 # Read, never invoked, so no extraction can find them: harness/chain_graph.py walks both.
 READ_INPUTS = ("docs/adrs/", "stories/")
+# ADR-0003/D4's in-repo path set: the sequencer's definition and the advance scripts live under
+# this directory, and a trusted_base not covering it lets a story edit the sequencer that grades
+# it and merge. The DIRECTORY rather than the module list, because a hand-kept list is exactly
+# what drifts — `core.py`'s SEQUENCER_SOURCES was short two live modules when this set landed,
+# and a directory cannot be short. Coverage is required whether or not the tree carries the
+# directory today, which is the same demand `core.py startup` makes of any profile it will run
+# under: the run-time gate refuses per module, this court refuses per prefix at the commit path.
+SEQUENCER_SOURCES = ("harness/chain/",)
 # `.claude/` rather than `.claude/chain/`, and the wider prefix is the point: it satisfies D3.2's
 # own-file clause by containing the profile, and it also covers the sibling surface, which is the
 # harness's project-settings root. A story adding `.claude/settings.json` with hooks, or an agent
@@ -167,7 +180,7 @@ if absent:
     # A token naming no file is a mis-parse or a stale check, either way not a coverage question.
     void(f"{CHECK} invokes path(s) absent from the tree: {', '.join(absent)}")
 
-required = sorted(set(ALWAYS) | set(READ_INPUTS) | set(invoked))
+required = sorted(set(ALWAYS) | set(READ_INPUTS) | set(SEQUENCER_SOURCES) | set(invoked))
 
 declaring = [t for t in tables(data) if "trusted_base" in t]
 entry_count = 0
