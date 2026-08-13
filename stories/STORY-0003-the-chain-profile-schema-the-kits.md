@@ -60,12 +60,20 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   carry a criterion that the pinning holds.
 - Discharged 2026-08-12 on `feat/chain-profile`: `.claude/chain/profile.toml` (five keys, schema
   documented in its own comments), `scripts/profile-check.sh` (ADR-0002/D3.2's court, wired into
-  `scripts/check.sh` after `merge-posture-check.sh`), and the 16-case fixture. The court derives
+  `scripts/check.sh` after `merge-posture-check.sh`), and the 20-case fixture. The court derives
   its requirement set from `check.sh`'s own invocations rather than a hand-kept list, so a check
   added below is required automatically; `docs/adrs/`, `stories/` and `.githooks/` are named in
   the court because no invocation reaches them. `settings_sources = "pinned"` is a marker key
   only, per the note above; STORY-0012 builds what reads it. The anti-weakening contract holds by
-  measurement rather than assertion: the fixture is a net add of 16 cases, and the change
-  introduces no suppression and no skip marker. Two mutations were run and killed with the
-  mutants observed executing—the own-file requirement deleted (killed by `missing-own-file`) and
-  the empty-extraction guard disabled (killed by `no-invocations`).
+  measurement rather than assertion: the fixture is a net add of 20 cases, and the change
+  introduces no suppression and no skip marker. Three mutations were run and killed with the
+  mutants observed executing—the own-file requirement deleted (killed by `missing-own-file` and
+  `own-dir-too-narrow`), the empty-extraction guard disabled (killed by `no-invocations`), and
+  the partial-extraction sweep disabled (killed by the three `missed-*` cases).
+- Merge review returned MERGE_SAFE with four findings, all taken in a second commit: the
+  line-anchored extraction gained a sweep, so an invocation form it cannot resolve is
+  could-not-run rather than silently unrequired—it read clean on three of four forms before;
+  `trusted_base` widened from `.claude/chain/` to `.claude/`, the settings root, with the court
+  requiring it so the widening cannot regress unobserved; the workflows justification corrected
+  to the measured 5-of-20 partial mirror; and the ADR-0002/D4 citation narrowed to what D4
+  decides. The gap between `ci.yml` and `scripts/check.sh` is recorded follow-up work.

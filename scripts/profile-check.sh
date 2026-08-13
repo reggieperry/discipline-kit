@@ -6,7 +6,8 @@
 # path is a hole in the cage the merge stage cannot see: the list is the only statement of what
 # is protected, and nothing else re-derives it. D3.2 names three omissions that make the list
 # self-defeating, and this checks all three: the list's own file, the CI workflows, and any path
-# the commit-path check invokes or reads.
+# the commit-path check invokes or reads. The own-file clause is required here as the whole
+# `.claude/` settings root rather than the profile alone; the reason is at ALWAYS below.
 #
 # THE REQUIRED SET IS DERIVED, NEVER HAND-KEPT. A second list of "what check.sh runs" would drift
 # from check.sh the first time a check is added, and would drift silently, since both lists are
@@ -21,11 +22,18 @@
 # WHAT IS DELIBERATELY NOT REQUIRED is the corpus each check grades. `scrub-gate.sh` scans the
 # whole tree, `em-dash-check.sh` scans every tracked markdown file, `shellcheck_all.sh` scans every
 # tracked shell file, and `rule_grades.py` reads `claude-project/rules/`. Requiring a graded corpus
-# would put the whole repository in the trusted base and park every story ever written. The
-# distinction is configuration versus subject matter: `scripts/em-dash-exempt.txt` decides what the
-# em-dash check will tolerate and is inside `scripts/`; the markdown it reads is what the check is
-# for. The rules directory's integrity is carried by ADR-0002/D4 instead, which re-derives the
-# reviewer's denominator from the pinned examiner copy and never from the judged tree.
+# would put the whole repository in the trusted base and park every story ever written.
+#
+# The distinction is configuration versus subject matter, and it holds on each sweep's own terms.
+# `scripts/em-dash-exempt.txt` decides what the em-dash court will tolerate, so it is configuration
+# and it is inside `scripts/`; the markdown that court reads is what it is for. `rule_grades.py`
+# reads `claude-project/rules/*.md` and nothing else -- no configuration file, no allowlist, no
+# exemption list -- so every byte it reads is subject matter, and a rule edit changes what the
+# court grades rather than what it will accept. Separately, and at the merge stage rather than
+# here, ADR-0002/D4 defends the same directory at the one point where a rule edit could move a
+# verdict: the reviewer's lens-set denominator is re-derived from the pinned examiner copy and
+# never from the judged tree, so a grade edit in the judged worktree cannot shrink it. That is a bound on the
+# reviewer's denominator, not a licence for this exclusion, which stands on the sentence above it.
 #
 # The profile is PARSED (python3 tomllib), never line-grepped, for the reasons measured at
 # merge-posture-check.sh: a grep court was fail-open four ways.
@@ -73,8 +81,14 @@ CHECK = "scripts/check.sh"
 
 # Read, never invoked, so no extraction can find them: harness/chain_graph.py walks both.
 READ_INPUTS = ("docs/adrs/", "stories/")
-# The list's own file and the CI workflows are D3.2 verbatim; the hook is what runs the check.
-ALWAYS = (PROFILE, ".github/workflows/", ".githooks/", CHECK)
+# `.claude/` rather than `.claude/chain/`, and the wider prefix is the point: it satisfies D3.2's
+# own-file clause by containing the profile, and it also covers the sibling surface, which is the
+# harness's project-settings root. A story adding `.claude/settings.json` with hooks, or an agent
+# definition beside it, changes how every later phase runs; ADR-0004/D3 pins the settings sources
+# per invocation precisely because settings inject, and a trusted base stopping at `chain/` would
+# park nothing when that file appeared. The CI workflows are D3.2 verbatim; the hook is what runs
+# the check at all.
+ALWAYS = (".claude/", ".github/workflows/", ".githooks/", CHECK)
 
 
 def void(msg: str) -> None:
@@ -100,20 +114,47 @@ def tables(node):
             yield from tables(v)
 
 
-# The invocation set, extracted from the check itself. A token starting with `-` is a shell
-# option or a heredoc's stdin marker (`python3 - <<'PY'`), never a path.
+# The invocation set, extracted from the check itself. THE EXTRACTION IS LINE-START ANCHORED,
+# which is exact for the form check.sh uses (`bash <path>` or `python3 <path>` at column zero)
+# and blind to every other: `if ! bash tools/x.sh; then`, a bare `./tools/x.sh`, and
+# `python3 -m pkg.mod`, whose option token the skip below eats. Measured on a four-line sample,
+# one form of four was extracted and the other three read clean, so the anchor alone is a court
+# that stops looking without saying so.
+#
+# SO THE ANCHOR IS PAIRED WITH A SWEEP. Any non-comment line that looks like an invocation and
+# that the anchor did not resolve is could-not-run, never silently unrequired. The sweep is
+# deliberately cruder than the extraction: it may VOID on a line no path could be derived from,
+# and that is the right direction, since the remedy is to name the path in trusted_base and the
+# alternative is a requirement set quietly missing an entry.
 INVOCATION = re.compile(r"^\s*(?:bash|python3)\s+(\S+)")
+SUSPECT = re.compile(r"(?:^|\s)(?:bash|python3)\s")
 invoked: list[str] = []
-for line in (root / CHECK).read_text(encoding="utf-8").splitlines():
+missed: list[str] = []
+for lineno, line in enumerate((root / CHECK).read_text(encoding="utf-8").splitlines(), 1):
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        continue  # a comment naming a check is not an invocation of it
     m = INVOCATION.match(line)
-    if not m:
+    if m:
+        token = m.group(1)
+        if token == "-":
+            continue  # `python3 - <<'PY'`: a heredoc on stdin, so there is no path to require
+        if token.startswith("-"):
+            # An option, so the real target sits further along a line this court does not parse.
+            missed.append(f"{lineno}: {stripped}")
+            continue
+        if any(c in token for c in "$\"'`"):
+            void(f"{CHECK} invokes a path this court cannot resolve statically ({token!r})")
+        invoked.append(token)
         continue
-    token = m.group(1)
-    if token.startswith("-"):
-        continue
-    if any(c in token for c in "$\"'`"):
-        void(f"{CHECK} invokes a path this court cannot resolve statically ({token!r})")
-    invoked.append(token)
+    if SUSPECT.search(line) or stripped.startswith("./"):
+        missed.append(f"{lineno}: {stripped}")
+
+if missed:
+    void(
+        f"{CHECK} has {len(missed)} line(s) that look like invocations the extraction could not "
+        "resolve, so the requirement set may be short: " + "; ".join(missed)
+    )
 
 invoked = sorted(set(invoked))
 if not invoked:

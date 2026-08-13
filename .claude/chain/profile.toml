@@ -54,11 +54,20 @@ settings_sources = "pinned"
 #
 # What each entry is here for:
 #
-#   .claude/chain/       this file. D3.2's first named omission: a list that can edit itself is
-#                        not a cage. The directory rather than the file, so a second profile
-#                        artifact cannot be added outside the list.
-#   .github/workflows/   D3.2's second. The CI workflow runs the same acceptance set as the
-#                        commit path, and a story that can edit it can green its own push.
+#   .claude/             this file, and the settings root it sits in. D3.2's first named omission
+#                        is the list's own file: a list that can edit itself is not a cage. The
+#                        entry is the whole `.claude/` tree rather than `chain/` because the
+#                        sibling surface is the harness's project-settings root — a story adding
+#                        `.claude/settings.json` with hooks, or an agent definition beside it,
+#                        changes how every later phase runs, and ADR-0004/D3 pins the settings
+#                        sources per invocation precisely because settings inject. A base
+#                        stopping at `chain/` would park nothing when that file appeared.
+#   .github/workflows/   D3.2's second, named there verbatim. What ci.yml actually runs is 5 of
+#                        the 20 invocations in scripts/check.sh, so it is a partial mirror rather
+#                        than the same acceptance set its own header claims; either way a story
+#                        that can edit it can green its own push. Closing that gap between the
+#                        workflow and the commit path is follow-up work, recorded and not done
+#                        here.
 #   .githooks/           pre-commit is what invokes scripts/check.sh at all. D3.2's text names
 #                        what the check invokes or reads and the hook is one step upstream of
 #                        that, but editing it is the widest version of the same evasion.
@@ -83,16 +92,20 @@ settings_sources = "pinned"
 # WHAT IS DELIBERATELY ABSENT is the corpus each check grades: every tracked markdown file
 # (em-dash), every tracked shell file (shellcheck), the whole tree (scrub-gate), and
 # claude-project/rules/ (rule_grades). Listing a graded corpus would put the repository in its own
-# trusted base and park every story ever written. The rules directory is protected instead by
-# ADR-0002/D4, which re-derives the reviewer's denominator from the pinned examiner copy and never
-# from the judged tree.
+# trusted base and park every story ever written. The rules directory is the one worth stating
+# on its own terms: rule_grades.py reads `*.md` under it and nothing else — no configuration
+# file, no allowlist, no exemption list — so every byte it reads is subject matter, and editing a
+# rule changes what that court grades rather than what it will accept. ADR-0002/D4 covers the
+# separate point at the merge stage, where a rule edit could otherwise move a verdict: the
+# reviewer's lens-set denominator is re-derived from the pinned examiner copy, never from the
+# judged tree.
 #
 # SELF-HOSTING NOTE. The kit is the repository whose product is its own checks, so a chain story
 # that improves a court will touch these paths and park for-cause once the merge stage exists.
 # That is the design working rather than failing: the park is an operator decision, taken with the
 # diff in hand, and the alternative is a chain that merges changes to its own judge.
 trusted_base = [
-  ".claude/chain/",
+  ".claude/",
   ".github/workflows/",
   ".githooks/",
   "scripts/",

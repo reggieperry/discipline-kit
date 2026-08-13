@@ -18,12 +18,16 @@ require, and that second reading is the failure this court is most exposed to.
   profile-is-dir      a directory at the profile path              -> 2, profile-check: VOID
   no-check-script     no scripts/check.sh to derive the set from   -> 2, profile-check: VOID
   no-invocations      a check.sh that invokes nothing              -> 2, profile-check: VOID
+  missed-conditional  `if ! bash tools/hidden.sh; then`            -> 2, profile-check: VOID
+  missed-direct-exec  `./tools/direct.sh`, no interpreter word     -> 2, profile-check: VOID
+  missed-module-form  `python3 -m tools.mod`, an option not a path -> 2, profile-check: VOID
   invoked-path-absent an invocation naming a file that is absent   -> 2, profile-check: VOID
   entry-not-relative  a trusted_base entry that is absolute        -> 2, profile-check: VOID
   entry-universal     a trusted_base entry of "." covering all     -> 2, profile-check: VOID
   trusted-base-string trusted_base declared as a string, not list  -> 2, profile-check: VOID
   no-trusted-base     a profile declaring no trusted_base at all   -> 1, profile-check: FAIL
-  missing-own-file    trusted_base omits .claude/chain/            -> 1, .claude/chain/
+  missing-own-file    trusted_base omits .claude/                  -> 1, .claude/
+  own-dir-too-narrow  trusted_base stops at .claude/chain/         -> 1, .claude/
   missing-workflows   trusted_base omits .github/workflows/        -> 1, .github/workflows/
   missing-githooks    trusted_base omits .githooks/                -> 1, .githooks/
   missing-invoked     an invoked path no entry covers              -> 1, tools/extra.sh
@@ -37,11 +41,26 @@ looking, which is the one reading this file exists to make impossible. `invoked-
 is the same argument one step earlier: a token the extractor produced that names no file is a
 mis-parse, and a mis-parse must not be answered with a coverage verdict.
 
+THE PARTIAL-EXTRACTION SEMANTICS ARE THE SAME ARGUMENT AT ONE INVOCATION RATHER THAN ALL OF
+THEM, and the three `missed-*` cases exist because that reading is the harder one to see. The
+extraction is line-start anchored, which is exact for the form check.sh uses and blind to every
+other; measured on a four-line sample, one form of four was extracted and the other three read
+clean, with the zero-case VOID staying quiet because the count was not zero. So the anchor is
+paired with a sweep: any non-comment line that looks like an invocation and that the anchor did
+not resolve is could-not-run. Each case here plants one such form with its target OUTSIDE every
+declared prefix, so a court without the sweep reports clean on a tree whose real requirement set
+is short by one. `missed-module-form` is the subtlest: the anchor matches that line and captures
+`-m`, which the option skip then eats, so the case also pins that `-` is the only option token
+the skip may legitimately consume (the heredoc form `python3 - <<'PY'`, which names no path).
+
 `missing-own-file` and `missing-workflows` are D3.2's two named omissions, and `missing-invoked`
-is its third clause. `missing-githooks` extends the same logic to the hook that invokes the
-check: the literal text of D3.2 names what the check invokes or reads, and the hook is upstream
-of that, but a story that can edit `.githooks/pre-commit` can stop the check running at all,
-which is the widest version of the evasion the clause exists to block.
+is its third clause. `own-dir-too-narrow` is the same clause read at the right width: a base
+naming `.claude/chain/` satisfies the own-file requirement literally while leaving
+`.claude/settings.json` outside the cage, and that file is the harness's project-settings source,
+which ADR-0004/D3 pins per invocation because settings inject. `missing-githooks` extends the
+logic to the hook: the literal text of D3.2 names what the check invokes or reads, and the hook
+is upstream of that, but a story that can edit `.githooks/pre-commit` can stop the check running
+at all, which is the widest version of the evasion the clause exists to block.
 
 Run: python3 harness/fixtures/profile_check_test.py   (exit 0 = pass).
 """
@@ -62,7 +81,7 @@ FAIL_MARKER = "profile-check: FAIL"
 # The kit's own shape, reduced to what the court reads: a commit-path check invoking two
 # files, the story-graph inputs, the workflows, the hook, and the profile itself.
 DEFAULT_BASE = (
-    ".claude/chain/",
+    ".claude/",
     ".github/workflows/",
     ".githooks/",
     "scripts/",
@@ -178,6 +197,37 @@ def build_no_invocations(root: Path) -> Path:
     return kit_tree(root, check_body='#!/usr/bin/env bash\nset -euo pipefail\necho "nothing here"\n')
 
 
+def build_missed_conditional(root: Path) -> Path:
+    """An invocation inside a conditional. The extraction is line-start anchored, so this one is
+    invisible to it, and an invisible invocation is silently unrequired: `tools/` is outside every
+    declared prefix here, and without the guard the tree reads clean."""
+    return kit_tree(
+        root,
+        check_body=DEFAULT_CHECK + "if ! bash tools/hidden.sh; then exit 1; fi\n",
+        extra_files=("scrub-gate.sh", "harness/tool.py", "tools/hidden.sh"),
+    )
+
+
+def build_missed_direct_exec(root: Path) -> Path:
+    """A script run directly rather than through an interpreter. Same invisibility."""
+    return kit_tree(
+        root,
+        check_body=DEFAULT_CHECK + "./tools/direct.sh\n",
+        extra_files=("scrub-gate.sh", "harness/tool.py", "tools/direct.sh"),
+    )
+
+
+def build_missed_module_form(root: Path) -> Path:
+    """`python3 -m pkg.mod`. The anchor MATCHES this line and captures `-m`, which the option
+    skip then drops, so the module never enters the requirement set. The skip exists for the
+    heredoc form `python3 - <<'PY'`, and `-` is the only option token it may legitimately eat."""
+    return kit_tree(
+        root,
+        check_body=DEFAULT_CHECK + "python3 -m tools.mod\n",
+        extra_files=("scrub-gate.sh", "harness/tool.py", "tools/mod.py"),
+    )
+
+
 def build_invoked_path_absent(root: Path) -> Path:
     """An extracted token naming a file that is not in the tree: a mis-parse or a stale check,
     either way not a coverage question."""
@@ -212,7 +262,17 @@ def build_no_trusted_base(root: Path) -> Path:
 
 
 def build_missing_own_file(root: Path) -> Path:
-    return kit_tree(root, entries=tuple(e for e in DEFAULT_BASE if e != ".claude/chain/"))
+    return kit_tree(root, entries=tuple(e for e in DEFAULT_BASE if e != ".claude/"))
+
+
+def build_own_dir_too_narrow(root: Path) -> Path:
+    """A trusted_base naming `.claude/chain/` where the settings root belongs. It satisfies
+    D3.2's own-file clause literally and leaves `.claude/settings.json` outside the cage, which
+    is the surface ADR-0004/D3 pins per invocation because settings inject."""
+    return kit_tree(
+        root,
+        entries=tuple(".claude/chain/" if e == ".claude/" else e for e in DEFAULT_BASE),
+    )
 
 
 def build_missing_workflows(root: Path) -> Path:
@@ -248,12 +308,16 @@ def main() -> int:
         case("profile-is-dir", 2, VOID_MARKER, build_profile_is_dir),
         case("no-check-script", 2, VOID_MARKER, build_no_check_script),
         case("no-invocations", 2, VOID_MARKER, build_no_invocations),
+        case("missed-conditional", 2, VOID_MARKER, build_missed_conditional),
+        case("missed-direct-exec", 2, VOID_MARKER, build_missed_direct_exec),
+        case("missed-module-form", 2, VOID_MARKER, build_missed_module_form),
         case("invoked-path-absent", 2, VOID_MARKER, build_invoked_path_absent),
         case("entry-not-relative", 2, VOID_MARKER, build_entry_not_relative),
         case("entry-universal", 2, VOID_MARKER, build_entry_universal),
         case("trusted-base-string", 2, VOID_MARKER, build_trusted_base_string),
         case("no-trusted-base", 1, FAIL_MARKER, build_no_trusted_base),
-        case("missing-own-file", 1, ".claude/chain/", build_missing_own_file),
+        case("missing-own-file", 1, ".claude/", build_missing_own_file),
+        case("own-dir-too-narrow", 1, ".claude/", build_own_dir_too_narrow),
         case("missing-workflows", 1, ".github/workflows/", build_missing_workflows),
         case("missing-githooks", 1, ".githooks/", build_missing_githooks),
         case("missing-invoked", 1, "tools/extra.sh", build_missing_invoked),
