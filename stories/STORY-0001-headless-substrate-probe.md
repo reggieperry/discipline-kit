@@ -80,20 +80,20 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] The scratch repository's project `.claude/` holds exactly the agent definition and the
+- [x] The scratch repository's project `.claude/` holds exactly the agent definition and the
       PreToolUse hook—verified by `find .claude -type f` in the retained record listing those
       two files and no others.
-- [ ] The harness version is recorded in the result—verified by the record carrying the
+- [x] The harness version is recorded in the result—verified by the record carrying the
       `claude --version` output as a literal string.
-- [ ] Limb (a) is recorded PASS or FAIL against the subagent's completion in the stream
+- [x] Limb (a) is recorded PASS or FAIL against the subagent's completion in the stream
       output—verified by the retained raw stream containing (or not containing) that record.
-- [ ] Limb (b) is recorded PASS or FAIL against three observables—verified by
+- [x] Limb (b) is recorded PASS or FAIL against three observables—verified by
       `git cat-file -e <branch>:<file>` for reachability and `git status --porcelain` printing
       nothing in the parent checkout.
-- [ ] Limb (c) is recorded PASS or FAIL against the marker file—verified by `test -f` on it.
-- [ ] Every limb carries PASS or FAIL and no third value—verified by reading the record; an
+- [x] Limb (c) is recorded PASS or FAIL against the marker file—verified by `test -f` on it.
+- [x] Every limb carries PASS or FAIL and no third value—verified by reading the record; an
       unrunnable limb reads FAIL with its reason, never "inconclusive" and never a blank.
-- [ ] The raw outputs are retained beside the record—verified by the record naming each file
+- [x] The raw outputs are retained beside the record—verified by the record naming each file
       and each file existing.
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
@@ -117,6 +117,13 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   reverts the run entirely; the record is one commit to back out.
 
 # Notes
+
+- **Discharged 2026-08-12**: the probe ran, two legs; the record and raw outputs are
+  `docs/probe/D7-headless-probe-2026-08-12.md` and its siblings. Headless verdicts: limbs (a)
+  capability, (b), (c) all PASS at harness 2.1.224, with the registration finding (repo-level
+  agent definitions not loaded headlessly; the `--agents` route works) and the one-source rule
+  it implies. The substrate choice is the successor record's, per ADR-0003/D7.
+
 
 - This is the chain's first real story, so it is also what makes reverse coverage non-vacuous:
   before it, `harness/chain_graph.py` had no cited Decision to find.
