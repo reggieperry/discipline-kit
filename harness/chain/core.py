@@ -120,6 +120,15 @@ INTEGER = re.compile(r"^[1-9][0-9]*$")
 # this kind, which is ADR-0001/D5's liveness signal in its positive form.
 RESULT_RECORD = "result"
 
+# The compaction marker, matched as a prefix on a record's kind or on a key NAME. ADR-0004/D1
+# reads a compaction event as mid-phase death — the one event that may have lost the composed
+# prompt's constraints — and no probe has driven one at 2.1.224, so the exact record shape is
+# unmeasured and this net is the best available pending D5's probe limb: wide, not closed,
+# because a net that can miss is not fail-closed. The blind spot, named: the scan reads the
+# record's kind and its top-level key names, never the subtype value, which is where the
+# marker most plausibly lives (a compact_boundary-style subtype, unmeasured).
+COMPACT_PREFIX = "compact"
+
 # ADR-0001/D5's allowlist, declared as data so a court can read it: the session id, for
 # resumption and diagnosis, and the record kind, for liveness. Nothing else from a
 # harness-written stream reaches this runtime, and `harness/sequencer_source_check.py` fails the
@@ -364,6 +373,15 @@ def admitted_signals(path: Path | None) -> Signals:
     Two ids in one stream leave the id unread rather than picking one, because picking would be
     a guess about which session a resume names, and the count is reported instead.
 
+    THE COMPACTION LIMB is a liveness read, not an admitted field. ADR-0004/D1 rules that a
+    compaction event observed in a phase transcript is mid-phase death, so a stream carrying
+    one reads `compacted` even when a result record is present — the fail-closed ordering,
+    since the event may have lost the composed prompt's constraints before the phase went on to
+    finish. Detection is value-free: a record whose admitted kind, or any of whose KEY NAMES,
+    begins with the compaction prefix. Key names are scanned, never their values, so nothing
+    beyond `ADMITTED_KEYS` reaches this runtime; what the limb contributes is one more liveness
+    word, which is exactly what ADR-0001/D5 admits.
+
     THE READ ANNOUNCES ITSELF, so that reading harness state is visible in a transcript wherever
     it happens. A caller that admits a stream before establishing that the ref namespace is
     consistent has read from a run it must not start, and without the announcement that ordering
@@ -378,6 +396,7 @@ def admitted_signals(path: Path | None) -> Signals:
     records = 0
     unreadable = 0
     terminal = False
+    compacted = False
     for line in path.read_text(errors="replace").splitlines():
         if not line.strip():
             continue
@@ -395,10 +414,17 @@ def admitted_signals(path: Path | None) -> Signals:
         value = admitted.get("session_id")
         if isinstance(value, str) and value and value not in ids:
             ids.append(value)
-        if admitted.get("type") == RESULT_RECORD:
+        kind = admitted.get("type")
+        if kind == RESULT_RECORD:
             terminal = True
+        if isinstance(kind, str) and kind.startswith(COMPACT_PREFIX):
+            compacted = True
+        if any(isinstance(k, str) and k.startswith(COMPACT_PREFIX) for k in whole):
+            compacted = True
     if records == 0:
         liveness = "unreadable" if unreadable else "empty"
+    elif compacted:
+        liveness = "compacted"
     else:
         liveness = "complete" if terminal else "in-phase"
     return Signals(session_id=ids[0] if len(ids) == 1 else None, ids=len(ids),
