@@ -439,6 +439,11 @@ def owned(path: Path, root: Path, story: str, number: int) -> Path:
     if path != attempt_worktree(root, story, number):
         raise CouldNotRun(f"{path} is not the path this attempt composes, and the sequencer "
                           "clears only paths it composed itself (ADR-0004/D2)")
+    # TOCTOU bound, named rather than rested on silently: a link swapped in between this
+    # check and the removal is not caught HERE — what actually protects the target is that
+    # shutil.rmtree refuses a top-level symlink and lstats internally, so a swapped link
+    # errors rather than deleting through. The check exists for the honest refusal message;
+    # the mechanism is rmtree's.
     if path.is_symlink():
         raise CouldNotRun(f"{path} is a symlink, and what a link names is not the sequencer's "
                           "to remove")

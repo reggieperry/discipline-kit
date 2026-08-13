@@ -7,6 +7,13 @@ source; today it would grep nothing and prove nothing." The sources exist now, s
 and its denominators are printed on every run for the reason the whole kit exists: a clean report
 over an empty corpus and a clean report over a real one look identical from outside.
 
+WHAT THIS DOES NOT CATCH, stated so it is not mistaken for caught: a forbidden key composed at
+runtime ("is_" + "error", an f-string building the denials key) greps clean, because the check
+strips comments and docstrings and then matches literals — the ADR's own grep-shaped scope.
+Measured: two composed-key shapes read clean against this check. The real exposure is drift
+under review, not evasion — a hostile author of sequencer source has better options than
+hiding a key, and the review discipline is the court for both.
+
 WHAT IT LOOKS FOR, each pattern carrying the decision it serves:
 
     status-frontmatter   a story spec's `status:` field read for control flow. ADR-0001/D5, and
