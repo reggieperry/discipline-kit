@@ -35,14 +35,14 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] a receipt shorter than the derived denominator parks the story—verified by `the receipt-completeness check's known-bad fixture`
-- [ ] the denominator cannot be shrunk from the judged tree—verified by `a fixture flipping a rule grade in the judged tree only`
+- [x] a receipt shorter than the derived denominator parks the story—verified by `the receipt-completeness check's known-bad fixture`: `short-receipt-parks-1` in `harness/fixtures/receipt_test.py` requires exit 1 naming the uncovered rule with the pass marker absent, and `receipt-absent-parks-1` pins the limiting case, 0 of N covered
+- [x] the denominator cannot be shrunk from the judged tree—verified by `a fixture flipping a rule grade in the judged tree only`: `judged-grade-flip` flips a rule to "mechanically enforced" in the judged working tree's own rules copy and nothing else, and requires the exit code identical, the printed denominator line byte-identical, and the park still naming the same rule
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 
@@ -53,3 +53,19 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- Built 2026-08-13, the receipt half only. The schema (`<rule-file> covered|finding`, one line
+  per rule-dimension), the inclusion rule (receipt-owed exactly when the grade opens with
+  "review and convention" or "partly mechanical"), and every fail-closed decision—an absent
+  receipt parks as the 0-of-N limiting case; a `finding` counts its dimension covered and
+  parks; an id outside the denominator, a duplicate, and any malformed line (including
+  `covered` with trailing text) are could-not-run; an ungraded pinned rule and an empty
+  denominator are could-not-run—are stated in `harness/chain/receipt.py`'s docstring, each
+  pinned by a case in `harness/fixtures/receipt_test.py` (15 cases). Red-first: 1 of 15 against
+  a stub that admitted everything, the one green case green for the stub's reason. Six
+  hand-applied mutations, six killed, each verified compiling and executing before the kill was
+  believed. The fixture is wired into `scripts/check.sh`; the court itself stays off the commit
+  path until the reviewer phase emits receipts and the pinned root exists—the loader
+  precedent, recorded as the check.sh comment. Anti-weakening evidence: the diff versus
+  033a1b3 deletes nothing (check.sh purely additive), the new module's two `noqa: E402` import
+  lines match the established chain-module pattern, and the only "skip" matches are the word
+  in prose.
