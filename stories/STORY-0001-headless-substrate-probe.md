@@ -123,6 +123,13 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   capability, (b), (c) all PASS at harness 2.1.224, with the registration finding (repo-level
   agent definitions not loaded headlessly; the `--agents` route works) and the one-source rule
   it implies. The substrate choice is the successor record's, per ADR-0003/D7.
+- **Corrected 2026-08-12, same day**: the successor record's pre-draft gate audited the record
+  against the raws; a third leg discriminated the one-source finding (the pinned `--agents`
+  definition governs only as the sole source; the invoking prompt overrides), the redaction
+  disclosure was corrected (slug and bare-username survivors now scrubbed), a false VERIFIED
+  mark in the design was caught (worktrees are not git-excluded at 2.1.224), and
+  `docs/probe/probe-artifacts.txt` now retains the artifacts criteria 1 and 7 name, which the
+  first commit discharged by prose.
 
 
 - This is the chain's first real story, so it is also what makes reverse coverage non-vacuous:

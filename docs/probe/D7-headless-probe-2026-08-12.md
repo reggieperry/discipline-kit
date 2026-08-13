@@ -71,3 +71,42 @@ in the retained raws, marked in place). An unattended phase therefore inherits w
 operator's user-level hooks inject unless the sequencer's invocation pins its settings
 sources—a requirement for STORY-0005/0006, and a second reason the event log lives outside
 any tree that gets packaged.
+
+## Correction and leg 3, same day—the successor record's pre-draft gate audited this record
+
+The gate verified every citation against the raws and the surviving scratch tree, and three
+statements above do not survive it. Corrected here rather than edited away:
+
+- **The one-source finding above is confounded, and its mechanism was misread.** The leg-2
+  worker's own account reads "my original task named `probe2.txt` … the follow-up named
+  `probe.txt` … I followed the later one"—the follow-up being the *invoking prompt*, whose
+  content the parent had relayed from the repo definition file. Repo file and prompt agreed,
+  so the observation could not separate them. **Leg 3 discriminates**: with the repo
+  definition removed and a neutral invoking prompt ("its definition knows"), the `--agents`
+  JSON's instruction executed—`probe3.txt`, commit `19afee2`, its own worktree branch,
+  marker at 11. The corrected rule set: the pinned `--agents` definition governs when it is
+  the sole source; the invoking prompt's relayed content can override it; and leg 1's
+  fallback shows the wrapper's main agent improvising a substitute brief **from the judged
+  tree**—ADR-0001/D3's defect reached by initiative inside the wrapper. The sequencer rule
+  is therefore three-part: the judged tree carries no `.claude/agents/` at all (asserted from
+  the filesystem), the wrapper fails closed on a missing pinned type, and the invoking prompt
+  carries spawn-by-name only, never phase instructions.
+- **The redaction disclosure above was wrong twice.** There are two redactions, not one (the
+  home path substitution, and the SessionStart hook output replaced by a marked line), and
+  the substitution was not "throughout": the operator's username survived 28 times via the
+  scratch path's *slug* form and `ls -l` ownership columns, which the scrub gate's
+  slash-anchored TIER-1 pattern is blind to—the gate read clean on files carrying the
+  identifier. All retained raws are now redacted in all three forms (path, slug, bare
+  username); widening the gate's pattern and pinning it with a fixture case is queued with
+  the in-flight hygiene slice.
+- **A design VERIFIED mark is measured false at 2.1.224.** §4.8 states worktrees are
+  "git-excluded via `.git/info/exclude`, so it never appears in the parent's `git status`.
+  VERIFIED." The scratch repo's `.git/info/exclude` is the stock template and the parent's
+  porcelain prints `?? .claude/worktrees/` (retained in `probe-artifacts.txt`). The
+  operational fact above stands with a stronger ground: the porcelain-empty precondition
+  cannot rely on an exclusion the harness does not write.
+
+`probe-artifacts.txt` retains what STORY-0001's criteria 1 and 7 name and the first
+commit of this record did not keep: the `.claude` listings at both setup states, the find
+output, the full ref list, the hook marker verbatim, the stock exclude file, and the parent
+porcelain. Raw leg-3 outputs retained beside the others, same redactions.

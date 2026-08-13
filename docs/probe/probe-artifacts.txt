@@ -1,0 +1,39 @@
+== .claude contents at the leg-1/2 setup commit (7e107e6):
+.claude/agents/probe-worker.md
+.claude/settings.json
+== .claude contents at leg 3 (definition removed):
+.claude/settings.json
+== find .claude -type f (current tree, worktrees excluded):
+.claude/settings.json
+== git log --all --oneline:
+19afee2 probe3-commit
+aa0e4bb leg3: no repo-level agent definition
+24fe34e probe-commit
+bd9a9fe probe-commit
+7e107e6 probe-setup
+== branches:
+main
+worktree-agent-a0d34b25803a586be
+worktree-agent-a9d2a96d253f531b5
+worktree-agent-af74b721e2c994fa3
+== hook marker (verbatim):
+Wed Aug 12 07:08:29 PM PDT 2026
+Wed Aug 12 07:08:46 PM PDT 2026
+Wed Aug 12 07:09:04 PM PDT 2026
+Wed Aug 12 07:09:11 PM PDT 2026
+Wed Aug 12 07:09:14 PM PDT 2026
+Wed Aug 12 07:09:23 PM PDT 2026
+Wed Aug 12 07:10:58 PM PDT 2026
+Wed Aug 12 07:11:14 PM PDT 2026
+Wed Aug 12 07:11:16 PM PDT 2026
+Wed Aug 12 07:30:03 PM PDT 2026
+Wed Aug 12 07:30:10 PM PDT 2026
+== .git/info/exclude (stock template — worktrees NOT excluded, the porcelain finding):
+# git ls-files --others --exclude-from=.git/info/exclude
+# Lines that start with '#' are comments.
+# For a project mostly in C, the following would be a good set of
+# exclude patterns (uncomment them if you want to use them):
+# *.[oa]
+# *~
+== parent porcelain:
+?? .claude/worktrees/
