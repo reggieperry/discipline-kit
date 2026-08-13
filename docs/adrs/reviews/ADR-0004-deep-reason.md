@@ -58,6 +58,12 @@ chain-graph comments corrected. STORY-0012's criteria rebuilt: a positive
 one-invocation-composed-from-pinned-brief criterion, the fresh-attempt criterion, both-trees
 porcelain at the seam, and the spawn-audit court.
 
-## Pass 3 (fix confirmation)
+## Pass 3 (fix confirmation), 2026-08-12: CLEAN, acceptance supported
 
-Recorded after the confirmation pass runs.
+All four blockers, three mediums, and the lows verified applied at the pushed tip, each at
+its line; every gate green with coverage exact (24 decisions, 22 cited, 2 waived). One
+non-blocking residue taken at landing: the two main-loop Alternatives bullets cited overflow
+as a rejection ground after the record itself had conceded overflow discriminates
+nothing—both now reject on disinterest alone, with context length a disclosed concern. The
+record lands Accepted; the substrate fork ADR-0003/D7 left open is closed by measurement,
+correction, and three passes.

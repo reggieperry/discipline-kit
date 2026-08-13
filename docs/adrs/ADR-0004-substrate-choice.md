@@ -1,7 +1,8 @@
 # ADR-0004: Each phase is its own headless invocation, and the sequencer owns the worktrees
 
-**Status:** Proposed (2026-08-12).
-Acceptance gate: deep-reason passes recorded in
+**Status:** Accepted (2026-08-12).
+Acceptance gate: three deep-reason passes, the third CLEAN at the pushed tip with the
+adversary supporting acceptance, recorded in
 [reviews/ADR-0004-deep-reason.md](reviews/ADR-0004-deep-reason.md).
 
 ## Context
@@ -131,11 +132,12 @@ no-agents-directory assertion, since judged-tree definitions would become live a
 
 - **The interactive main-loop session as sequencer** (the walkthrough's assertion): a model
   that has read every phase's output before deciding advancement—the self-report defect
-  relocated—and the system's longest-lived context, with no stated overflow behavior.
-  Rejected on both D7 criteria.
+  relocated. Rejected on disinterest; its being the system's longest-lived context is a
+  disclosed concern, not a ground, since overflow is unmeasured for every candidate.
 - **A single long headless session driving all phases** (the fourth candidate, enumerated
-  here): inherits both main-loop defects without the interactive operator's oversight.
-  Rejected on both criteria, stated so the fork is decided as enumerated.
+  here): the same relocated self-report, without even the interactive operator's oversight.
+  Rejected on disinterest, stated so the fork is decided as enumerated; its context length
+  is the same disclosed concern as above.
 - **One-shot wrapper sessions spawning one phase subagent each** (this record's own
   pre-draft hypothesis): keeps every verified session property, but the wrapper is a model
   layer holding judgment on the advancement path—measured improvising a brief from the
