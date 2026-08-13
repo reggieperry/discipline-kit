@@ -79,6 +79,14 @@ python3 harness/fixtures/core_test.py
 # pinned material and stub harness binaries — the real `claude` is never invoked here — and it
 # demonstrates the post-batch transcript audit red and green on synthetic streams.
 python3 harness/fixtures/invoke_test.py
+# The receipt court's fixture (ADR-0002/D4), on the same boundary as the loader's: the court
+# itself (harness/chain/receipt.py) stays off the commit path because it VOIDs until the
+# machine-hardening checklist creates the pinned root, and it has no caller until the reviewer
+# phase emits receipts — it wires the day both exist. The fixture builds its own throwaway
+# pinned roots, receipts and repositories, so it needs neither. D4's two named conditions are
+# its cases: a receipt shorter than the derived denominator parks, and a grade flip in the
+# judged tree cannot shrink the denominator read from the pinned copy.
+python3 harness/fixtures/receipt_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
 # nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators
