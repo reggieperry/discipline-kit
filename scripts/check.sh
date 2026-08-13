@@ -79,6 +79,12 @@ python3 harness/fixtures/core_test.py
 # pinned material and stub harness binaries — the real `claude` is never invoked here — and it
 # demonstrates the post-batch transcript audit red and green on synthetic streams.
 python3 harness/fixtures/invoke_test.py
+# The merge stage's fixture, on the same boundary as the seam's and the invoke layer's: the
+# merge CLI reads the profile's pinned root and VOIDs on every machine until the hardening
+# checklist creates it, so only the fixture is wired. It builds its own dedicated clones, bare
+# local remotes, pinned material and stub commit-check/forge binaries — no real forge is ever
+# invoked — and it asserts the record's forged-ref residue line verbatim, per posture.
+python3 harness/fixtures/merge_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
 # nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators

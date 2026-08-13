@@ -109,6 +109,7 @@ SEQUENCER_SOURCES = (
     "harness/chain/advance.py",
     "harness/chain/attempt.py",
     "harness/chain/loader.py",
+    "harness/chain/merge.py",
 )
 
 PHASE_REF = re.compile(r"^refs/chain/[^/]+/attempt-(?P<attempt>[^/]+)/phase-(?P<phase>[^/]+)$")
