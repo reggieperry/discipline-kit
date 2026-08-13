@@ -104,6 +104,17 @@ def build_clean(root: Path) -> Path:
     return kit_tree(root)
 
 
+def build_mypy_cache(root: Path) -> Path:
+    """A type-checker cache carrying the home path: a build artifact check.sh itself creates
+    mid-run (mypy in the reference tests), never packaged, and excluded like __pycache__.
+    Unexcluded, the first check.sh run after any mypy invocation blocks every later commit."""
+    kit = kit_tree(root)
+    cache = kit / ".mypy_cache" / "3.12"
+    cache.mkdir(parents=True)
+    (cache / "cache.db").write_text("meta " + FORBIDDEN_HOME + "/somewhere\n")
+    return kit
+
+
 def build_tier1_home_path(root: Path) -> Path:
     kit = kit_tree(root)
     (kit / "docs").mkdir()
@@ -201,6 +212,7 @@ def main() -> int:
     results = [
         case("clean", 0, PASS_MARKER, build_clean),
         case("tier1-home-path", 1, TIER1_MARKER, build_tier1_home_path),
+        case("mypy-cache-excluded", 0, PASS_MARKER, build_mypy_cache),
         case("tier1-username-slug", 1, TIER1_MARKER, build_tier1_username_slug),
         case("tier1-username-bare", 1, TIER1_MARKER, build_tier1_username_bare),
         case("tier1-home-path-in-license", 1, TIER1_MARKER, build_tier1_home_path_in_license),

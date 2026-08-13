@@ -77,11 +77,11 @@ tier2='\belder\b|EL-[0-9]|ADR-[0-9]{3}|ssh t7920|\bsling\b|reconciler|kickoff|\b
 echo "== TIER-1 (forbidden anywhere) =="
 tier1_hit=0
 if grep -rniE "$tier1" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" \
-    --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ ; then
+    --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ --exclude-dir=.mypy_cache ; then
   tier1_hit=1
 fi
 if grep -rniE "$tier1user" "$KIT" --exclude="$SELF" --exclude="refresh-from-pack.sh" \
-    --exclude=LICENSE --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ ; then
+    --exclude=LICENSE --exclude=.git --exclude-dir=.git --exclude-dir=__pycache__ --exclude-dir=.mypy_cache ; then
   tier1_hit=1
 fi
 if [[ "$tier1_hit" -ne 0 ]]; then
