@@ -33,6 +33,8 @@ require, and that second reading is the failure this court is most exposed to.
   missing-invoked     an invoked path no entry covers              -> 1, tools/extra.sh
   missing-story-input trusted_base omits stories/                  -> 1, stories/
   missing-sequencer-sources trusted_base omits harness/chain/      -> 1, harness/chain/
+  sequencer-file-not-directory entries cover harness/chain/core.py -> 1, the DIRECTORY named
+                      by name and omit the directory                  as the exact uncovered line
 
 THE EMPTY-EXTRACTION SEMANTICS ARE PINNED BY `no-invocations`, and they are VOID rather than
 clean on purpose. Zero extracted invocations means the derivation read nothing, so every
@@ -157,7 +159,8 @@ def case(name: str, want: int, marker: str, build) -> bool:
         got = run(kit)
         said = got.stdout + got.stderr
         ok = got.returncode == want and marker in said
-        print(f"  {'ok  ' if ok else 'FAIL'} {name}: want exit {want} naming '{marker}', got exit {got.returncode}")
+        shown = marker.replace("\n", "\\n")
+        print(f"  {'ok  ' if ok else 'FAIL'} {name}: want exit {want} naming '{shown}', got exit {got.returncode}")
         if not ok:
             print(f"       stdout: {got.stdout.strip()[:400]}")
             print(f"       stderr: {got.stderr.strip()[:400]}")
@@ -312,6 +315,24 @@ def build_missing_sequencer_sources(root: Path) -> Path:
     )
 
 
+def build_sequencer_file_not_directory(root: Path) -> Path:
+    """The court's DIRECTORY shape pinned, against the mutant that survived the merge review.
+
+    A court whose D4 set is narrowed back to a hand-kept module list — the drift-prone form this
+    story removed from `core.py` — reads this tree clean: the entries cover
+    `harness/chain/core.py` by name (and the invoked file exactly, as above), and omit only the
+    directory. The real court fails it, and the case's marker is the exact uncovered LINE with
+    its trailing newline, because the bare substring "harness/chain/" is a prefix of every
+    module path beneath it — which is precisely how the mutant passed `missing-sequencer-sources`
+    at exit 1 with its uncovered line reading "harness/chain/core.py".
+    """
+    return kit_tree(
+        root,
+        entries=tuple("harness/tool.py" if e == "harness/" else e for e in DEFAULT_BASE)
+        + ("harness/chain/core.py",),
+    )
+
+
 def main() -> int:
     if not TOOL.is_file():
         print(f"profile_check_test: court not found at {TOOL}", file=sys.stderr)
@@ -338,6 +359,8 @@ def main() -> int:
         case("missing-invoked", 1, "tools/extra.sh", build_missing_invoked),
         case("missing-story-input", 1, "stories/", build_missing_story_input),
         case("missing-sequencer-sources", 1, "harness/chain/", build_missing_sequencer_sources),
+        case("sequencer-file-not-directory", 1, "harness/chain/\n",
+             build_sequencer_file_not_directory),
     ]
     failed = results.count(False)
     print(f"profile_check_test: {len(results) - failed}/{len(results)} cases pass")

@@ -58,7 +58,12 @@ which existed only because the ledger did.
   the set only when the tree carries the directory — the fixture trees do not, so only the new case catches
   it), the agents assertion contents-keyed and inverted, and each of the two recovered modules dropped from
   the tuple (killed twice over, by the named-omission assertion and by the completeness case). Fixtures at 21,
-  30 and 60; the mapping and the key-shape decision are the story file's discharge record.
+  30 and 60; the mapping and the key-shape decision are the story file's discharge record. The merge review
+  (MERGE_SAFE, one should-fix) then found a seventh mutant surviving — the court's set narrowed back to a
+  hand-kept module list passed all 21 cases, since the known-bad's substring marker "harness/chain/" is a
+  prefix of every module path beneath it — killed sole-kill red-first by `sequencer-file-not-directory`, whose
+  tree covers `harness/chain/core.py` by name, omits the directory, and asserts the exact uncovered line with
+  its trailing newline; the profile-check fixture stands at 22.
 - **STORY-0007 built: the merge stage — merge_ok's eight conjuncts, the merge record, and both terminal acts.**
   `harness/chain/merge.py` is where ADR-0002's D3, D5 and the terminal-act half of D1 become mechanism, over the
   seams that already exist: position and the start-up posture are `core.py`'s, pinned-material resolution is the

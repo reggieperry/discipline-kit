@@ -40,8 +40,8 @@ Story-specific criteria—each dischargeable by a named check:
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
-- [x] The assertion count is not reduced versus the merge-base. Net adds only: `profile_check_test.py` 20 to 21 cases, `invoke_test.py` 29 to 30, `core_test.py` 58 to 60; no case, marker or state assertion removed anywhere.
-- [x] No new suppressions are introduced versus the merge-base. The diff adds no marker of any kind; the four pre-existing `# noqa: E402` lines in the touched modules are untouched.
+- [x] The assertion count is not reduced versus the merge-base. Net adds only: `profile_check_test.py` 20 to 22 cases, `invoke_test.py` 29 to 30, `core_test.py` 58 to 60; no case, marker or state assertion removed anywhere.
+- [x] No new suppressions are introduced versus the merge-base. The diff adds no marker of any kind; the six pre-existing `# noqa: E402` lines in the touched modules (two in `core.py`, four in `invoke.py`) are untouched.
 - [x] No new skipped tests versus the merge-base. No fixture has a skip mechanism and every case runs on every invocation.
 
 # Risks and rollback
@@ -127,3 +127,16 @@ sequencer cleanly. Closed red-first in `core_test.py`: `trusted-base-omits-invoc
 `sequencer-sources-complete` (the tuple held to the live `harness/chain/*.py` listing, so the
 next module cannot ship outside the gate silently). STORY-0011's discharge record described the
 tuple as it stood then; this entry supersedes its count without editing that record.
+
+The merge review (MERGE_SAFE, one should-fix) found a seventh mutant SURVIVING: the court's D4
+set narrowed to `("harness/chain/core.py",)` passed all 21 cases, because
+`missing-sequencer-sources` asserts the bare substring "harness/chain/", which is a prefix of
+every module path beneath it—the mutant's uncovered line "harness/chain/core.py" contains the
+marker, so the directory shape was pinned in prose only, and a revert to the drift-prone
+hand-kept form this story removed from `core.py` would have landed silently
+(`core.py startup`'s per-module refusal still fails closed at run time, so a lost defense
+layer, not an opened fail-open). Closed red-first, the mutant verified executing and the revert
+cmp-verified: `sequencer-file-not-directory` covers `harness/chain/core.py` by name, omits the
+directory, and asserts the exact uncovered line with its trailing newline—the sole kill under
+the reviewer's mutant. The existing case's marker was left as-is: tightening it would duplicate
+that kill, not strengthen it.
