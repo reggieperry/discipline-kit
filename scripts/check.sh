@@ -31,6 +31,9 @@ python3 harness/fixtures/authoring_artifacts_test.py
 # The story graph's checker is not wired here: it exits 1 against this tree, where 18 of 19 live
 # Decisions have no story. Its FIXTURE is, so the checker cannot rot while that gap closes.
 python3 harness/fixtures/chain_graph_test.py
+# The checker itself, wired since 2026-08-12: decision coverage closed (17 cited, 2 waived),
+# so a new ADR without stories or waivers, a dangling dep, or a cycle now fails the commit.
+python3 harness/chain_graph.py
 python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py

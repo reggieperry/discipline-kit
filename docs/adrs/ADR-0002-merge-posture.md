@@ -122,6 +122,8 @@ their rule, made outside this record. Under `merge-local` there is no window at 
 merge, bounded by revert, and the positive acknowledgment where wanted is the operator's
 push.
 
+Covered-by: none—the decision removes a window rather than adding one, so nothing is built.
+
 ### D7: Downstream consumption pins tags, never `main`
 
 `install.sh --refresh-rules` and every other downstream consumer resolve a tagged release. A

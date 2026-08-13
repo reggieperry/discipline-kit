@@ -46,6 +46,8 @@ Whatever sequences the chain has direct filesystem and subprocess access at ever
 advancement decision: it runs git, runs the pinned checks, and reads trees itself. This
 retires Workflow-as-spine permanently (no filesystem, measured) without naming what remains.
 
+Covered-by: none—it retires Workflow-as-spine; the surviving substrates satisfy it by construction.
+
 ### D2: The verdict channel is a pinned advance script's exit code, and nothing else
 
 Every phase verdict the sequencer consumes is the exit code of a pinned advance script,

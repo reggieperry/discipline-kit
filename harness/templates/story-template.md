@@ -23,7 +23,7 @@ cites:                # the sources the work is checked against; their depth dec
   THE LAST FIVE FRONTMATTER KEYS ARE OPTIONAL, and they are what makes a story a node in the chain's
   graph rather than a standalone spec. Delete all five for a plain story; carry them when the story
   discharges a numbered Decision. A story that carries them is read by `harness/chain_graph.py`,
-  which is run ON DEMAND rather than on the commit path today: `adr:` must name a registered ADR and
+  which runs on the commit path: `adr:` must name a registered ADR and
   `decisions:` its actual Decisions, `deps:` must name story ids that exist and must not close a
   cycle, and every non-superseded Decision must be cited by some story or waived in its own ADR.
   The checker reports uncovered Decisions, of which this repository currently has many, so it is

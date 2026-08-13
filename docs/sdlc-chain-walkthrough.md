@@ -33,7 +33,7 @@ them.
 
 ## Build state — all 21 steps
 
-Checked against kit `main`, not recalled. **2 built, 4 partial, 1 operator action, 14 not built —
+Checked against kit `main`, not recalled. **3 built, 3 partial, 1 operator action, 14 not built —
 21 rows.** Any step not in this table is a step this document forgot; the count is written down so
 it cannot quietly shrink. This tally was counted off the table rather than carried forward, which
 is how the previous line's error surfaced: it read "1 operator action, 4 partial, 16 not built",
@@ -45,7 +45,7 @@ summing to 21 only by leaving the one `built` row out of its own arithmetic.
 | A2 write the ADR | built | `harness/templates/ADR-template.md`, apparatus-free and dash-conformant; ADR-0001 authored against it; shape guarded by `authoring_artifacts_test.py` on the commit path |
 | A3 index it | **partial** | registry table in `docs/adrs/README.md`; ADR-0001 registered 2026-08-07 |
 | A4 decompose into stories | **built** | `harness/templates/story-template.md` carries the schema — the five chain fields optional, the key list closed; `stories/STORY-0001` is the first instance |
-| A5 commit-path integrity checks | **partial** | `harness/chain_graph.py`: the parser and all six checks, each printing its denominator; a 25-case fixture is on the commit path, the checker itself is NOT — it exits 1 here, 18 of 19 live Decisions having no story, which is the true state it is reporting |
+| A5 commit-path integrity checks | built | `harness/chain_graph.py`: the parser and all six checks, each printing its denominator; the 25-case fixture AND the checker are both on the commit path since 2026-08-12, when the coverage triage closed the graph (17 Decisions cited by ten stories plus STORY-0001, 2 waived with reasons) |
 | B1 `propose` | not built | |
 | B2 fix the coverage gap | not built | needs B1 |
 | B3 `agree` | not built | |
@@ -143,14 +143,16 @@ always halts are externally indistinguishable from a working fence; the kit's ow
 `postcondition.py` was exactly that for a month without anyone noticing. A check whose failing case
 has never been demonstrated is not a check.
 
-**BUILT, AND UNWIRED ON PURPOSE.** `harness/chain_graph.py` implements all six checks with their
+**BUILT, AND ON THE COMMIT PATH since 2026-08-12.** `harness/chain_graph.py` implements all six checks with their
 denominators, and 25 fixture cases pin them: every check has a known-good returning 0 and a
 known-bad returning non-zero, each asserting the marker string its finding prints, because a tree
 built to be cyclic that exits 1 on malformed frontmatter has told nobody anything about cycle
-detection. The FIXTURE runs on the commit path. The CHECKER does not, and the reason is the thing it
-found: run against this repository it exits 1 with 18 `UNCOVERED-DECISION` findings out of 19 live
-Decisions, which is an accurate report of a decomposition that has one story. Wiring a check that
-always fails teaches everyone to bypass the hook, so it wires when the coverage gap closes.
+detection. Both the fixture and the checker run on the commit path. The checker was held back until
+the 2026-08-12 coverage triage closed the gap it had honestly reported (18 of 19 live Decisions
+uncovered when the decomposition had one story; now 17 cited by eleven stories, 2 waived with
+reasons) — wiring a check that always fails teaches everyone to bypass the hook, so it wired the
+day it could pass, and from that day a new ADR without stories or waivers fails the commit that
+adds it.
 
 ---
 
