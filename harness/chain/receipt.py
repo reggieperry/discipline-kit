@@ -22,10 +22,12 @@ non-space character is `#`, carry nothing. Nothing else does either: this court 
 and the token and judges neither the rule nor the finding.
 
 THE DENOMINATOR comes from `<pinned_root>/rules/*.md`, the examiner copy of the coding rules,
-resolved through the loader's own refusals (a root inside a working tree, material escaping
-the root) and read with the same `grade_of` reader `rule_grades.py` runs on the commit path —
-one definition of what a grade line says, so the two cannot drift apart. The inclusion rule is
-stated once, at `receipt_owed`.
+resolved through the loader's own refusals — a root inside a working tree, and material
+escaping the root, applied to the rules directory AND to every globbed rule file, since one
+symlinked rule is enough to hand a judged tree the grade — and read with the same `grade_of`
+reader `rule_grades.py` runs on the commit path — one definition of what a grade line says,
+so the two cannot drift apart. A rule file that cannot be read as UTF-8 text is could-not-run
+naming the file, never a verdict. The inclusion rule is stated once, at `receipt_owed`.
 
 EVERY OPEN QUESTION IS DECIDED FAIL-CLOSED, each pinned by a fixture case:
 
@@ -34,7 +36,9 @@ EVERY OPEN QUESTION IS DECIDED FAIL-CLOSED, each pinned by a fixture case:
   which is what makes this a verdict rather than could-not-run.
 - A `finding` line counts its dimension as covered (it was examined) and PARKS the story.
   This court cannot see a finding's disposition — that is D3.5's refutation machinery — and
-  a finding read as a pass would merge a reviewer-found defect silently.
+  a finding read as a pass would merge a reviewer-found defect silently. A pointer-less
+  `finding` is accepted and parks the same way: an empty pointer carries no caveat to read
+  past, so the reason a trailing caveat on `covered` is refused does not reach it.
 - A line naming a rule outside the derived denominator — absent from the pinned copy, or
   pinned but mechanically enforced — is could-not-run: the receipt was written against some
   other rule set than the pinned copy, so it is not evidence about this denominator. Surplus
@@ -141,9 +145,20 @@ def receipt_owed(pinned: Path) -> list[str]:
     files = sorted(rules_copy.glob("*.md"))
     if not files:
         raise CouldNotRun(f"{rules_copy} holds no rules; refusing to pass vacuously")
-    owed = [p.name for p in files
-            if grade_token(p.name, rule_grades.grade_of(p.read_text(encoding="utf-8")))
-            != "mechanically enforced"]
+    # Containment per FILE, not only per directory: a clean rules directory holding one rule
+    # symlinked into a judged tree hands that tree the grade, and a flip there shrinks the
+    # denominator — measured signing a short receipt before this refusal existed.
+    loader.refuse_escaping_material(pinned, *files)
+    owed: list[str] = []
+    for p in files:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise CouldNotRun(
+                f"{p.name} in the pinned rules copy could not be read as UTF-8 text: {e}"
+            ) from e
+        if grade_token(p.name, rule_grades.grade_of(text)) != "mechanically enforced":
+            owed.append(p.name)
     if not owed:
         raise CouldNotRun(
             f"every rule in {rules_copy} is mechanically enforced, so the denominator is "

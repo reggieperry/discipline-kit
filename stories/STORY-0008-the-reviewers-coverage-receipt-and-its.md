@@ -41,7 +41,7 @@ Story-specific criteria—each dischargeable by a named check:
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
 - [x] The assertion count is not reduced versus the merge-base.
-- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base. (What the tick covers: the new module carries two `noqa: E402` import lines, the same sys.path-then-import shape every existing chain module carries—advance, attempt, core, invoke—and no scanner on the commit path reads `noqa`; nothing else suppression-shaped was added.)
 - [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
@@ -69,3 +69,20 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   033a1b3 deletes nothing (check.sh purely additive), the new module's two `noqa: E402` import
   lines match the established chain-module pattern, and the only "skip" matches are the word
   in prose.
+- Merge-review fix round (FIX_NEEDED, all findings demonstrated by measurement; fixed
+  red-first, re-verified). Containment now applies per rule FILE, not only per directory: one
+  pinned rule symlinked into the judged tree handed that tree the grade, and a flip there
+  shrank the denominator and signed a short receipt—exit 1 then exit 0 across the flip; both
+  runs now VOID (`rule-file-symlink-escape`). An invalid-UTF-8 pinned rule escaped as a
+  UnicodeDecodeError traceback with exit 1, the one verdict-shaped code; now could-not-run
+  naming the file (`undecodable-pinned-rule-2`). The could-not-run-dominates-park ordering
+  claim was unpinned—the reviewer's reorder mutation survived 19 of 19 minus the new case—
+  and `short-and-foreign-2` now pins it (mutation re-applied: killed). The pointer-less
+  `finding` is decided accepted-and-parking, stated in the docstring and pinned by
+  `finding-bare-parks-1` (an empty pointer carries no caveat to launder, so the
+  covered-trailer refusal's reason does not reach it; discriminates against the
+  finding-park-dropped mutant). Three live rules grading themselves "mechanically enforced
+  for <scope>" were regraded "partly mechanical" with the scope sentences retained
+  (java-testing, python-testing, scala-testing); a scratch probe over a pinned copy of the
+  live corpus moved the denominator from 50 to 53 of 57. Fixture at 19 cases; regression:
+  original mutations 1 and 2 re-run, both still killed (6/19 and 14/19).

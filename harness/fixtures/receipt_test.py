@@ -25,17 +25,39 @@ rule's own case.
   short-receipt-parks-1     one owed rule missing (the story criterion) -> 1, PARK naming beta.md
   receipt-absent-parks-1    no receipt file at all: 0 of N covered      -> 1, PARK
   finding-parks-1           full coverage, one finding token            -> 1, PARK, not "uncovered"
+  finding-bare-parks-1      a pointer-less finding line                 -> 1, PARK, not "uncovered"
   judged-grade-flip         the other story criterion, see below        -> denominator unmoved
+  rule-file-symlink-escape  a pinned rule FILE symlinked into the
+                            judged tree, flipped there across two runs  -> 2/2, VOID, never a sign
   unknown-id-2              an id the pinned copy does not hold         -> 2, VOID naming it
   not-owed-id-2             a pinned but mechanically-enforced rule     -> 2, VOID naming it
+  short-and-foreign-2       a receipt both short AND foreign            -> 2, VOID, no PARK
   duplicate-id-2            the same dimension claimed twice            -> 2, VOID
   malformed-line-2          a line with no token                        -> 2, VOID naming the line
   bad-token-2               a token outside covered/finding             -> 2, VOID
   covered-trailing-text-2   a caveat after `covered`                    -> 2, VOID
   ungraded-pinned-rule-2    a pinned rule with no grade line            -> 2, VOID naming it
+  undecodable-pinned-rule-2 a pinned rule that is not UTF-8             -> 2, VOID, no traceback
   empty-denominator-2       every pinned rule mechanically enforced     -> 2, VOID, never a pass
   rules-dir-absent-2        a pinned root with no rules copy            -> 2, VOID
   pinned-root-in-worktree-2 the root inside a git working tree          -> 2, VOID (D3)
+
+RULE-FILE-SYMLINK-ESCAPE is judged-grade-flip's evasion, measured signing before it was
+refused: containment applied to the rules DIRECTORY alone leaves each globbed rule file
+unexamined, so one pinned rule symlinked into the judged tree hands that tree the grade — a
+flip there shrank the denominator and turned the park into a PASS (exit 1 then exit 0 across
+the flip). Both runs must read could-not-run: the resolved path escapes the pinned root, and
+what would be read is not the material the root pins.
+
+SHORT-AND-FOREIGN-2 pins the ordering the module docstring claims: could-not-run dominates the
+park. Every other could-not-run case rides a complete receipt, so a court that evaluated the
+park first would survive all of them — measured surviving 15/15 under exactly that reorder —
+and this receipt is both short (beta.md uncovered) and foreign (zeta.md), so the reorder
+parks it where the refusal is required.
+
+FINDING-BARE-PARKS-1 pins the accepted shape: a `finding` with no pointer counts its
+dimension covered and parks. An empty pointer carries no caveat to read past — the reason a
+trailing caveat on `covered` is refused does not reach it.
 
 JUDGED-GRADE-FLIP IS ADR-0002/D4'S NAMED COURT, the one case about a verdict rather than a
 refusal. Its falsification condition is a denominator that shrinks when only the judged tree
@@ -254,6 +276,71 @@ def grade_flip_case() -> bool:
     return ok
 
 
+def rule_symlink_case() -> bool:
+    """A pinned rule file symlinked into the judged tree must refuse, not shrink.
+
+    Two runs, both required could-not-run: against the untouched judged copy, and again after
+    the judged grade flips to "mechanically enforced" — the flip that, when the symlink was
+    followed, shrank the denominator and turned this short receipt into a signed PASS.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        judged = judged_repo(tmp, DEFAULT_RULES)
+        root = tmp / "pinned"
+        root.mkdir()
+        pinned_rules = rules_dir(root, {"alpha.md": REVIEW})
+        (pinned_rules / "beta.md").symlink_to(judged / ".claude" / "rules" / "beta.md")
+        kit = kit_tree(tmp, root)
+        receipt_path = tmp / "receipt"
+        receipt_path.write_text("alpha.md covered\n", encoding="utf-8")
+
+        first = run_tool(kit, receipt_path, cwd=judged)
+        first_said = first.stdout + first.stderr
+        (judged / ".claude" / "rules" / "beta.md").write_text(rule_text(MECHANICAL),
+                                                             encoding="utf-8")
+        second = run_tool(kit, receipt_path, cwd=judged)
+        second_said = second.stdout + second.stderr
+
+    ok = (first.returncode == 2 and VOID_MARKER in first_said
+          and second.returncode == 2 and VOID_MARKER in second_said
+          and PASS_MARKER not in second_said)
+    print(f"  {'ok  ' if ok else 'FAIL'} rule-file-symlink-escape: want exit 2 naming "
+          f"'{VOID_MARKER}' on both sides of the judged flip, never a pass; "
+          f"got exit {first.returncode}/{second.returncode}")
+    if not ok:
+        print(f"       first: {first_said.strip()[:400]}")
+        print(f"       second: {second_said.strip()[:400]}")
+    return ok
+
+
+def undecodable_rule_case() -> bool:
+    """A pinned rule that is not UTF-8 is a broken instrument, never a verdict.
+
+    The refusal must name the file and must not escape as a traceback: an uncaught decode
+    error exits 1, the one verdict-shaped code, and a merge stage reading it would park a
+    story over an instrument defect.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        root = tmp / "pinned"
+        root.mkdir()
+        pinned_rules = rules_dir(root, {"alpha.md": REVIEW})
+        (pinned_rules / "beta.md").write_bytes(b"\xff\xfe not utf-8\n")
+        kit = kit_tree(tmp, root)
+        receipt_path = tmp / "receipt"
+        receipt_path.write_text(COMPLETE_RECEIPT, encoding="utf-8")
+        got = run_tool(kit, receipt_path)
+    said = got.stdout + got.stderr
+    ok = (got.returncode == 2 and VOID_MARKER in said and "beta.md" in said
+          and "Traceback" not in said)
+    print(f"  {'ok  ' if ok else 'FAIL'} undecodable-pinned-rule-2: want exit 2 naming "
+          f"'{VOID_MARKER}' and beta.md with no traceback, got exit {got.returncode}")
+    if not ok:
+        print(f"       stdout: {got.stdout.strip()[:400]}")
+        print(f"       stderr: {got.stderr.strip()[:400]}")
+    return ok
+
+
 def main() -> int:
     if not TOOL.is_file():
         print(f"receipt_test: tool not found at {TOOL}", file=sys.stderr)
@@ -266,11 +353,16 @@ def main() -> int:
         case("finding-parks-1", 1, "finding",
              receipt="alpha.md covered\nbeta.md finding the grade overstates the gate\n",
              absent="uncovered"),
+        case("finding-bare-parks-1", 1, "beta.md",
+             receipt="alpha.md covered\nbeta.md finding\n", absent="uncovered"),
         grade_flip_case(),
+        rule_symlink_case(),
         case("unknown-id-2", 2, "zeta.md",
              receipt=COMPLETE_RECEIPT + "zeta.md covered\n"),
         case("not-owed-id-2", 2, "gamma.md",
              receipt=COMPLETE_RECEIPT + "gamma.md covered\n"),
+        case("short-and-foreign-2", 2, "zeta.md",
+             receipt="alpha.md covered\nzeta.md covered\n", absent=PARK_MARKER),
         case("duplicate-id-2", 2, VOID_MARKER,
              receipt=COMPLETE_RECEIPT + "alpha.md covered\n"),
         case("malformed-line-2", 2, "line 1", receipt="alpha.md\nbeta.md covered\n"),
@@ -280,6 +372,7 @@ def main() -> int:
         case("ungraded-pinned-rule-2", 2, "beta.md",
              rules={"alpha.md": REVIEW, "beta.md": None},
              receipt="alpha.md covered\nbeta.md covered\n"),
+        undecodable_rule_case(),
         case("empty-denominator-2", 2, VOID_MARKER,
              rules={"alpha.md": MECHANICAL, "gamma.md": MECHANICAL}, receipt=""),
         case("rules-dir-absent-2", 2, VOID_MARKER, with_rules=False,
