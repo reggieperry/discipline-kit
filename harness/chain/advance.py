@@ -247,11 +247,76 @@ def seam_run(found: loader.Postcondition, repo: Path, timeout: int) -> tuple[int
     return done.returncode, done.stdout + done.stderr
 
 
-def record(repo: Path, ref: str, sha: str) -> None:
-    """Write the phase ref and read it back, or could-not-run naming git's own refusal.
+def git_dir(repo: Path) -> Path:
+    """The repository's own git directory, following a linked worktree's `.git` FILE."""
+    dot = repo / ".git"
+    if dot.is_dir():
+        return dot
+    if dot.is_file():
+        line = dot.read_text().strip()
+        if not line.startswith("gitdir:"):
+            raise CouldNotRun(f"{dot} is a file that does not name a gitdir: {line[:80]!r}")
+        named = Path(line.split(":", 1)[1].strip())
+        return named if named.is_absolute() else (repo / named).resolve()
+    raise CouldNotRun(f"{repo} carries no .git entry, so its ref store cannot be read")
 
-    The read-back is not ceremony: `update-ref` exiting 0 is a report by the tool being used, and
-    the property this seam owes is that the ref EXISTS at the graded sha before exit 0 is returned.
+
+def ref_store(repo: Path) -> Path:
+    """Where SHARED refs live, which for a linked worktree is the common directory and not its own.
+
+    `refs/chain/` is shared, so a seam run inside a sequencer-owned worktree (ADR-0004/D2) would
+    read an empty per-worktree directory and report the ref absent if this indirection were left
+    out. `commondir` is git's own statement of where that is, and it may be relative to the gitdir.
+    """
+    d = git_dir(repo)
+    common = d / "commondir"
+    if common.is_file():
+        named = Path(common.read_text().strip())
+        return named if named.is_absolute() else (d / named).resolve()
+    return d
+
+
+def stored_ref(repo: Path, ref: str) -> str | None:
+    """The sha the REF STORE holds for `ref`, read from the filesystem rather than asked of git.
+
+    This is the loader's own house rule at a second site: the thing being defended against is the
+    thing that would otherwise answer the question. A `git` earlier on PATH whose `update-ref`
+    writes nothing and whose `rev-parse` echoes HEAD agrees with itself, so a read-back put
+    through git returns the graded sha for a ref that is not in the store (measured: exit 0, PASS
+    printed, ref absent).
+
+    THE HONEST BOUND. A liar on the SEQUENCER's own PATH is already inside the gap ADR-0003/D4
+    names, where the sequencer's environment is pinned by an operator checklist that has not run
+    on any machine here; nothing in this file closes that. What the direct read buys against an
+    honest git is a partial write, a race, and inconsistent tooling, and it happens to catch the
+    consistent liar too. It reads the `files` backend; a repository on `reftable` reads as absent,
+    which is could-not-run and so fails closed rather than open.
+    """
+    store = ref_store(repo)
+    loose = store / ref
+    if loose.is_file():
+        value = loose.read_text().strip()
+        if value.startswith("ref:"):
+            raise CouldNotRun(f"{ref} is a symbolic ref naming {value[4:].strip()}, not a sha")
+        return value or None
+    packed = store / "packed-refs"
+    if packed.is_file():
+        for line in packed.read_text().splitlines():
+            if not line or line.startswith(("#", "^")):
+                continue
+            sha, _, name = line.partition(" ")
+            if name.strip() == ref:
+                return sha.strip()
+    return None
+
+
+def record(repo: Path, ref: str, sha: str) -> None:
+    """Write the phase ref and confirm it from the ref store, or could-not-run naming why not.
+
+    The confirmation is not ceremony: `update-ref` exiting 0 is a report by the tool being used,
+    and the property this seam owes is that the ref EXISTS at the graded sha before exit 0 is
+    returned. It is taken from the store rather than through git, for the reason `stored_ref`
+    gives.
     """
     done = git(repo, "update-ref", ref, sha)
     if done.returncode != 0:
@@ -259,10 +324,11 @@ def record(repo: Path, ref: str, sha: str) -> None:
             f"the phase ref {ref} could not be written at {sha}: "
             f"{done.stderr.strip() or done.stdout.strip()} (ADR-0003/D3: no exit 0 without the ref)"
         )
-    written = git(repo, "rev-parse", "--verify", "--quiet", ref).stdout.strip()
+    written = stored_ref(repo, ref)
     if written != sha:
         raise CouldNotRun(
-            f"the phase ref {ref} reads {written or 'absent'} after the write, not {sha}"
+            f"the ref store of {repo} holds {written or 'nothing'} for {ref} after the write, "
+            f"not the graded {sha} (ADR-0003/D3: no exit 0 without the ref)"
         )
 
 
@@ -276,10 +342,14 @@ def advance(a: argparse.Namespace) -> int:
     if a.tree_ref:
         declared_sha = resolve(repo, a.tree_ref)
         if declared_sha != sha:
+            # Not ADR-0002/D3.7, which is about a head that MOVES between evaluation and merge and
+            # so supports the re-verification below. This refusal stands on its own reason: the
+            # seam grades the working tree, and a declaration disagreeing with the tree it names
+            # leaves the caller and the seam talking about two different commits.
             raise CouldNotRun(
                 f"--tree-ref {a.tree_ref} resolves to {declared_sha}, and the graded tree is at "
                 f"{sha}: the seam grades the working tree, so a disagreement means the sequencer "
-                "and the tree are not talking about the same commit (ADR-0002/D3.7)"
+                "and the tree are not talking about the same commit"
             )
     say(f"advance: graded sha {sha}, ref {ref}")
 

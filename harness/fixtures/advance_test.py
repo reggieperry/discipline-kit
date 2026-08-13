@@ -22,11 +22,13 @@ the divergence the record forbids, and both read as a plain exit code.
   demonstration-failed-2     the postcondition fails its own red    -> 2, no ref
   dirty-tree-2               porcelain not empty at the seam        -> 2, no ref, no run
   worktree-outside-clean-0   a live worktree outside the parent     -> 0, ref written
+  seam-inside-worktree-0     the graded tree IS a linked worktree    -> 0, ref in the shared store
   worktree-inside-parent-2   a worktree path inside the parent      -> 2, naming it
   moving-head-2              the graded ref moves during the run    -> 2, no ref
   declared-sha-mismatch-2    --tree-ref disagrees with HEAD         -> 2, no ref, no run
   failed-update-ref-2        a ref-directory collision at the write -> 2, no ref
   lying-update-ref-2         update-ref reports 0 and writes nothing -> 2, no ref
+  consistent-liar-2          and its rev-parse echoes HEAD as well   -> 2, no ref
   red-proof-fail-1           native 2 under red-proof's contract    -> 1, no ref
   red-proof-pass-0           native 0 under red-proof's contract    -> 0, ref = sha
   red-proof-unmapped-2       native 1, which that contract omits    -> 2, no ref
@@ -384,6 +386,29 @@ def worktree_outside_case() -> bool:
         return ok
 
 
+def seam_in_worktree_case() -> bool:
+    """The graded tree is the sequencer-owned worktree itself, which is ADR-0004/D2's shape.
+
+    An attest-only phase runs in a worktree the sequencer created, so the seam is pointed at one:
+    its `.git` is a FILE naming a gitdir under the parent, and `refs/chain/` is a SHARED ref that
+    lives in the common directory rather than in the per-worktree one. A confirmation reading the
+    per-worktree directory finds nothing and calls a good write missing, so the ref is asserted
+    from the parent repository, where it actually lives.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        kit, repo = bench(tmp)
+        wt = tmp / "phase-worktree"
+        git(repo, "worktree", "add", "-q", "-b", "phase-tester", str(wt))
+        sha = git(wt, "rev-parse", "HEAD")
+        ok = judge("seam-inside-worktree-0", run_advance(kit, wt), want=0, marker=PASS_MARKER,
+                   repo=repo, ref=phase_ref(), want_ref=sha)
+        if not (wt / ".git").is_file():
+            print("       the graded tree has no .git file, so the case was not constructed")
+            ok = False
+        return ok
+
+
 def worktree_inside_case() -> bool:
     """The harness's own placement, measured non-excluded, is the shape D2 rejects.
 
@@ -552,6 +577,26 @@ def hostile_env_case() -> bool:
         return ok
 
 
+# A git that lies CONSISTENTLY, for `consistent-liar-2`: `update-ref` reports success and writes
+# nothing, and any `rev-parse` naming a chain ref answers with the real HEAD. A read-back put
+# through the same tool agrees with itself, so the seam signs a ref that is not in the store.
+GIT_CONSISTENT_LIAR = """#!/usr/bin/env bash
+repo=""
+prev=""
+asked_ref=0
+for arg in "$@"; do
+  if [ "$prev" = "-C" ]; then repo="$arg"; fi
+  case "$arg" in
+    update-ref) exit 0 ;;
+    refs/chain/*) asked_ref=1 ;;
+  esac
+  prev="$arg"
+done
+if [ "$asked_ref" = 1 ]; then exec {real} -C "$repo" rev-parse --verify --quiet HEAD; fi
+exec {real} "$@"
+"""
+
+
 def real_git() -> str:
     return subprocess.run(["bash", "-c", "command -v git"], capture_output=True, text=True,
                           env=clean_env()).stdout.strip()
@@ -571,6 +616,28 @@ def spy_path(td: Path) -> tuple[Path, Path]:
     """A directory holding a `git` wrapper that logs every invocation, and the log it writes."""
     log = td / "git-invocations.log"
     return shim(td, GIT_SPY, log=log), log
+
+
+def consistent_liar_case() -> bool:
+    """The read-back must not be put through the tool it is checking on.
+
+    `lying-update-ref-2` catches a liar that contradicts itself. This one does not: its
+    `update-ref` writes nothing and its `rev-parse` answers with HEAD, so a read-back through git
+    agrees with itself and the seam exits 0 saying recorded while the ref store holds nothing.
+    Measured against the read-back-through-rev-parse form: exit 0, PASS printed, ref absent.
+
+    The honest bound is that a liar on the SEQUENCER's own PATH is already inside the pinned-
+    environment gap of ADR-0003/D4. What the direct read buys against an honest git is partial
+    writes, races and inconsistent tooling; it catches this shape as well, which is why the case
+    is here rather than in a disclosure paragraph.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        kit, repo = bench(tmp)
+        env = clean_env()
+        env["PATH"] = f"{shim(tmp, GIT_CONSISTENT_LIAR)}{os.pathsep}{env['PATH']}"
+        return judge("consistent-liar-2", run_advance(kit, repo, env=env), want=2,
+                     marker=VOID_MARKER, repo=repo, ref=phase_ref(), want_ref="none")
 
 
 def lying_write_case() -> bool:
@@ -688,11 +755,13 @@ def main() -> int:
         demonstration_failed_case(),
         dirty_case(),
         worktree_outside_case(),
+        seam_in_worktree_case(),
         worktree_inside_case(),
         moving_head_case(),
         declared_sha_case(),
         failed_write_case(),
         lying_write_case(),
+        consistent_liar_case(),
         *red_proof_cases(),
         unknown_code_case(),
         seam_void_case(),

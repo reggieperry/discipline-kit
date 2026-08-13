@@ -75,7 +75,7 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   definition. STORY-0009 carries the judged-tree half.
 - Discharged 2026-08-12 on `feat/chain-advance`: `harness/chain/advance.py` (the seam),
   `harness/chain/attempt.py` (the re-walk deletion and the attempt-start worktree clearing), and
-  their 22-case fixture `harness/fixtures/advance_test.py`, wired into `scripts/check.sh`. The
+  their 24-case fixture `harness/fixtures/advance_test.py`, wired into `scripts/check.sh`. The
   seam's order is itself the design, each step being what makes the next one meaningful: the ref
   components are well-formed, the repository is a working tree, porcelain is empty, the graded sha
   resolves and matches any `--tree-ref` the caller declared, the contract is readable, the
@@ -112,6 +112,34 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   than an instruction: the seam grades the working tree at `--repo`, so a `--tree-ref` naming some
   other commit reads could-not-run (`declared-sha-mismatch-2`) instead of silently grading one
   tree and recording another sha.
+- Merge review returned MERGE_SAFE with three items, all taken in a second commit. The one with
+  teeth: the post-write confirmation was put through git, and a `git` earlier on PATH whose
+  `update-ref` writes nothing and whose `rev-parse` echoes HEAD agrees with itself, so the seam
+  exited 0 printing "recorded" with the ref absent from the store (measured, then red-proved as
+  `consistent-liar-2`). The confirmation now reads the ref store on the filesystem—the gitdir,
+  following a linked worktree's `.git` FILE and its `commondir`, since `refs/chain/` is a shared
+  ref and a seam run inside a sequencer-owned worktree would otherwise read an empty directory—
+  and falls back to `packed-refs`. That is the loader's own house rule at a second site: the thing
+  being defended against is the thing that would otherwise answer the question. Its honest bound
+  is stated in the source: a liar on the SEQUENCER's own PATH is already inside ADR-0003/D4's
+  pinned-environment gap, which no line here closes; what the direct read buys against an honest
+  git is a partial write, a race and inconsistent tooling, and it catches the consistent liar as
+  well. A repository on the `reftable` backend reads as absent, which is could-not-run and so
+  fails closed. `lying-update-ref-2` is kept: it is the inconsistent shape, and the two liars are
+  different specimens.
+- The review's second item was a citation: ADR-0002/D3.7 states the moved-between-evaluation-and-
+  merge property, which supports the post-run re-verification and NOT the pre-run `--tree-ref`
+  check. The citation now sits only at the re-verification, and the declaration check stands on
+  its own stated reason.
+- The review's third item is recorded and not acted on, because acting on it would take another
+  story's decision. `attempt.py` refuses a path still on disk after its registration is gone
+  rather than deleting it, and that is in tension with ADR-0004/D2's letter: a phase that crashed
+  leaving an unregistered directory behind wedges every retry of that story at the same place
+  until an operator intervenes. Safety and availability disagree here, and the question is the
+  sequencer's authority to act unattended—clearing under its own authority after diagnosing what
+  is there, against the blind force-delete D2 implies. STORY-0006 and STORY-0011 own it; the
+  tension is written into `attempt.py`'s docstring so the next reader meets it there rather than
+  discovering it from a wedged retry.
 - What the seam does not check, stated so it is not read as checked: porcelain is read once,
   before the seam run, and not again after it, so a postcondition that dirties the tree it grades
   is not caught—only one that moves the graded sha is. The worktree clearing refuses a path that
@@ -123,8 +151,8 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   admitted everything and wrote nothing—0 of 20 passed. The three cases whose expected verdict is
   pass failed too, and on the ref rather than on the code, which is D3's coupling doing exactly
   what it is for: an always-admits seam returns the right exit code and records nothing.
-- Eleven mutations, eleven killed, each with the mutant observed executing rather than reported
-  killed:
+- Thirteen mutations, thirteen killed, each with the mutant observed executing rather than
+  reported killed:
   the ref write moved after the success print with its failure swallowed (killed by
   `failed-update-ref-2` and `lying-update-ref-2`); the sha re-verification removed
   (`moving-head-2`); the contract read replaced by the identity map (`red-proof-fail-1`,
@@ -136,9 +164,14 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   run rather than on the exit code, since git refuses the bad name itself); the demonstration
   failure mapped to fail (`demonstration-failed-2`); the could-not-run verdict returned silently
   instead of raised (`seam-void-2`, which discriminates on the reason line, since the exit code is
-  2 either way); and the post-write read-back deleted, which survived the first battery and is
-  what `lying-update-ref-2` was added to kill.
-- The anti-weakening contract holds by measurement: the fixture is a net add of 22 cases, no
+  2 either way); the post-write confirmation deleted (`lying-update-ref-2`, `consistent-liar-2`),
+  which survived the first battery of ten and is what `lying-update-ref-2` was added to kill; the
+  confirmation put back through git rather than read from the store (`consistent-liar-2`, the
+  merge review's finding); and the `commondir` indirection dropped from the store resolution
+  (`seam-inside-worktree-0`), which is the case that keeps a seam run inside a sequencer-owned
+  worktree from reading its own empty per-worktree ref directory and calling a good write
+  missing.
+- The anti-weakening contract holds by measurement: the fixture is a net add of 24 cases, no
   assertion is removed, no suppression or skip marker is introduced, and the one edit to an
   existing file's behaviour (`loader.py`'s `adapt`) leaves `loader_test.py` at 27 of 27.
 - `advance.py` and `attempt.py` are NOT on the commit path while the fixture is, for the reason
