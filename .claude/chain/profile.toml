@@ -4,7 +4,7 @@
 # exists, because the class does not: the two first targets differ on every fact in this file.
 # So this is the kit's own instance of the schema, and a consuming repository writes its own.
 #
-# THE SCHEMA. Five keys, all top-level, all required by some court or some future one:
+# THE SCHEMA. Six keys, all top-level, all required by some court or some future one:
 #
 #   terminal          the chain's terminal act. ADR-0002/D1 names exactly two: "open-pr" and
 #                     "merge-local". Any other value fails scripts/merge-posture-check.sh.
@@ -16,6 +16,10 @@
 #                     mechanical, which is why the number is written down where a reviewer sees it.
 #   settings_sources  the ADR-0004/D3 declaration that a phase invocation pins its settings
 #                     sources. A marker key for now; STORY-0012 builds the enforcement.
+#   pinned_root       the absolute out-of-tree root the examiner material is resolved from.
+#                     ADR-0001/D3 and ADR-0003/D4, read by harness/chain/loader.py, which VOIDs
+#                     when the key is unset, relative, or names nothing.
+#
 #   trusted_base      the path prefixes a chain story may not touch. ADR-0002/D3.2, watched by
 #                     scripts/profile-check.sh.
 #
@@ -45,6 +49,27 @@ harness_version = "2.1.224"
 # until STORY-0012 lands the invocation that reads it; STORY-0005 and STORY-0006 each carry a
 # criterion that the pinning holds.
 settings_sources = "pinned"
+
+# ADR-0001/D3 and D4: postconditions, the checks they call, their configuration and the fixtures
+# that demonstrate them are resolved from here and never from the judged repository, because the
+# judged party supplying its own examiner is the defect class the whole record exists to close.
+# ADR-0003/D4 extends the same rule to the sequencer's definition and the advance scripts, so this
+# is one root with several kinds of material under it and not a postcondition-only path.
+#
+# THE DIRECTORY DOES NOT EXIST ON ANY MACHINE YET, and declaring it anyway is the honest state
+# rather than an aspiration: design §4.3 puts predicate scripts at absolute paths outside any
+# working tree, root-owned 0755, and names that as an operator checklist item the kit cannot
+# perform. Until the checklist runs, harness/chain/loader.py resolves nothing and VOIDs saying so,
+# which is why the loader is not on the commit path while its fixture is. What the loader checks
+# is that the root is absolute and outside every git working tree; ownership and mode it does not
+# check, and stating that here is what keeps the checklist from being read as done.
+#
+# NO COURT REQUIRES THIS KEY TO BE PRESENT, and the boundary is deliberate. A profile with no
+# pinned_root is a sequencer that must refuse to start, which is ADR-0003/D5's fail-closed start-up
+# obligation and belongs to STORY-0011; the loader meanwhile VOIDs on the absence and admits
+# nothing, so nothing here is fail-open while that story is unwritten. Adding the key to
+# profile-check.sh's required set would take STORY-0011's decision early and in the wrong file.
+pinned_root = "/var/lib/discipline-chain/"
 
 # ADR-0002/D3.2. A cumulative diff touching any prefix below parks the story regardless of green,
 # so a story can neither widen its own cage, nor edit the check that clears it, nor edit the

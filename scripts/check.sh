@@ -50,6 +50,13 @@ python3 harness/fixtures/scrub_gate_test.py
 # the court passes against this repository, and a court only ever observed passing is not known
 # to be watching. Its trees plant each omission ADR-0002/D3.2 names.
 python3 harness/fixtures/profile_check_test.py
+# The postcondition loader's fixture, on the commit path; the loader itself deliberately is not,
+# for the reason the chain graph's checker was held back until its triage closed. The loader
+# resolves examiner material from the profile's out-of-tree `pinned_root`, that directory is
+# created by the machine-hardening checklist, and the checklist has not run on any machine here,
+# so the loader VOIDs, which on the commit path would block every commit rather than report a
+# defect. It wires the day the root exists. The fixture needs no such root: it builds its own.
+python3 harness/fixtures/loader_test.py
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
