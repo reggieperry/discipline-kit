@@ -37,6 +37,7 @@ Story-specific criteria—each dischargeable by a named check:
 
 - [ ] derived position equals planted refs across the fixture repository—verified by `the position fixture named in ADR-0001's Falsification section`
 - [ ] no sequencer source reads the log, status frontmatter, or stream verdict fields for control flow—verified by `the D5 grep-shaped source check`
+- [ ] the sequencer's own invocation pins its settings sources, so a user-scope hook cannot inject into the run it drives—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from the sequencer's transcript`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -53,3 +54,7 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- The settings-source criterion comes from `docs/probe/D7-headless-probe-2026-08-12.md`: user-scope
+  SessionStart hooks fire in headless runs, so an unattended run inherits whatever the operator's
+  user-level hooks inject unless the invocation pins its sources. STORY-0005 carries the same
+  criterion for the phase invocations; this one is the sequencer's own.

@@ -36,6 +36,7 @@ Out of scope:
 Story-specific criteria—each dischargeable by a named check:
 
 - [ ] a profile omitting the sequencer's definition path fails the profile check—verified by `the extended check's known-bad fixture`
+- [ ] the pinned `--agents` payload is the sole definition source: the judged tree carries no agent-definition directory at all, asserted from the filesystem rather than inferred, and any definition found there is a finding whether or not it shares a name with a pinned one—verified by `a check case asserting the judged tree has no agent-definition directory, with an empty directory a finding and a populated one a finding`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -52,3 +53,21 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- The one-source rule is `docs/probe/D7-headless-probe-2026-08-12.md`, read at its CORRECTION
+  rather than at its first draft. Leg 2 as first written—two sources, the repo file's followed—was
+  confounded: the repo file and the invoking prompt carried the same instruction, so nothing
+  separated them. Leg 3 discriminates, with the repo definition removed and a neutral prompt: the
+  pinned payload's instruction executed. The corrected rule is three-part, and only the first part
+  is this story's, because only it is a check over the judged tree—the judged tree carries no
+  agent-definition directory at all. The other two are the invocation's: the wrapper fails closed
+  on a missing pinned type, which STORY-0005 carries, and the invoking prompt carries
+  spawn-by-name only and never phase instructions, which is a phase-brief content rule noted
+  there. Directory absence rather than name collision is the test, and leg 1 is why the route
+  exists rather than why the name is irrelevant. Leg 1 carried no `--agents` payload at all: the
+  repo-level definition was not registered in headless `-p` mode, `Agent(subagent_type: ...)`
+  failed with "not found", and the wrapper's main agent then improvised a substitute brief FROM
+  THE JUDGED TREE—ADR-0001/D3's defect reached by initiative inside the wrapper. What that
+  measures is that a definition sitting in the judged tree is reachable material for the wrapper.
+  It does NOT measure that a differently-named one would be read; that substitute came from the
+  same-named file. Absence is therefore the fail-closed rule, chosen because the tree-read route
+  is measured, not because breadth beyond it was.

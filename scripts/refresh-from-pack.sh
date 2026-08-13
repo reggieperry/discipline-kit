@@ -33,9 +33,21 @@ if [[ ! -d "$OVERLAY/rules" ]]; then
   exit 1
 fi
 
+# g: git confined to the pack checkout, immune to the redirecting variables the caller may have
+# exported. `-C` re-scopes the working directory and NOT the gitdir, so a run inherited from a
+# hook or a phase seam — both of which export GIT_DIR, and in a linked worktree it is absolute —
+# would fetch into and CHECK OUT A TAG IN the exporting repository while appearing to operate on
+# the directory named by `-C`. `checkout` writes, so the damage here is to a real tree rather
+# than to a verdict. Same helper as scripts/revert-sufficiency-check.sh, same reason.
+g() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+    -u GIT_COMMON_DIR -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    git -C "$PACK_DIR" "$@"
+}
+
 echo "Checking out $TAG in $PACK_DIR"
-git -C "$PACK_DIR" fetch --tags --quiet
-git -C "$PACK_DIR" checkout --quiet "$TAG"
+g fetch --tags --quiet
+g checkout --quiet "$TAG"
 
 echo "Refreshing rules"
 rm -f "$KIT"/claude-project/rules/*.md
