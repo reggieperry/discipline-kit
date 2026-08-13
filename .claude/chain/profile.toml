@@ -4,7 +4,7 @@
 # exists, because the class does not: the two first targets differ on every fact in this file.
 # So this is the kit's own instance of the schema, and a consuming repository writes its own.
 #
-# THE SCHEMA. Five keys, all top-level, all required by some court or some future one:
+# THE SCHEMA. Six keys, all top-level, all required by some court or some future one:
 #
 #   terminal          the chain's terminal act. ADR-0002/D1 names exactly two: "open-pr" and
 #                     "merge-local". Any other value fails scripts/merge-posture-check.sh.
@@ -16,6 +16,10 @@
 #                     mechanical, which is why the number is written down where a reviewer sees it.
 #   settings_sources  the ADR-0004/D3 declaration that a phase invocation pins its settings
 #                     sources. A marker key for now; STORY-0012 builds the enforcement.
+#   pinned_root       the absolute out-of-tree root the examiner material is resolved from.
+#                     ADR-0001/D3 and ADR-0003/D4, read by harness/chain/loader.py, which VOIDs
+#                     when the key is unset, relative, or names nothing.
+#
 #   trusted_base      the path prefixes a chain story may not touch. ADR-0002/D3.2, watched by
 #                     scripts/profile-check.sh.
 #
@@ -46,6 +50,27 @@ harness_version = "2.1.224"
 # criterion that the pinning holds.
 settings_sources = "pinned"
 
+# ADR-0001/D3 and D4: postconditions, the checks they call, their configuration and the fixtures
+# that demonstrate them are resolved from here and never from the judged repository, because the
+# judged party supplying its own examiner is the defect class the whole record exists to close.
+# ADR-0003/D4 extends the same rule to the sequencer's definition and the advance scripts, so this
+# is one root with several kinds of material under it and not a postcondition-only path.
+#
+# THE DIRECTORY DOES NOT EXIST ON ANY MACHINE YET, and declaring it anyway is the honest state
+# rather than an aspiration: design §4.3 puts predicate scripts at absolute paths outside any
+# working tree, root-owned 0755, and names that as an operator checklist item the kit cannot
+# perform. Until the checklist runs, harness/chain/loader.py resolves nothing and VOIDs saying so,
+# which is why the loader is not on the commit path while its fixture is. What the loader checks
+# is that the root is absolute and outside every git working tree; ownership and mode it does not
+# check, and stating that here is what keeps the checklist from being read as done.
+#
+# NO COURT REQUIRES THIS KEY TO BE PRESENT, and the boundary is deliberate. A profile with no
+# pinned_root is a sequencer that must refuse to start, which is ADR-0003/D5's fail-closed start-up
+# obligation and belongs to STORY-0011; the loader meanwhile VOIDs on the absence and admits
+# nothing, so nothing here is fail-open while that story is unwritten. Adding the key to
+# profile-check.sh's required set would take STORY-0011's decision early and in the wrong file.
+pinned_root = "/var/lib/discipline-chain/"
+
 # ADR-0002/D3.2. A cumulative diff touching any prefix below parks the story regardless of green,
 # so a story can neither widen its own cage, nor edit the check that clears it, nor edit the
 # inputs that check consumes. The list must contain its own file, the CI workflows, and every
@@ -57,7 +82,7 @@ settings_sources = "pinned"
 #   .claude/             this file, and the settings root it sits in. D3.2's first named omission
 #                        is the list's own file: a list that can edit itself is not a cage. The
 #                        entry is the whole `.claude/` tree rather than `chain/` because the
-#                        sibling surface is the harness's project-settings root — a story adding
+#                        sibling surface is the harness's project-settings root—a story adding
 #                        `.claude/settings.json` with hooks, or an agent definition beside it,
 #                        changes how every later phase runs, and ADR-0004/D3 pins the settings
 #                        sources per invocation precisely because settings inject. A base
@@ -93,8 +118,8 @@ settings_sources = "pinned"
 # (em-dash), every tracked shell file (shellcheck), the whole tree (scrub-gate), and
 # claude-project/rules/ (rule_grades). Listing a graded corpus would put the repository in its own
 # trusted base and park every story ever written. The rules directory is the one worth stating
-# on its own terms: rule_grades.py reads `*.md` under it and nothing else — no configuration
-# file, no allowlist, no exemption list — so every byte it reads is subject matter, and editing a
+# on its own terms: rule_grades.py reads `*.md` under it and nothing else—no configuration
+# file, no allowlist, no exemption list—so every byte it reads is subject matter, and editing a
 # rule changes what that court grades rather than what it will accept. ADR-0002/D4 covers the
 # separate point at the merge stage, where a rule edit could otherwise move a verdict: the
 # reviewer's lens-set denominator is re-derived from the pinned examiner copy, never from the
