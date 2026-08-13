@@ -8,8 +8,23 @@ runs the other way, and it is the last one before a story merges.
 
   exit 0   every changed path is covered by a declared path
   exit 1   at least one changed path is covered by none of them, and they are named
-  exit 2   THE CHECK COULD NOT RUN — no story on the base, no `**In:**` section, or no
-           machine-readable path in it. Never a pass.
+  exit 2   THE CHECK COULD NOT RUN. Never a pass, and NAMED: `NO STORY`, `NO SCOPE SECTION`,
+           `NO PATH DECLARATIONS`, or a diff that did not answer.
+
+THE SCOPE SECTION IS WRITTEN TWO WAYS AND BOTH ARE READ. The walkthrough's A4 sketch writes
+`**In:**` / `**Out:**`; `harness/templates/story-template.md` writes `In scope:` / `Out of
+scope:` with the bullet list a blank line below the opener, and every story under `stories/`
+follows the template. The two need separate windows rather than one union: the bold form puts
+free prose under it and is terminated BY a blank line, and terminating the template form there
+would end its list before the first bullet ever arrived.
+
+THE THREE COULD-NOT-RUN STATES ARE NAMED APART, because they send the operator to three
+different remedies and an unnamed exit 2 sends them to none. A missing story is a base-ref or
+a filing problem. A story with no scope section at all is malformed. A story whose scope is
+PROSE is neither: the walkthrough's proximity rule says a story months out is a light stub
+with rough scope, and ten of this repository's eleven stories are legitimately that shape. The
+third state prints how many changed paths went UNEXAMINED, so a stub cannot read as a quiet
+green — the check that found nothing and the check that looked at nothing say so differently.
 
 THE STORY IS READ FROM THE BASE REF, NOT THE WORKING TREE. §3.10 commits stories to main
 before a set is agreed and reads the graph from `origin/main`; the consequence shows up here,
@@ -38,7 +53,12 @@ import sys
 from fnmatch import fnmatch
 
 # `**In:**` opens the list; the next bold marker or blank line closes it.
-IN_OPEN = re.compile(r"^\*\*In:\*\*\s*(.*)$")
+IN_BOLD = re.compile(r"^\*\*In:\*\*\s*(.*)$")
+# `In scope:` opens a bullet list a blank line below it; the first line that is neither a
+# bullet nor a bullet's continuation closes it, which is what `Out of scope:` is.
+IN_PROSE = re.compile(r"^In scope:\s*(.*)$", re.IGNORECASE)
+HEADING = re.compile(r"^#")
+BULLET = re.compile(r"^\s*[-*+]\s")
 BOLD = re.compile(r"^\*\*")
 BACKTICKED = re.compile(r"`([^`]+)`")
 
@@ -62,26 +82,70 @@ def git(repo: str, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def declared_paths(body: str) -> list[str]:
-    """Every backticked token under the story's `**In:**` marker, in order.
+def bold_form_paths(rest: str, below: list[str]) -> list[str]:
+    """The `**In:**` window: the opener's own text, then lines up to a blank or a bold marker.
 
-    Prose without backticks yields nothing, which the caller treats as could-not-run rather
-    than as an empty allowlist. An empty allowlist would fail every path and read as drift;
-    the honest answer is that no machine-readable scope was declared.
+    Blank-line termination is kept exactly as it was. This form writes prose freely underneath
+    the section, and a wider window would admit backticks that are not scope — every one of
+    which would ENLARGE the allowlist, which is the failure direction this tool exists to catch.
     """
-    out: list[str] = []
-    capturing = False
-    for line in body.splitlines():
-        if not capturing:
-            m = IN_OPEN.match(line)
-            if m:
-                capturing = True
-                out += BACKTICKED.findall(m.group(1))
-            continue
-        if BOLD.match(line) or not line.strip():
+    out = BACKTICKED.findall(rest)
+    for line in below:
+        if not line.strip() or BOLD.match(line) or HEADING.match(line):
             break
         out += BACKTICKED.findall(line)
     return out
+
+
+def prose_form_paths(rest: str, below: list[str]) -> list[str]:
+    """The `In scope:` window: the bullet list, across the blank line that separates it.
+
+    Blank lines are skipped rather than closing the window, so the list is bounded instead by
+    what a list ends at: a heading, a bold marker, or any line in column 0 that is not a bullet.
+    Indented lines are continuations of a bullet — `stories/STORY-0001` wraps one and carries
+    text onto it — so they are read, and a backticked path is as declared on the second line of
+    a bullet as on the first.
+
+    THE OUT-OF-SCOPE LIST IS NEVER ENTERED, and the column-0 rule is the whole of what keeps it
+    out: `Out of scope:` is a line in column 0 that is not a bullet, so the window closes on it.
+    That matters more than it looks, because the out-of-scope list holds paths in exactly the
+    same shape as the in-scope one — a window running past its opener hands the branch an
+    allowlist containing what the story forbade, which widens scope silently. A separate
+    `Out of scope:` pattern was tried here and REMOVED: two guards covering one condition mask
+    each other under mutation, and each survived alone while the pair together failed the
+    fixture. One guard, with a case that goes red when it goes.
+    """
+    out = BACKTICKED.findall(rest)
+    for line in below:
+        if not line.strip():
+            continue
+        if HEADING.match(line) or BOLD.match(line):
+            break
+        if BULLET.match(line) or line[:1].isspace():
+            out += BACKTICKED.findall(line)
+            continue
+        break
+    return out
+
+
+def declared_paths(body: str) -> tuple[list[str], bool]:
+    """Every backticked token under the story's in-scope opener, and whether one was found.
+
+    The two are returned separately because "no scope section" and "a scope section written in
+    prose" are different findings with different remedies, and collapsing them into an empty
+    list loses the distinction. Prose without backticks yields no paths, which the caller
+    treats as could-not-run rather than as an empty allowlist: an empty allowlist would fail
+    every path and read as drift, and the honest answer is that no path was declared.
+    """
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        bold = IN_BOLD.match(line)
+        if bold:
+            return bold_form_paths(bold.group(1), lines[i + 1:]), True
+        prose = IN_PROSE.match(line)
+        if prose:
+            return prose_form_paths(prose.group(1), lines[i + 1:]), True
+    return [], False
 
 
 def covered(path: str, declared: list[str]) -> bool:
@@ -135,17 +199,18 @@ def main() -> int:
     show = git(a.repo, "show", f"{a.base}:{a.story}")
     if show.returncode != 0:
         print(
-            f"scope: could not read '{a.story}' from '{a.base}' — the scope a branch declares "
-            f"for itself is not a declaration. No check performed.",
+            f"scope: NO STORY — could not read '{a.story}' from '{a.base}'. The scope a branch "
+            f"declares for itself is not a declaration. No check performed.",
             file=sys.stderr,
         )
         return 2
 
-    declared = declared_paths(show.stdout)
-    if not declared:
+    declared, has_section = declared_paths(show.stdout)
+    if not has_section:
         print(
-            f"scope: '{a.story}' on '{a.base}' carries no backticked path under '**In:**'. "
-            f"No machine-readable scope, so no check performed.",
+            f"scope: NO SCOPE SECTION — '{a.story}' on '{a.base}' carries neither an '**In:**' "
+            f"marker nor an 'In scope:' opener. The story is malformed against "
+            f"harness/templates/story-template.md, so no check performed.",
             file=sys.stderr,
         )
         return 2
@@ -153,6 +218,17 @@ def main() -> int:
     changed = changed_paths(a.repo, a.base)
     if changed is None:
         print(f"scope: could not diff '{a.base}...HEAD'. No check performed.", file=sys.stderr)
+        return 2
+
+    if not declared:
+        print(
+            f"scope: NO PATH DECLARATIONS — '{a.story}' on '{a.base}' has a scope section that "
+            f"names no backticked path: the scope carries no path declarations; nothing to "
+            f"reconcile lexically. {len(changed)} changed path(s) went UNEXAMINED. This is the "
+            f"walkthrough's stub depth, not a defect in the story — tighten the scope to paths "
+            f"before hand-off if the work is imminent. No check performed.",
+            file=sys.stderr,
+        )
         return 2
 
     drift = [p for p in changed if not covered(p, declared)]

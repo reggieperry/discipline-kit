@@ -53,3 +53,8 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- The schema should carry the settings-source pinning declaration, so the sources a phase and the
+  sequencer invoke with are declared per repository beside the posture rather than hard-coded in
+  whatever script happens to build the command line. `docs/probe/D7-headless-probe-2026-08-12.md`
+  is why: user-scope SessionStart hooks fire in headless runs, and STORY-0005 and STORY-0006 each
+  carry a criterion that the pinning holds.

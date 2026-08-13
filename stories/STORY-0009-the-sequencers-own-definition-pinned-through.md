@@ -36,6 +36,7 @@ Out of scope:
 Story-specific criteria—each dischargeable by a named check:
 
 - [ ] a profile omitting the sequencer's definition path fails the profile check—verified by `the extended check's known-bad fixture`
+- [ ] the pinned `--agents` payload is the sole definition source: a repo-level agent definition in the judged tree sharing a name with a pinned phase definition is reported as a finding—verified by `a check case planting a same-named definition under the judged tree's agent directory and asserting the finding`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -52,3 +53,8 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- The one-source rule is `docs/probe/D7-headless-probe-2026-08-12.md`'s leg-2 finding, measured
+  rather than reasoned: with the `--agents` JSON and a same-named repo-level definition both
+  present, the worker received two instruction sources and followed the repo file's. The same
+  probe found the repo-level definition is not registered at all in headless `-p` mode, so the
+  payload is the only route in and a repo-level file beside it can only compete.

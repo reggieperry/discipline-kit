@@ -38,6 +38,8 @@ Story-specific criteria—each dischargeable by a named check:
 - [ ] a failed ref write forces a nonzero exit—verified by `an advance-script fixture with update-ref forced to fail`
 - [ ] a dirty tree at the seam reads could-not-run—verified by `the porcelain-precondition fixture`
 - [ ] red-proof's native exit 2 reads as fail, not could-not-run—verified by `the adaptation fixture`
+- [ ] a parent repository holding live phase worktrees still reads porcelain-empty at the seam, either because the precondition accounts for the worktree path or because the worktrees are placed outside the parent—verified by `a porcelain-precondition fixture case with a phase worktree materialized and the tree otherwise clean`
+- [ ] the phase invocation pins its settings sources, so a user-scope hook cannot inject into a phase transcript—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from the phase transcript`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -54,3 +56,10 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- The last two acceptance criteria come from `docs/probe/D7-headless-probe-2026-08-12.md`, which
+  measured both facts rather than predicting them: worktrees materialize under
+  `.claude/worktrees/` INSIDE the parent repository and show up as an untracked directory, and
+  user-scope SessionStart hooks fire in headless runs—the operator's own startup hook injected
+  machine-identity detail into both legs' transcripts. The worktree criterion is written so
+  either remedy discharges it, because that choice belongs to this story's builder and not to
+  the probe.

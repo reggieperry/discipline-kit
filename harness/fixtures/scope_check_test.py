@@ -14,10 +14,29 @@ the checker's exit code:
   rename-out      a declared path is MOVED OUT of the declared set   -> 1
   rename-in       a file moves INTO scope from outside it            -> 1
   no-story        the story file does not exist                      -> 2 (never a pass)
-  no-in-section   the story carries no `**In:**` section             -> 2 (never a pass)
-  no-paths        `**In:**` exists but names no backticked path      -> 2 (never a pass)
+  no-in-section   the story carries NEITHER scope opener             -> 2, NO SCOPE SECTION
+  no-paths        `**In:**` exists but names no backticked path      -> 2, NO PATH DECLARATIONS
   empty-diff      nothing changed at all                             -> 0, denominator 0
   prefix-boundary a SIBLING of a declared directory is touched        -> 1
+
+The five `template-*` cases and `template-file` cover the OTHER scope form, which is the one
+every real story is written in. `harness/templates/story-template.md` writes `In scope:` /
+`Out of scope:` with the bullets a blank line below the opener; the tool read only `**In:**`,
+so all eleven files under `stories/` reported could-not-run and the check had never run once on
+the corpus it governs. `template-file` reads the template itself rather than a transcription of
+it, because a transcription cannot catch the template renaming its opener.
+
+  bold-window-narrow        `**In:**` does NOT read past its blank line    -> 1
+  template-in-scope         the template form, paths declared and honored  -> 0
+  template-drift            the template form, a path outside them         -> 1
+  template-wrapped-bullet   a path on a bullet's CONTINUATION line         -> 0
+  template-out-not-declared a path named under `Out of scope:` is touched  -> 1
+  template-no-paths         the template form, prose bullets, no paths     -> 2, NO PATH DECL.
+  template-file             the shipped template parses as a scope section -> 2, NO PATH DECL.
+
+`template-out-not-declared` is the one whose failure would be silent: the out-of-scope list is
+a list of paths in the same shape as the in-scope one, so a window that runs past its opener
+hands the branch an allowlist containing what the story forbade.
 
 RENAME-OUT IS THE CASE THIS TOOL EXISTS FOR, and it is why the tool cannot use
 `git diff --name-only`. Measured on git 2.43: moving `scripts/check.sh` to `other/check.sh`
@@ -39,6 +58,12 @@ import tempfile
 from pathlib import Path
 
 TOOL = Path(__file__).resolve().parent.parent / "scope_check.py"
+
+# The names the tool must give its two non-story could-not-run states. Asserted as strings so a
+# state that stops being named, or starts being named as the other one, is a failure rather
+# than an indistinguishable exit 2.
+NO_SECTION_MARKER = "NO SCOPE SECTION"
+NO_PATHS_MARKER = "NO PATH DECLARATIONS"
 
 STORY = """\
 ---
@@ -69,6 +94,30 @@ title: A worked example
 No scope section at all.
 """
 
+# The bold form's window is narrower than the template form's ON PURPOSE, and this is the story
+# that shows the difference. `**In:**` puts free prose under it, so the window is terminated by
+# the first blank line; the template form cannot use that rule, because a blank line is what
+# separates its opener from its own first bullet. Reading the bold form with the wider window
+# picks up `other/` from the note below and ENLARGES the allowlist. Measured: with no case of
+# this shape, giving both forms the wide window left every case green.
+STORY_BOLD_WITH_NOTES = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+## Scope
+
+**In:** `src/`
+
+- a note below the blank line, mentioning `other/` without declaring it
+
+**Out:**
+- everything else
+"""
+
 STORY_PROSE_IN = """\
 ---
 id: STORY-0001
@@ -81,6 +130,104 @@ title: A worked example
 
 **In:** the source tree and the note, described in prose with no backticks.
 """
+
+# The five below are the TEMPLATE's scope form: `In scope:` / `Out of scope:` openers with a
+# blank line between the opener and its bullet list. `harness/templates/story-template.md`
+# writes that form and all eleven files under `stories/` follow it, while the tool read only
+# `**In:**` — so every real story reported could-not-run and the check had never once run on
+# the corpus it governs. The blank line is why the two forms need separate windows: the bold
+# form is terminated BY a blank line, and terminating this one there would end the list before
+# its first bullet.
+TEMPLATE_STORY = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+# Scope and non-goals
+
+In scope:
+
+- the source tree `src/` and the note `docs/note.md`
+
+Out of scope:
+
+- everything else
+
+# Acceptance criteria
+"""
+
+TEMPLATE_STORY_WRAPPED = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+# Scope and non-goals
+
+In scope:
+
+- the source tree and, carried onto a wrapped continuation line, the note at
+  `docs/note.md` together with `src/`
+
+Out of scope:
+
+- everything else
+
+# Acceptance criteria
+"""
+
+TEMPLATE_STORY_OUT_PATHS = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+# Scope and non-goals
+
+In scope:
+
+- `src/`
+
+Out of scope:
+
+- `other/`, which an implementer must not touch even though it is adjacent
+
+# Acceptance criteria
+"""
+
+TEMPLATE_STORY_PROSE = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+# Scope and non-goals
+
+In scope:
+
+- the advance scripts and their fixtures
+
+Out of scope:
+
+- the seam court replay
+
+# Acceptance criteria
+"""
+
+# The real template, read from the tree rather than transcribed. A transcription cannot catch
+# the template changing its opener, which is the drift this whole reconciliation was.
+TEMPLATE_FILE = (
+    Path(__file__).resolve().parent.parent / "templates" / "story-template.md"
+)
 
 
 def clean_env() -> dict[str, str]:
@@ -150,14 +297,23 @@ def run_tool(repo: Path, story: str = "STORY-0001.md") -> subprocess.CompletedPr
     )
 
 
-def case(name: str, want: int, build, story: str | None = STORY) -> bool:
-    """Build a repository via `build`, run the tool, and compare the exit code."""
+def case(name: str, want: int, build, story: str | None = STORY, marker: str | None = None) -> bool:
+    """Build a repository via `build`, run the tool, and compare the exit code.
+
+    `marker` is a substring the run's output must carry. The three could-not-run states share
+    exit 2 and are NOT the same finding — a missing story, a story with no scope section, and a
+    story whose scope is prose send the operator to three different remedies — so an exit code
+    alone cannot tell whether the tool named the state it actually met. Where a case supplies a
+    marker, the exit code and the naming are asserted together.
+    """
     with tempfile.TemporaryDirectory() as td:
         repo = new_repo(Path(td), story)
         build(repo)
         got = run_tool(repo)
-        ok = got.returncode == want
-        print(f"  {'ok  ' if ok else 'FAIL'} {name}: want exit {want}, got {got.returncode}")
+        said = got.stdout + got.stderr
+        ok = got.returncode == want and (marker is None or marker in said)
+        want_txt = f"exit {want}" + (f" naming '{marker}'" if marker else "")
+        print(f"  {'ok  ' if ok else 'FAIL'} {name}: want {want_txt}, got exit {got.returncode}")
         if not ok:
             print(f"       stdout: {got.stdout.strip()[:300]}")
             print(f"       stderr: {got.stderr.strip()[:300]}")
@@ -254,6 +410,47 @@ def build_prefix_boundary(repo: Path) -> None:
     commit_all(repo, "touch a directory that merely shares a prefix")
 
 
+def build_out_of_scope_touched(repo: Path) -> None:
+    """A path named under `Out of scope:` is touched, and must read as drift.
+
+    The out-of-scope list is a list of paths in exactly the same shape as the in-scope one, so
+    a window that runs past the `Out of scope:` opener swallows it and hands the branch an
+    allowlist containing the very paths the story forbade. That widens scope silently, which is
+    the one direction this tool exists to catch.
+    """
+    (repo / "other" / "b.py").write_text("changed — named under Out of scope\n")
+    commit_all(repo, "touch a path the story declared out of scope")
+
+
+def template_file_case() -> bool:
+    """The tool must find a scope section in `harness/templates/story-template.md` itself.
+
+    This is the reconciliation, pinned at its source. The template ships placeholder bullets
+    with no backticked path, so the honest verdict is the named no-path-declarations state —
+    NOT the no-scope-section state, which is what the tool returned for every story written to
+    this template before the fix. If the template renames its opener, this case goes red at the
+    template rather than silently on eleven stories.
+    """
+    if not TEMPLATE_FILE.is_file():
+        print(f"  FAIL template-file: {TEMPLATE_FILE} not found")
+        return False
+    body = TEMPLATE_FILE.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as td:
+        repo = new_repo(Path(td), body)
+        build_in_scope(repo)
+        got = run_tool(repo)
+        said = got.stdout + got.stderr
+        ok = got.returncode == 2 and NO_PATHS_MARKER in said and NO_SECTION_MARKER not in said
+        print(
+            f"  {'ok  ' if ok else 'FAIL'} template-file: want exit 2 naming "
+            f"'{NO_PATHS_MARKER}' and not '{NO_SECTION_MARKER}', got exit {got.returncode}"
+        )
+        if not ok:
+            print(f"       stdout: {got.stdout.strip()[:300]}")
+            print(f"       stderr: {got.stderr.strip()[:300]}")
+        return ok
+
+
 def build_story_on_branch(repo: Path) -> None:
     """A branch that authors its own story does NOT get to declare its own scope."""
     (repo / "STORY-0001.md").write_text(STORY)
@@ -271,11 +468,21 @@ def main() -> int:
         case("rename-out", 1, build_rename_out),
         case("rename-in", 1, build_rename_in),
         case("no-story", 2, build_no_story, story=None),
-        case("no-in-section", 2, build_no_in_section, story=STORY_NO_IN),
-        case("no-paths", 2, build_no_paths, story=STORY_PROSE_IN),
+        case("no-in-section", 2, build_no_in_section, story=STORY_NO_IN,
+             marker=NO_SECTION_MARKER),
+        case("no-paths", 2, build_no_paths, story=STORY_PROSE_IN, marker=NO_PATHS_MARKER),
         case("empty-diff", 0, build_empty_diff),
         case("prefix-boundary", 1, build_prefix_boundary),
         case("story-only-on-branch", 2, build_story_on_branch, story=None),
+        case("bold-window-narrow", 1, build_out_of_scope_touched, story=STORY_BOLD_WITH_NOTES),
+        case("template-in-scope", 0, build_in_scope, story=TEMPLATE_STORY),
+        case("template-drift", 1, build_drift, story=TEMPLATE_STORY),
+        case("template-wrapped-bullet", 0, build_in_scope, story=TEMPLATE_STORY_WRAPPED),
+        case("template-out-not-declared", 1, build_out_of_scope_touched,
+             story=TEMPLATE_STORY_OUT_PATHS),
+        case("template-no-paths", 2, build_no_paths, story=TEMPLATE_STORY_PROSE,
+             marker=NO_PATHS_MARKER),
+        template_file_case(),
         hostile_env_case(),
     ]
     failed = results.count(False)

@@ -37,6 +37,10 @@ python3 harness/chain_graph.py
 python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/scope_check_test.py
+# The scrub gate runs first in this file and had never been observed firing. Its fixture points
+# it at throwaway trees with planted tokens, so a tier that stops scanning is caught here rather
+# than by a private identifier reaching a tarball.
+python3 harness/fixtures/scrub_gate_test.py
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
