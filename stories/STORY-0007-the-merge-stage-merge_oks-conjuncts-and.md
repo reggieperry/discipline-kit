@@ -86,6 +86,13 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- Owed reconciliation: conjunct 4 composes with STORY-0008's shipped `receipt.py` only through
+  an operator-authored `receipt-complete` postcondition wrapper at
+  `<pinned_root>/postconditions/receipt-complete/`—it translates the loader's positional
+  merged-tree argument into `--receipt <tree>/<receipt-path> --root <kit>`, fixes the in-tree
+  receipt-file convention, and supplies the red and green fixture trees the loader demonstrates
+  against. The exit contracts already align: the receipt court's park (exit 1) reads as
+  conjunct 4 FAIL, the intended mapping. The wrapper is owed, not shipped.
 - Recorded by STORY-0005's merge review: that story's seam discloses three residues the merge
   stage is the natural reader of, and how it consumes them is this story's interface call rather
   than the seam's. The seam reads porcelain once, before the postcondition runs and not after, so

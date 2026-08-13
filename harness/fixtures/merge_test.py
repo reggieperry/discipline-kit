@@ -67,6 +67,9 @@ injectable seams pointed at stubs written here, and every git spawn scrubs the c
   THE RECORD
   record-in-worktree-2       a record path inside a working tree     -> 2, nothing written
   record-preexists-2         a pre-planted file at the path          -> 2, bytes untouched
+  record-composed-default-1  no --record given: a pinning park       -> 1, the composed default
+                             records, and so does the clean pass        under the pinned root,
+                                                                        block and residue named
   hostile-gitdir-0           GIT_DIR naming a decoy repository       -> 0, derived from --repo
 
 Run: python3 harness/fixtures/merge_test.py   (exit 0 = pass).
@@ -810,6 +813,34 @@ def record_preexists_case() -> bool:
         return judge("record-preexists-2", got, want=2, marker="already exists", faults=faults)
 
 
+def record_composed_default_case() -> bool:
+    """With no --record, the composed default must record the pinning parks, whose audit value
+    IS the record; the clean pass on the same default path is the regression half."""
+    faults = []
+    with tempfile.TemporaryDirectory() as td:
+        rig = build_rig(Path(td), tip_past=True)
+        got = run_merge(rig, use_record=False)
+        composed = rig.pinned / "records" / STORY / "merge-1.record"
+        if not composed.is_file():
+            faults.append(f"no composed-default record at {composed}")
+        else:
+            lines = composed.read_text().splitlines()
+            if not any("candidate-diverged" in line for line in lines):
+                faults.append("the composed record lacks the candidate-diverged block")
+            if residue_expected("open-pr") not in lines:
+                faults.append("the composed record lacks the residue line")
+    with tempfile.TemporaryDirectory() as td:
+        clean = build_rig(Path(td), terminal="open-pr")
+        again = run_merge(clean, use_record=False)
+        composed = clean.pinned / "records" / STORY / "merge-1.record"
+        if again.returncode != 0:
+            faults.append(f"the clean composed-default run exited {again.returncode}, not 0")
+        if not composed.is_file():
+            faults.append("no composed-default record on the clean pass")
+    return judge("record-composed-default-1", got, want=1, marker="candidate-diverged",
+                 faults=tuple(faults))
+
+
 def hostile_gitdir_case() -> bool:
     """`GIT_DIR` names a decoy: the stage must operate on --repo and derive the same verdict."""
     with tempfile.TemporaryDirectory() as td:
@@ -876,6 +907,7 @@ def main() -> int:
 
         record_in_worktree_case(),
         record_preexists_case(),
+        record_composed_default_case(),
         hostile_gitdir_case(),
     ]
     failed = results.count(False)

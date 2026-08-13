@@ -56,7 +56,11 @@ already exists, so nothing can pre-plant authorship; before validation the stage
 stderr only. Line-oriented text, never JSON — the future undeclared-testimony court needs a
 greppable format. Exactly two `testimony:` lines, ADR-0002/D4's names: the plan declaration
 verbatim, and the receipt's per-lens findings. A `not-established:` block names what this stage
-does not pin. The scratch worktree is removed only after the record is written.
+does not pin. The scratch worktree is removed only after the record is written. With no
+`--record`, the composed default `<pinned_root>/records/<story>/merge-<attempt>.record` arms as
+soon as position reads consistent — the composed name needs the attempt number — so the pinning
+parks and everything after them record, while stops before that point (the posture, the version
+gate, the briefing, an inconsistent namespace) speak on stderr alone.
 
 THE TERMINAL ACTS. merge-local: refuse if `refs/heads/main` is checked out in any worktree of
 the clone, then `git update-ref refs/heads/main <trial-commit> <main-target>` — an atomic
@@ -83,9 +87,11 @@ THE EXIT CONTRACT:
     1   merge_ok is false — the park, verdict-shaped; the stage writes no ref on this path
     2   could-not-run, naming the condition — including an act failing after a true verdict
         (push rejected, forge down), which is re-entry safe: the push is by sha and the
-        compare-and-swap still guards. An evaluation the instruments could not finish reads
+        compare-and-swap still guards. An instrument failure that ABORTS evaluation reads
         could-not-run even where a conjunct had already read FAIL — the loader's own dominance
-        rule — and the record carries whatever was established either way.
+        rule for an evaluation left incomplete; a COMPLETED evaluation with a conjunct FAIL is
+        the park (exit 1) even when conjuncts downstream of the failure never ran. The record
+        carries whatever was established either way.
 
 Usage:
     python3 harness/chain/merge.py evaluate --root <kit> --repo <clone> --story <id>
@@ -306,11 +312,21 @@ def armed_record(path: Path) -> Path:
     return path
 
 
-def pinned_candidate(repo: Path, story: str, expected: int) -> Pin:
-    """Call A: position, the final phase ref, tip-equality, and phase-ref ancestry."""
+def pinned_candidate(repo: Path, story: str, expected: int, pinned_root: Path,
+                     state: State) -> Pin:
+    """Call A: position, the final phase ref, tip-equality, and phase-ref ancestry.
+
+    THE COMPOSED-DEFAULT RECORD ARMS HERE, immediately after the namespace reads consistent,
+    because the composed name needs the attempt number that only now exists — so the pinning
+    parks (candidate-diverged, phase-ref-ancestry) and premature invocation all record, whose
+    audit value IS the record, and only the stops before this point speak on stderr alone.
+    """
     here = core.position(repo, story)
     core.report(here)
     core.consistent(here)
+    if state.record_path is None:
+        state.record_path = armed_record(
+            pinned_root / RECORDS / story / f"merge-{here.attempt}.record")
     if here.attempt == 0 or here.phase < expected:
         raise CouldNotRun(
             f"premature-invocation: position reads attempt {here.attempt} phase {here.phase} "
@@ -850,11 +866,8 @@ def body(a: argparse.Namespace, do_act: bool, story: str, expected: int, state: 
                 "body, and none was supplied; could-not-run until the documenter exists"
             )
     git_version_gate()
-    pin = pinned_candidate(repo, story, expected)
+    pin = pinned_candidate(repo, story, expected, posture.pinned_root, state)
     state.pin = pin
-    if state.record_path is None:
-        state.record_path = armed_record(
-            posture.pinned_root / RECORDS / story / f"merge-{pin.attempt}.record")
     say(f"merge: candidate {pin.candidate} from {pin.ref}; main-target {pin.main}")
 
     trial: Trial | None = None
