@@ -143,7 +143,7 @@ first commit.
   re-derivation and the re-walk rule's attempt deletion.
 - The unattended run envelope—cron start, per-story locking, concurrency bounded by a
   recorded tokens-per-minute figure rather than a guessed one—is deliberately not this
-  record: it is substrate-agnostic and is named as the owed ADR-0004.
+  record: it is substrate-agnostic and is named as the owed unattended-run-envelope record.
 
 ## Alternatives
 
@@ -197,5 +197,6 @@ unwatched:
 - Superseded by: None.
 - Related: `docs/sdlc-chain-design.md` §4.2, §4.4, §4.6, §4.8, §6; the walkthrough's
   surfaces table (whose "the main loop drives" assertion this record deliberately does not
-  ratify); the owed records this one names—the substrate choice (D7's successor), the
-  containment posture (phase isolation), and ADR-0004, the unattended run envelope.
+  ratify); the owed records this one names—the substrate choice (D7's successor, now
+  [ADR-0004](ADR-0004-substrate-choice.md)), the containment posture (phase isolation), and
+  the unattended-run-envelope record.

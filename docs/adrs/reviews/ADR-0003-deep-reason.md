@@ -9,8 +9,7 @@ budget decisions attached. Findings taken into the draft:
 
 - **The sketch straddled two areas.** Cron start, per-story locking, and the
   tokens-per-minute budget survive any substrate flip unchanged, so by ADR-0001's own
-  separability test they are not substrate decisions—they are the owed ADR-0004 (the
-  unattended run envelope), and the draft names them as such rather than deciding them.
+  separability test they are not substrate decisions—they are the owed unattended-run-envelope record, and the draft names them as such rather than deciding them.
 - **Three framing errors flagged and corrected**: ADR-0002 is Proposed and is cited, not
   leaned on; "the same shape invoked headlessly" was an unmeasured premise (every VERIFIED
   session property was measured interactively); and "never a shell driver" over-reached—the

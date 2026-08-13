@@ -71,7 +71,7 @@ Out of scope:
 
 - Choosing the substrate. That is D7's successor record, and it weighs disinterest of the
   looker and bounded context on top of whatever this probe returns.
-- The advance scripts of D2/D3, the profile schema D5 reads, and ADR-0004's unattended run
+- The advance scripts of D2/D3, the profile schema D5 reads, and the unattended-run-envelope record's unattended run
   envelope. None of them wait on this measurement in the way the substrate choice does.
 - Re-running the probe until it comes out green. A FAIL is the measurement's result, not a
   failed attempt at one.
