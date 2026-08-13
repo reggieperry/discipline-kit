@@ -147,8 +147,17 @@ def receipt_owed(pinned: Path) -> list[str]:
         raise CouldNotRun(f"{rules_copy} holds no rules; refusing to pass vacuously")
     # Containment per FILE, not only per directory: a clean rules directory holding one rule
     # symlinked into a judged tree hands that tree the grade, and a flip there shrinks the
-    # denominator — measured signing a short receipt before this refusal existed.
-    loader.refuse_escaping_material(pinned, *files)
+    # denominator — measured signing a short receipt before this refusal existed. The refusal
+    # resolves each path, and this interpreter's pathlib raises RuntimeError on a symlink
+    # loop — neither the loader's refusal nor an OSError, so unmapped it escapes as a
+    # traceback with exit 1, the one verdict-shaped code.
+    for p in files:
+        try:
+            loader.refuse_escaping_material(pinned, p)
+        except RuntimeError as e:
+            raise CouldNotRun(
+                f"{p.name} in the pinned rules copy could not be resolved: {e}"
+            ) from e
     owed: list[str] = []
     for p in files:
         try:

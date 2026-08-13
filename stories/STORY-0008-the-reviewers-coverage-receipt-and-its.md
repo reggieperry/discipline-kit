@@ -86,3 +86,15 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   (java-testing, python-testing, scala-testing); a scratch probe over a pinned copy of the
   live corpus moved the denominator from 50 to 53 of 57. Fixture at 19 cases; regression:
   original mutations 1 and 2 re-run, both still killed (6/19 and 14/19).
+- Re-verification round: the fix round's own per-file refusal moved one corner from correct
+  to verdict-shaped—a self-referential symlink among the pinned rules raises RuntimeError
+  from pathlib's resolve on this interpreter, which neither the loader's refusal nor the
+  OSError net catches, so it escaped as a traceback with exit 1 (at the merge-base the same
+  tree read exit 2 through the read's OSError net). Closed red-first: the per-file refusal
+  maps RuntimeError to could-not-run naming the file, pinned by `self-symlink-rule-2`;
+  `rule-file-symlink-escape` (now also asserting its ADR-0001/D3 message) and
+  `undecodable-pinned-rule-2` re-run as regression, both unchanged. Fixture at 20 cases.
+- Follow-up, recorded not fixed (pre-existing, outside this story's diff): `loader.py`'s own
+  `refuse_escaping_material` call sites share the latent RuntimeError class—`load`'s net is
+  OSError-only—so a symlink loop in pinned postcondition material would escape the same way;
+  the next loader story inherits it.

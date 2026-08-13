@@ -38,6 +38,7 @@ rule's own case.
   covered-trailing-text-2   a caveat after `covered`                    -> 2, VOID
   ungraded-pinned-rule-2    a pinned rule with no grade line            -> 2, VOID naming it
   undecodable-pinned-rule-2 a pinned rule that is not UTF-8             -> 2, VOID, no traceback
+  self-symlink-rule-2       a pinned rule that is a symlink to itself   -> 2, VOID, no traceback
   empty-denominator-2       every pinned rule mechanically enforced     -> 2, VOID, never a pass
   rules-dir-absent-2        a pinned root with no rules copy            -> 2, VOID
   pinned-root-in-worktree-2 the root inside a git working tree          -> 2, VOID (D3)
@@ -302,6 +303,7 @@ def rule_symlink_case() -> bool:
         second_said = second.stdout + second.stderr
 
     ok = (first.returncode == 2 and VOID_MARKER in first_said
+          and "ADR-0001/D3" in first_said
           and second.returncode == 2 and VOID_MARKER in second_said
           and PASS_MARKER not in second_said)
     print(f"  {'ok  ' if ok else 'FAIL'} rule-file-symlink-escape: want exit 2 naming "
@@ -341,6 +343,34 @@ def undecodable_rule_case() -> bool:
     return ok
 
 
+def self_symlink_rule_case() -> bool:
+    """A pinned rule that is a symlink to itself is a broken instrument, never a verdict.
+
+    Resolving it raises neither the loader's refusal nor an OSError on this interpreter, so a
+    net over those two alone lets it escape as a traceback with exit 1, the one verdict-shaped
+    code — the undecodable rule's class, one exception type over.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        root = tmp / "pinned"
+        root.mkdir()
+        pinned_rules = rules_dir(root, {"alpha.md": REVIEW})
+        (pinned_rules / "loop.md").symlink_to("loop.md")
+        kit = kit_tree(tmp, root)
+        receipt_path = tmp / "receipt"
+        receipt_path.write_text("alpha.md covered\n", encoding="utf-8")
+        got = run_tool(kit, receipt_path)
+    said = got.stdout + got.stderr
+    ok = (got.returncode == 2 and VOID_MARKER in said and "loop.md" in said
+          and "Traceback" not in said)
+    print(f"  {'ok  ' if ok else 'FAIL'} self-symlink-rule-2: want exit 2 naming "
+          f"'{VOID_MARKER}' and loop.md with no traceback, got exit {got.returncode}")
+    if not ok:
+        print(f"       stdout: {got.stdout.strip()[:400]}")
+        print(f"       stderr: {got.stderr.strip()[:400]}")
+    return ok
+
+
 def main() -> int:
     if not TOOL.is_file():
         print(f"receipt_test: tool not found at {TOOL}", file=sys.stderr)
@@ -373,6 +403,7 @@ def main() -> int:
              rules={"alpha.md": REVIEW, "beta.md": None},
              receipt="alpha.md covered\nbeta.md covered\n"),
         undecodable_rule_case(),
+        self_symlink_rule_case(),
         case("empty-denominator-2", 2, VOID_MARKER,
              rules={"alpha.md": MECHANICAL, "gamma.md": MECHANICAL}, receipt=""),
         case("rules-dir-absent-2", 2, VOID_MARKER, with_rules=False,
