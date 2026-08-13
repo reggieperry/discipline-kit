@@ -57,6 +57,12 @@ python3 harness/fixtures/profile_check_test.py
 # so the loader VOIDs, which on the commit path would block every commit rather than report a
 # defect. It wires the day the root exists. The fixture needs no such root: it builds its own.
 python3 harness/fixtures/loader_test.py
+# The seam's fixture, wired for the same reason and with the same boundary: `advance.py` and
+# `attempt.py` resolve examiner material through the loader, so they VOID on every machine until
+# the pinned root exists, and a tool that VOIDs on the commit path blocks every commit rather than
+# reporting a defect. The fixture builds its own throwaway roots and repositories, so it needs
+# neither the pinned root nor a chain to be running.
+python3 harness/fixtures/advance_test.py
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
