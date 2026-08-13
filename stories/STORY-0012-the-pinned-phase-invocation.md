@@ -82,3 +82,12 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by ADR-0004's landing commit; the coverage gate requires this story in the same
   commit as the record it covers.
+- Recorded by STORY-0005's merge review, and owed here: the seam reads `git status --porcelain` in
+  the ONE repository it was pointed at, and under ADR-0004/D2 an attest-only phase runs in a
+  sequencer-owned worktree while the primary tree carries the story's commits. Both trees are live
+  at that moment and only one is read, so the porcelain obligation of ADR-0003/D6 is met for the
+  graded tree and unwatched for the other. Which tree the seam is pointed at, and whether the
+  other one is checked at all, is decided by whatever composes the invocation—this story—rather
+  than by the seam, which cannot know a worktree exists that it was not told about. STORY-0005's
+  fixture pins both halves it can see: a worktree outside the parent leaves porcelain empty, and
+  one inside the parent reads could-not-run.

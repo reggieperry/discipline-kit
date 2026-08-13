@@ -39,6 +39,15 @@ other code a broken instrument. So a red limb exiting 1 and a green limb exiting
 demonstration; a red limb exiting 0 or a green limb exiting 1 is a demonstration FAILURE, which is
 a fact about the postcondition; and anything else is could-not-run, which is not.
 
+A PREDICATE WHOSE NATIVE CONTRACT DIFFERS is adapted through the optional `adapt` argument: a map
+from the code the postcondition returns to the canonical one, supplied by `harness/chain/advance.py`
+out of pinned material, since ADR-0003/D2 puts that adaptation inside the advance script and
+forbids the sequencer from interpreting a native code anywhere else. It applies to the
+demonstration for the reason the demonstration exists: red-proof's own known-bad tree makes it
+exit 2, so a demonstration read in native codes would call that predicate broken, and one read in
+codes the seam will never use is not evidence about the seam. The default is identity, which is
+every postcondition written to the canonical contract.
+
 THE LOADER'S OWN EXIT CONTRACT is the same three values read for the loader's act:
 
     0   loadable, and the demonstration ran
@@ -286,8 +295,14 @@ def demonstrate(run: Path, home: Path, tree: Path, config: Path | None,
         return done.returncode, done.stdout + done.stderr
 
 
+def native(code: int) -> int | None:
+    """The identity adaptation: a postcondition written to the canonical contract of ADR-0003/D2."""
+    return code
+
+
 def load(root: Path, name: str, *, timeout: int = DEFAULT_TIMEOUT,
-         say: Callable[[str], None] = print) -> Postcondition:
+         say: Callable[[str], None] = print,
+         adapt: Callable[[int], int | None] = native) -> Postcondition:
     """Resolve `name` from the pinned root and demonstrate it, or raise saying why not.
 
     Every `OSError` on the resolution path becomes could-not-run. A filesystem the loader cannot
@@ -299,13 +314,14 @@ def load(root: Path, name: str, *, timeout: int = DEFAULT_TIMEOUT,
     placed at the reported site would have left the measured shape open.
     """
     try:
-        return demonstrated(root, name, timeout=timeout, say=say)
+        return demonstrated(root, name, timeout=timeout, say=say, adapt=adapt)
     except OSError as e:
         raise CouldNotRun(f"a filesystem read failed while loading {name!r}: {e}") from e
 
 
 def demonstrated(root: Path, name: str, *, timeout: int,
-                 say: Callable[[str], None]) -> Postcondition:
+                 say: Callable[[str], None],
+                 adapt: Callable[[int], int | None] = native) -> Postcondition:
     """The resolution and demonstration themselves, guarded by `load`.
 
     The denominators go to `say` as they are established, so a refusal reports what it did reach
@@ -328,15 +344,19 @@ def demonstrated(root: Path, name: str, *, timeout: int,
         code, transcript = demonstrate(run, home, fixtures[limb], config, timeout)
         codes[limb] = code
         want = REQUIRED[limb]
-        say(f"postcondition-loader: demonstration {limb}: exit {code} (required {want})")
+        read = adapt(code)
+        as_read = "" if read == code else f", read as {read}"
+        say(f"postcondition-loader: demonstration {limb}: exit {code}{as_read} (required {want})")
         # In full rather than summarized. The transcript is how an operator sees WHICH examiner
         # spoke and why it decided as it did, and a truncated one is a filtered failure signal.
         for line in transcript.splitlines():
             say(f"postcondition-loader: {limb}| {line}")
-        if code not in (0, 1):
-            broken.append(f"{limb} exited {code}, outside the 0/1 contract")
-        elif code != want:
-            wrong.append(f"the {limb} fixture returned {code} where {want} was required")
+        if read is None:
+            broken.append(f"{limb} exited {code}, which the declared contract does not map")
+        elif read not in (0, 1):
+            broken.append(f"{limb} exited {code}{as_read}, outside the 0/1 contract")
+        elif read != want:
+            wrong.append(f"the {limb} fixture returned {code}{as_read} where {want} was required")
 
     if broken:
         raise CouldNotRun(

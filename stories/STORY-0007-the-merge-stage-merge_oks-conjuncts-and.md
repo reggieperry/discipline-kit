@@ -54,3 +54,12 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- Recorded by STORY-0005's merge review: that story's seam discloses three residues the merge
+  stage is the natural reader of, and how it consumes them is this story's interface call rather
+  than the seam's. The seam reads porcelain once, before the postcondition runs and not after, so
+  a postcondition that dirties the tree it grades is not caught there. It grades the WORKING TREE
+  at the path it was given rather than a fresh checkout of the sha it records, which is the same
+  question ADR-0002/D3.8 leaves open as a conjunct owed a mechanism—source-set integrity, the
+  tree the checks graded being the tree being merged. And the forged-ref residue ADR-0001
+  discloses stands: an agent holding Bash writes the same ref the seam writes, and D3.7's
+  one-pinned-candidate-sha conjunct is evaluated over refs that carry that residue with them.
