@@ -36,7 +36,7 @@ Out of scope:
 Story-specific criteria—each dischargeable by a named check:
 
 - [ ] a profile omitting the sequencer's definition path fails the profile check—verified by `the extended check's known-bad fixture`
-- [ ] the pinned `--agents` payload is the sole definition source: the judged tree carries no agent-definition directory at all, asserted from the filesystem rather than inferred, and any definition found there is a finding whether or not it shares a name with a pinned one—verified by `a check case planting a definition under the judged tree's agent directory, both same-named and differently-named, and asserting the finding in each`
+- [ ] the pinned `--agents` payload is the sole definition source: the judged tree carries no agent-definition directory at all, asserted from the filesystem rather than inferred, and any definition found there is a finding whether or not it shares a name with a pinned one—verified by `a check case asserting the judged tree has no agent-definition directory, with an empty directory a finding and a populated one a finding`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -62,6 +62,12 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   agent-definition directory at all. The other two are the invocation's: the wrapper fails closed
   on a missing pinned type, which STORY-0005 carries, and the invoking prompt carries
   spawn-by-name only and never phase instructions, which is a phase-brief content rule noted
-  there. Same-named is the wrong test on its own: leg 1 measured the wrapper's main agent
-  improvising a substitute brief FROM THE JUDGED TREE when the pinned type did not resolve, so a
-  differently-named definition sitting there is material too.
+  there. Directory absence rather than name collision is the test, and leg 1 is why the route
+  exists rather than why the name is irrelevant. Leg 1 carried no `--agents` payload at all: the
+  repo-level definition was not registered in headless `-p` mode, `Agent(subagent_type: ...)`
+  failed with "not found", and the wrapper's main agent then improvised a substitute brief FROM
+  THE JUDGED TREE—ADR-0001/D3's defect reached by initiative inside the wrapper. What that
+  measures is that a definition sitting in the judged tree is reachable material for the wrapper.
+  It does NOT measure that a differently-named one would be read; that substitute came from the
+  same-named file. Absence is therefore the fail-closed rule, chosen because the tree-read route
+  is measured, not because breadth beyond it was.

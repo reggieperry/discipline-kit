@@ -97,14 +97,39 @@ def bold_form_paths(rest: str, below: list[str]) -> list[str]:
     return out
 
 
+def declaring_part(line: str) -> str:
+    """The part of a scope bullet that declares: everything before its first em dash.
+
+    Matched on the character rather than on ` — ` or `—`, so it holds under either spacing. The
+    kit sets em dashes closed and the corpus this reads is mixed, and a separator rule that
+    depended on the spacing would be a rule about house style rather than about scope.
+    """
+    return line.split("—", 1)[0]
+
+
 def prose_form_paths(rest: str, below: list[str]) -> list[str]:
     """The `In scope:` window: the bullet list, across the blank line that separates it.
 
     Blank lines are skipped rather than closing the window, so the list is bounded instead by
     what a list ends at: a heading, a bold marker, or any line in column 0 that is not a bullet.
-    Indented lines are continuations of a bullet — `stories/STORY-0001` wraps one and carries
-    text onto it — so they are read, and a backticked path is as declared on the second line of
-    a bullet as on the first.
+
+    THE WINDOW IS NARROWER THAN THE SECTION, in the two ways a scope bullet mentions a path it
+    is not declaring. Both were MEASURED admitting a non-declaration before they were closed.
+
+      A CONTINUATION LINE DECLARES NOTHING. A bullet may wrap — `stories/STORY-0001` wraps its
+      in-scope bullet — and the wrapped remainder is prose about the declaration rather than
+      more of it. Reading it admitted `other/b.py` from a line whose own words said it was
+      declaring nothing. A continuation is therefore SKIPPED and does not close the window
+      either, because the bullets after it are still declarations.
+
+      NOTHING AFTER A BULLET'S EM DASH DECLARES. The dash is where a scope bullet turns to
+      commentary — the pattern to mirror, the sibling that stays behind, the file to read
+      first — and every path named there is one the branch must NOT touch. Reading past it
+      admitted a path from `` `src/` — mirror the pattern in `tests/legacy/old.py` ``.
+
+    Both narrowings can only LOSE a declaration, never invent one, so the failure they can
+    cause is a path reported as drift that the story meant to allow. That is the direction this
+    tool is allowed to be wrong in; the direction it is not is the allowlist growing on its own.
 
     THE OUT-OF-SCOPE LIST IS NEVER ENTERED, and the column-0 rule is the whole of what keeps it
     out: `Out of scope:` is a line in column 0 that is not a bullet, so the window closes on it.
@@ -115,14 +140,16 @@ def prose_form_paths(rest: str, below: list[str]) -> list[str]:
     each other under mutation, and each survived alone while the pair together failed the
     fixture. One guard, with a case that goes red when it goes.
     """
-    out = BACKTICKED.findall(rest)
+    out = BACKTICKED.findall(declaring_part(rest))
     for line in below:
         if not line.strip():
             continue
         if HEADING.match(line) or BOLD.match(line):
             break
-        if BULLET.match(line) or line[:1].isspace():
-            out += BACKTICKED.findall(line)
+        if BULLET.match(line):
+            out += BACKTICKED.findall(declaring_part(line))
+            continue
+        if line[:1].isspace():
             continue
         break
     return out

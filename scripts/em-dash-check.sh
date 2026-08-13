@@ -39,10 +39,12 @@ EXEMPT="scripts/em-dash-exempt.txt"
 
 exempt_count=$(grep -cv '^\s*\(#\|$\)' "$EXEMPT" || true)
 violations=0
+scanned=0
 declare -a BAD=()
 
 while IFS= read -r f; do
   grep -qxF -- "$f" "$EXEMPT" && continue
+  scanned=$((scanned + 1))
   n=$(grep -o ' — ' "$f" 2>/dev/null | grep -c . || true)
   if [ "${n:-0}" -gt 0 ]; then
     violations=$((violations + 1))
@@ -55,6 +57,13 @@ done < <(git ls-files '*.md')
 
 echo "== em-dash check =="
 echo "  $exempt_count file(s) exempt — tracked before the rule was enforced, not converted"
+# THE DENOMINATOR, printed on every run including the passing ones, for the same reason the
+# shell scanner prints its own. `git ls-files '*.md'` returning nothing — a wrong pattern, a run
+# outside a repository, an unstaged new file — produced the identical green as a scan that read
+# every file, and "no violations" and "no files" are not the same report.
+# (The line above deliberately does not start with the scanner's name: a comment opening
+# `# shellcheck` is read as a directive, and an unparseable one is itself an error, SC1073.)
+echo "  $scanned file(s) scanned"
 
 if [ "$violations" -gt 0 ]; then
   echo "  DEFECT: new or unexempted file(s) use SPACED em dashes; the rule is closed (no spaces):"

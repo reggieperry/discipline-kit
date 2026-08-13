@@ -13,7 +13,7 @@ the checker's exit code:
   drift           a changed path is under none of them               -> 1
   rename-out      a declared path is MOVED OUT of the declared set   -> 1
   rename-in       a file moves INTO scope from outside it            -> 1
-  no-story        the story file does not exist                      -> 2 (never a pass)
+  no-story        the story file does not exist                      -> 2, NO STORY
   no-in-section   the story carries NEITHER scope opener             -> 2, NO SCOPE SECTION
   no-paths        `**In:**` exists but names no backticked path      -> 2, NO PATH DECLARATIONS
   empty-diff      nothing changed at all                             -> 0, denominator 0
@@ -29,7 +29,9 @@ it, because a transcription cannot catch the template renaming its opener.
   bold-window-narrow        `**In:**` does NOT read past its blank line    -> 1
   template-in-scope         the template form, paths declared and honored  -> 0
   template-drift            the template form, a path outside them         -> 1
-  template-wrapped-bullet   a path on a bullet's CONTINUATION line         -> 0
+  continuation-survives     a wrapped bullet does not END the list         -> 0
+  continuation-not-declared a backtick on a CONTINUATION line declares nothing -> 1
+  post-dash-not-declared    a backtick after a bullet's em dash likewise   -> 1
   template-out-not-declared a path named under `Out of scope:` is touched  -> 1
   template-no-paths         the template form, prose bullets, no paths     -> 2, NO PATH DECL.
   template-file             the shipped template parses as a scope section -> 2, NO PATH DECL.
@@ -62,6 +64,7 @@ TOOL = Path(__file__).resolve().parent.parent / "scope_check.py"
 # The names the tool must give its two non-story could-not-run states. Asserted as strings so a
 # state that stops being named, or starts being named as the other one, is a failure rather
 # than an indistinguishable exit 2.
+NO_STORY_MARKER = "NO STORY"
 NO_SECTION_MARKER = "NO SCOPE SECTION"
 NO_PATHS_MARKER = "NO PATH DECLARATIONS"
 
@@ -159,7 +162,12 @@ Out of scope:
 # Acceptance criteria
 """
 
-TEMPLATE_STORY_WRAPPED = """\
+# A wrapped bullet, whose CONTINUATION line carries a backticked path. Two things must both
+# hold and they pull in opposite directions: the continuation must not declare anything, and it
+# must not end the list either — the bullets after it are still declarations. `stories/
+# STORY-0001` wraps its in-scope bullet, so the wrap itself is real; what is not real is the idea
+# that everything under the opener is a path declaration.
+TEMPLATE_STORY_CONTINUATION = """\
 ---
 id: STORY-0001
 title: A worked example
@@ -171,8 +179,35 @@ title: A worked example
 
 In scope:
 
-- the source tree and, carried onto a wrapped continuation line, the note at
-  `docs/note.md` together with `src/`
+- the source tree, described across a wrapped line that happens to mention
+  `other/b.py` while declaring nothing
+- `src/`
+- `docs/note.md`
+
+Out of scope:
+
+- everything else
+
+# Acceptance criteria
+"""
+
+# A bullet that declares a path and then, after an em dash, POINTS AT another one. The pattern to
+# mirror, the file that stays behind, the sibling that must not be touched: all of them are named
+# in exactly this position, and none of them is a declaration. The bold window's docstring has
+# always disclosed this hazard for its own form; the prose window admitted it until measured.
+TEMPLATE_STORY_POST_DASH = """\
+---
+id: STORY-0001
+title: A worked example
+---
+
+# STORY-0001 A worked example
+
+# Scope and non-goals
+
+In scope:
+
+- `src/` — mirror the pattern already in `other/b.py`, which stays as it is
 
 Out of scope:
 
@@ -467,17 +502,22 @@ def main() -> int:
         case("drift", 1, build_drift),
         case("rename-out", 1, build_rename_out),
         case("rename-in", 1, build_rename_in),
-        case("no-story", 2, build_no_story, story=None),
+        case("no-story", 2, build_no_story, story=None, marker=NO_STORY_MARKER),
         case("no-in-section", 2, build_no_in_section, story=STORY_NO_IN,
              marker=NO_SECTION_MARKER),
         case("no-paths", 2, build_no_paths, story=STORY_PROSE_IN, marker=NO_PATHS_MARKER),
         case("empty-diff", 0, build_empty_diff),
         case("prefix-boundary", 1, build_prefix_boundary),
-        case("story-only-on-branch", 2, build_story_on_branch, story=None),
+        case("story-only-on-branch", 2, build_story_on_branch, story=None,
+             marker=NO_STORY_MARKER),
         case("bold-window-narrow", 1, build_out_of_scope_touched, story=STORY_BOLD_WITH_NOTES),
         case("template-in-scope", 0, build_in_scope, story=TEMPLATE_STORY),
         case("template-drift", 1, build_drift, story=TEMPLATE_STORY),
-        case("template-wrapped-bullet", 0, build_in_scope, story=TEMPLATE_STORY_WRAPPED),
+        case("continuation-survives", 0, build_in_scope, story=TEMPLATE_STORY_CONTINUATION),
+        case("continuation-not-declared", 1, build_out_of_scope_touched,
+             story=TEMPLATE_STORY_CONTINUATION),
+        case("post-dash-not-declared", 1, build_out_of_scope_touched,
+             story=TEMPLATE_STORY_POST_DASH),
         case("template-out-not-declared", 1, build_out_of_scope_touched,
              story=TEMPLATE_STORY_OUT_PATHS),
         case("template-no-paths", 2, build_no_paths, story=TEMPLATE_STORY_PROSE,
