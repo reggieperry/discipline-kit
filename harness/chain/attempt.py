@@ -23,15 +23,16 @@ still on disk after the registration is gone reads could-not-run, naming it: rem
 caller happened to name is a destructive act on a mistyped argument, and refusing costs an
 operator one command where the alternative costs them a directory.
 
-THAT REFUSAL IS IN TENSION WITH D2'S LETTER, and the tension is recorded rather than resolved
-here. D2 says every attempt start clears the pinned path so that a dead phase cannot block a
-retry; a phase that crashed leaving an unregistered directory behind meets a refusal instead, and
-every retry of that story then stops at the same place until an operator intervenes. The safety
-reading and the availability reading disagree, and the question belongs to whoever owns the
-sequencer's authority to act unattended: the sequencer clearing the path under its own authority
-after diagnosing what is there, against the blind force-delete D2's letter implies. STORY-0006
-(the sequencer core) and STORY-0011 (its fail-closed start-up) are where that is settled, and
-this module changes when it is.
+THAT REFUSAL IS IN TENSION WITH D2'S LETTER. D2 says every attempt start clears the pinned path
+so that a dead phase cannot block a retry; a phase that crashed leaving an unregistered directory
+behind meets a refusal instead, and every retry of that story then stops at the same place until
+an operator intervenes. STORY-0006 settled it, and this module is deliberately unchanged: the
+authority to clear such a path belongs to the sequencer and not to a tool acting on a path
+somebody typed. `harness/chain/core.py` clears an unregistered leftover under its own authority,
+after recording an inventory of what it found, at a path it COMPOSED from the pinned worktree
+root, the story id and the attempt number rather than accepted as an argument, and only where
+that path is no symlink and no working tree contains its parent. Here the argument is a caller's
+string, the mistyped-argument risk is real, and the refusal below stays the right answer.
 
     0   done, with what was deleted or cleared printed
     2   could-not-run, naming what stopped it. Never a story verdict either way.

@@ -63,6 +63,16 @@ python3 harness/fixtures/loader_test.py
 # reporting a defect. The fixture builds its own throwaway roots and repositories, so it needs
 # neither the pinned root nor a chain to be running.
 python3 harness/fixtures/advance_test.py
+# The sequencer core's fixture, wired on the same boundary: `core.py` reads a chain profile whose
+# pinned_root the machine-hardening checklist has not created, so its start-up gate VOIDs on every
+# machine here and the CLI stays off the commit path. The fixture builds its own profiles and
+# repositories, so it needs neither.
+python3 harness/fixtures/core_test.py
+# ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
+# nothing" until a sequencer source existed. Four exist now, so unlike the runtime it wires
+# directly: it reads sources rather than a pinned root, and it passes today with its denominators
+# printed on every run.
+python3 harness/sequencer_source_check.py
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
