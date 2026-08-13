@@ -63,6 +63,11 @@ python3 harness/fixtures/loader_test.py
 # reporting a defect. The fixture builds its own throwaway roots and repositories, so it needs
 # neither the pinned root nor a chain to be running.
 python3 harness/fixtures/advance_test.py
+# ADR-0001/D2's court: the denial probe replayed against the real advance seam. A did-nothing
+# tree must FAIL, a known-good tree must PASS, and an examiner that cannot execute must read
+# could-not-run with no ref written—never a pass. The fixture builds its own throwaway pinned
+# roots and repositories, so like the seam's other fixtures it needs no pinned root to exist.
+python3 harness/fixtures/seam_court_test.py
 # The sequencer core's fixture, wired on the same boundary: `core.py` reads a chain profile whose
 # pinned_root the machine-hardening checklist has not created, so its start-up gate VOIDs on every
 # machine here and the CLI stays off the commit path. The fixture builds its own profiles and
