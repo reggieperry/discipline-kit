@@ -19,6 +19,13 @@
 # non-tag-rev pattern when present: it consumes the upstream pack rather than this kit, and its
 # tag arrives as an explicit argument, so the refresh-region patterns do not apply to it.
 #
+# WHAT IS DISCLOSED AS UNWATCHED, so the clean verdict is read at its true width: the user-level
+# install mode (install.sh with no arguments) copies claude-user/* and reference/* from the
+# checkout's working tree, and the first-install per-repo instructions it prints do the same —
+# both are working-tree consumers no pattern here judges. D7 is watched on the refresh path
+# alone today; widening it to the install modes is a future story's work, recorded in
+# STORY-0002's notes.
+#
 # GREP-SHAPED, AND SAYS SO. Comment-only lines are dropped, then literals are matched: a rev
 # composed at runtime greps clean, and the region extraction is anchored on the refresh guard's
 # own line. Both limits fail closed rather than open — a refresh region the extractor cannot

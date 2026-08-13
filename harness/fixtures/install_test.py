@@ -8,18 +8,22 @@ version out of the checkout's `CHANGELOG.md`, resolving no tag at all — so a b
 installer cases drive the real `install.sh` (copied into scratch kit repositories, since it
 derives its kit root from its own location) and assert the refreshed content is the TAG's,
 not HEAD's. The court cases drive D7's check, whose known-bad plant is the pre-fix refresh
-region verbatim: the patterns are grounded in a defect that actually shipped, not a guessed
-one.
+region (pattern-bearing lines verbatim): the patterns are grounded in a defect that actually
+shipped, not a guessed one.
 
   THE INSTALLER
   refresh-resolves-latest-tag-0  HEAD differs from every tag       -> 0, the newest release
                                                                       tag's content, its name
                                                                       reported, the CHANGELOG
                                                                       decoy version absent
+  refresh-prerelease-not-latest-0  v2.0.0-rc1 and v2.0.0 both     -> 0, the final release's
+                                   tagged                            content, never the rc's
   refresh-explicit-tag-0         --tag names an older release      -> 0, that tag's content
   refresh-unknown-tag-1          --tag names no tag                -> 1, named, nothing copied
   bare-tree-refusal-1            a kit tree with no .git           -> 1, named, nothing copied
   no-tags-refusal-1              a kit repo with no release tag    -> 1, named, nothing copied
+  no-rules-in-tag-1              the resolved tag's tree holds no  -> 1, named, nothing copied
+                                 claude-project/rules/*.md
   no-rules-dir-1                 a consumer with no .claude/rules  -> 1 (the refusal that
                                                                       predates this story)
   tag-without-refresh-2          --tag outside --refresh-rules     -> 2, usage
@@ -61,6 +65,8 @@ COURT = REPO / "scripts" / "tag-consumption-check.sh"
 RULE_REL = Path("claude-project/rules/kit-rule.md")
 V9_BODY = "rule body shipped in v0.9.0\n"
 V10_BODY = "rule body shipped in v0.10.0\n"
+RC_BODY = "rule body shipped in v2.0.0-rc1, a pre-release\n"
+V2_BODY = "rule body shipped in v2.0.0, the final release\n"
 HEAD_BODY = "rule body only HEAD holds, never tagged\n"
 STALE_BODY = "stale rule body from an earlier refresh\n"
 LOCAL_BODY = "authored by the consumer, not the kit's to overwrite\n"
@@ -94,13 +100,17 @@ def git(repo: Path, *args: str) -> str:
     return done.stdout.strip()
 
 
-def kit_tree(td: Path, *, repo: bool = True, tags: bool = True) -> Path:
+def kit_tree(td: Path, *, repo: bool = True, tags: bool = True,
+             prerelease: bool = False) -> Path:
     """A kit-shaped tree carrying the real installer.
 
     `repo=False` leaves no `.git` (the tarball-download shape); `tags=False` leaves a
     repository whose release tags were never fetched. With both true the tree carries two
     release tags whose rule bodies differ from each other and from HEAD's, plus a CHANGELOG
     claiming a version no tag names — the decoy the pre-fix scrape would have reported.
+    `prerelease=True` adds v2.0.0-rc1 and v2.0.0 with distinct bodies: without a
+    versionsort.suffix pin the rc tag sorts ABOVE its final release, so the pair
+    discriminates the sort a plain refresh uses.
     """
     kit = td / "kit"
     (kit / RULE_REL).parent.mkdir(parents=True)
@@ -119,6 +129,15 @@ def kit_tree(td: Path, *, repo: bool = True, tags: bool = True) -> Path:
         git(kit, "add", "-A")
         git(kit, "commit", "-qm", "v0.10.0 tree")
         git(kit, "tag", "v0.10.0")
+    if tags and prerelease:
+        (kit / RULE_REL).write_text(RC_BODY)
+        git(kit, "add", "-A")
+        git(kit, "commit", "-qm", "v2.0.0-rc1 tree")
+        git(kit, "tag", "v2.0.0-rc1")
+        (kit / RULE_REL).write_text(V2_BODY)
+        git(kit, "add", "-A")
+        git(kit, "commit", "-qm", "v2.0.0 tree")
+        git(kit, "tag", "v2.0.0")
     (kit / RULE_REL).write_text(HEAD_BODY)
     (kit / "CHANGELOG.md").write_text("# Changelog\n\n## v9.9.9 (never tagged)\n")
     git(kit, "add", "-A")
@@ -197,6 +216,24 @@ def refresh_resolves_latest_tag(td: Path) -> None:
     )
 
 
+def refresh_prerelease_not_latest(td: Path) -> None:
+    kit, consumer = kit_tree(td, prerelease=True), consumer_tree(td)
+    got = run_installer(kit, consumer)
+    said = got.stdout + got.stderr
+    expect(got.returncode == 0, f"want exit 0, got {got.returncode}: {said.strip()[:300]}")
+    refreshed = (consumer / ".claude" / "rules" / "kit-rule.md").read_text()
+    expect(
+        refreshed == V2_BODY,
+        f"want the final release's rule body, got {refreshed!r} "
+        "(the rc body means the pre-release outranked its release in the sort)",
+    )
+    expect(
+        "v2.0.0-rc1" not in said,
+        f"the pre-release tag must not be the one reported, got: {said.strip()[:300]}",
+    )
+    expect("v2.0.0" in said, f"the resolved tag must be reported, got: {said.strip()[:300]}")
+
+
 def refresh_explicit_tag(td: Path) -> None:
     kit, consumer = kit_tree(td), consumer_tree(td)
     got = run_installer(kit, consumer, "--tag", "v0.9.0")
@@ -240,6 +277,35 @@ def no_tags_refusal(td: Path) -> None:
     unchanged(consumer)
 
 
+def no_rules_in_tag(td: Path) -> None:
+    """The resolved tag's tree carries claude-project/rules with no markdown in it.
+
+    The verdict was already fail-closed (the copy had nothing to expand and died), but the
+    voice was cp's raw `cannot stat` rather than a refusal naming the tag — this case pins
+    the named message alongside the untouched consumer.
+    """
+    kit = td / "kit"
+    rules = kit / "claude-project" / "rules"
+    rules.mkdir(parents=True)
+    shutil.copy(INSTALLER, kit / "install.sh")
+    (rules / "notes.txt").write_text("no markdown rules in this tree\n")
+    git(kit, "init", "-q", "-b", "main", ".")
+    git(kit, "config", "user.email", "fixture@example.invalid")
+    git(kit, "config", "user.name", "fixture")
+    git(kit, "add", "-A")
+    git(kit, "commit", "-qm", "rules dir without markdown")
+    git(kit, "tag", "v0.1.0")
+    consumer = consumer_tree(td)
+    got = run_installer(kit, consumer)
+    said = got.stdout + got.stderr
+    expect(got.returncode == 1, f"want exit 1, got {got.returncode}: {said.strip()[:300]}")
+    expect(
+        "carries no rules" in said,
+        f"the empty tag must be refused by name, got: {said.strip()[:300]}",
+    )
+    unchanged(consumer)
+
+
 def no_rules_dir(td: Path) -> None:
     kit = kit_tree(td)
     consumer = td / "consumer"
@@ -259,10 +325,11 @@ def tag_without_refresh(td: Path) -> None:
     expect(got.returncode == 2, f"want usage exit 2, got {got.returncode}")
 
 
-# The pre-fix refresh region, captured VERBATIM from install.sh before this story's fix (only
-# the surrounding argument parsing is reduced to what the court reads). This is the known-bad
-# corpus the court's patterns are grounded in: a copy sourced from the checkout's working
-# tree, a version scraped from the checkout's CHANGELOG, and no tag resolved anywhere.
+# The pre-fix refresh region — its pattern-bearing lines captured verbatim (the surrounding
+# argument parsing is reduced to what the court reads, and the refusal echo is shortened).
+# This is the known-bad corpus the court's patterns are grounded in: a copy sourced from the
+# checkout's working tree, a version scraped from the checkout's CHANGELOG, and no tag
+# resolved anywhere.
 PRE_FIX_INSTALLER = r"""#!/usr/bin/env bash
 set -euo pipefail
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -337,10 +404,12 @@ def main() -> int:
         return 2
     results = [
         case("refresh-resolves-latest-tag-0", refresh_resolves_latest_tag),
+        case("refresh-prerelease-not-latest-0", refresh_prerelease_not_latest),
         case("refresh-explicit-tag-0", refresh_explicit_tag),
         case("refresh-unknown-tag-1", refresh_unknown_tag),
         case("bare-tree-refusal-1", bare_tree_refusal),
         case("no-tags-refusal-1", no_tags_refusal),
+        case("no-rules-in-tag-1", no_rules_in_tag),
         case("no-rules-dir-1", no_rules_dir),
         case("tag-without-refresh-2", tag_without_refresh),
         court_case("court-clean-real-0", 0, (COURT_PASS, "consumer script"), lambda td: REPO),

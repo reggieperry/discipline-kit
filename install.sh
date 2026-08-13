@@ -36,11 +36,13 @@ fi
 # environment may carry. `-C` re-scopes the working directory and NOT the gitdir, so a run
 # inheriting GIT_DIR (a pre-commit hook exports it, absolute in a linked worktree) would read
 # another repository's tags while appearing to operate on the kit. Same helper as
-# scripts/refresh-from-pack.sh, same reason.
+# scripts/refresh-from-pack.sh, same reason. versionsort.suffix pins pre-release ordering:
+# without it `--sort=-version:refname` ranks v2.0.0-rc1 ABOVE v2.0.0, so an rc tag would win
+# a plain refresh until a newer final release landed.
 g() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
     -u GIT_COMMON_DIR -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
-    git -C "$KIT" "$@"
+    git -c versionsort.suffix=- -C "$KIT" "$@"
 }
 
 # --- --refresh-rules: re-sync the kit-shipped rules into an ALREADY-installed repo ---
@@ -84,6 +86,10 @@ if [ "$REFRESH_RULES" = 1 ]; then
   trap 'rm -rf "$tmp"' EXIT
   if ! g archive "$TAG" claude-project/rules | tar -x -C "$tmp"; then
     echo "✖ could not read claude-project/rules from tag $TAG." >&2
+    exit 1
+  fi
+  if ! compgen -G "$tmp/claude-project/rules/*.md" >/dev/null; then
+    echo "✖ tag $TAG carries no rules (no claude-project/rules/*.md in its tree) — nothing copied." >&2
     exit 1
   fi
   cp "$tmp"/claude-project/rules/*.md .claude/rules/

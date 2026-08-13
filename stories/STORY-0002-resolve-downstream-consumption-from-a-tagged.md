@@ -74,3 +74,7 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
 
 - Allocated by the 2026-08-12 decision-coverage triage (docs/adrs/coverage-triage-proposal.md),
   split option: one `adr:` per story.
+- D7 residue after this story: the user-level install mode (no arguments) copies
+  `claude-user/*` and `reference/*` from the checkout's working tree, and the first-install
+  per-repo instructions it prints do the same—both unwatched by the court, disclosed in its
+  header. A future story widens D7 to the install modes if the operator wants them pinned.

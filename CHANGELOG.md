@@ -42,8 +42,12 @@ which existed only because the ledger did.
   record named future is live: `scripts/tag-consumption-check.sh` on the commit path fails a consumer path
   that copies from the checkout tree, scrapes a version from CHANGELOG.md, resolves no tag, or resolves
   `main`/`HEAD` where a tag is owed. Its patterns are grounded in the pre-fix install.sh, kept verbatim as
-  the known-bad plant in `harness/fixtures/install_test.py` (fourteen cases, red-first, on the commit path),
-  and an empty corpus or a vanished refresh region reads could-not-run, never clean.
+  the known-bad plant in `harness/fixtures/install_test.py` (sixteen cases, red-first, on the commit path),
+  and an empty corpus or a vanished refresh region reads could-not-run, never clean. A review pass then
+  pinned pre-release ordering (versionsort.suffix, so v2.0.0-rc1 never outranks v2.0.0 in a plain refresh),
+  gave the no-rules-in-tag arm its named refusal in place of cp's raw error, and disclosed the unwatched
+  working-tree consumers — the user-level install mode and the first-install instructions — in the court's
+  header and the story's notes.
 
 - **STORY-0007 built: the merge stage — merge_ok's eight conjuncts, the merge record, and both terminal acts.**
   `harness/chain/merge.py` is where ADR-0002's D3, D5 and the terminal-act half of D1 become mechanism, over the
