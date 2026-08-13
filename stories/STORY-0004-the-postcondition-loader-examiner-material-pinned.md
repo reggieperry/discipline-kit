@@ -96,3 +96,37 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   directory that does not exist, the run exits 2, and could-not-run comes back carrying the
   postcondition's name—so exit 2 naming `demo` survives the mutation and exit 2 naming
   "'demo' has no red fixture" does not.
+- Merge review returned FIX_NEEDED with five findings, all taken in a second commit and each
+  reproduced before it was fixed. Two symlink shapes read LOADABLE with the judged tree's own
+  examiner running: a `pinned_root` symlinked into a subdirectory of a judged repository, and a
+  clean root whose `postconditions/` is a symlink into one. The first is the narrower hole the
+  review reported—a symlink naming the repository's own root was already refused, because the
+  first probe of the walk resolves through the link and meets `.git` immediately, and one shape
+  being caught by accident is what let the other read clean. The remedy is to resolve the root
+  before deciding and to require every resolved material path to sit under the resolved root.
+- A `PermissionError` from an unreadable ancestor escaped as a traceback, and an uncaught Python
+  exception exits 1, which is the code for a failed demonstration—ADR-0003/D2's inversion, a
+  broken instrument read as a fact about the story. Measured firing at the `is_dir()` probe on the
+  declared root rather than inside the path walk, so the guard is a net around every filesystem
+  read on the resolution path rather than a wrapper on the loop where it was reported; a guard at
+  the reported site would have left the measured shape open. Fixtures are now demonstrated against
+  a copy rather than in place, because a postcondition that writes into the tree it judges was
+  editing the evidence every later demonstration is judged by.
+- Two of the review's prescriptions were not followed literally, and each departure is a case
+  rather than an opinion. A walk from each material path would refuse a fixture tree that is
+  itself a git repository, which is exactly the shape a postcondition over a tree's porcelain
+  needs; `fixture-is-a-repo` pins that, and running the prescribed remedy as a mutation turns that
+  case red while containment closes both measured escapes. And `.claude/chain/profile.toml`'s
+  three spaced em dashes were not introduced by this story—they date from STORY-0003's commit,
+  measured by diffing the block—but they are closed here anyway, since the file's style is the
+  point rather than the authorship.
+- The review's other value was a survivor it did not name. Adding the two symlink cases left
+  `candidate.resolve()` on the root unpinned: the mutation dropping it kept the suite at 26 of 26,
+  because containment refused the escape for the wrong reason. What that resolution actually buys
+  is the LEGITIMATE symlinked root—a stable path pointing at a versioned release directory, and
+  any machine whose temporary directory is itself a symlink—so `root-symlink-legitimate` was added
+  and the mutation is killed. Nine mutations now run: the working-tree walk neutered, the red
+  requirement inverted, the both-fixtures requirement dropped, the working directory set to the
+  judged tree, the root resolution dropped, the containment check neutered, the fixture copy
+  dropped, the OSError net removed, and the rejected alternative fix installed. All nine killed,
+  27 cases.

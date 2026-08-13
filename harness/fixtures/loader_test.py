@@ -16,7 +16,14 @@ could-not-run.
 
   loadable              a well-formed postcondition demonstrates    -> 0, loadable
   config-exported       `config/` reaches the run through the env   -> 0, loadable
+  relative-resolution   a relative read reaches the pinned home     -> 0, loadable
+  fixture-is-a-repo     a fixture tree that is itself a repository  -> 0, loadable
+  root-symlink-legitimate a symlinked root outside worktrees   -> 0, loadable
+  fixtures-not-mutated  a run that writes cannot poison the pinned  -> 0, digests equal
   hostile-git-env       GIT_DIR in the caller's environment         -> 0, loadable
+  root-symlink-escape   pinned_root symlinked into a worktree       -> 2, VOID (D3)
+  material-symlink-escape postconditions/ symlinked into one        -> 2, VOID (D3)
+  unreadable-ancestor   a directory above the root at mode 000      -> 2, VOID
   missing-red-fixtures  no fixtures/red directory                   -> 2, VOID naming both
   missing-green-fixtures no fixtures/green directory                -> 2, VOID naming both
   red-passes            the fixture that should fail did not        -> 1, FAIL
@@ -46,6 +53,23 @@ converse limb points `pinned_root` at the judged tree's own copy: resolution fro
 working tree is refused outright, which is why the first limb cannot be defeated by moving the
 shadow somewhere the loader would look.
 
+THE TWO SYMLINK CASES ARE THE SAME COURT AS `pinned-root-in-worktree` READ AT THE RIGHT WIDTH,
+and both shapes were measured loadable before they existed. A path check that walks lexically from
+the declared root sees the names in the string and not the directories they reach: a `pinned_root`
+symlinked into a subdirectory of a judged repository never brings that repository's root into the
+walk, and a clean root whose `postconditions/` is a symlink into one never has it examined at all.
+The remedy is to resolve before deciding, and to require every resolved material path to sit under
+the resolved root. `fixture-is-a-repo` is what keeps that remedy from over-reaching: a fixture tree
+is the SUBJECT of a postcondition, and a postcondition over a tree's porcelain needs a fixture that
+is a git repository, so a rule refusing material with a repository at or under it would refuse the
+one shape D4 most needs. Containment refuses the escape without refusing the subject.
+
+`unreadable-ancestor` is the inversion ADR-0003/D2 forbids. A `PermissionError` while inspecting
+the path escaped as a traceback, and an uncaught Python exception exits 1, so a broken instrument
+was reported as a demonstration failure. It was measured firing at the `is_dir()` probe rather
+than inside the walk, which is why the guard is a net around every filesystem read on the
+resolution path and not a wrapper on one loop.
+
 THE TWO MISSING-FIXTURE CASES ASSERT THE STATE AND NOT ONLY THE EXIT CODE, and the difference is
 measured rather than stylistic: with the both-fixtures requirement deleted, the loader runs the
 postcondition against a directory that does not exist, the run cannot find its verdict file and
@@ -63,6 +87,7 @@ Run: python3 harness/fixtures/loader_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -108,6 +133,20 @@ if [ ! -f "${CHAIN_POSTCONDITION_CONFIG:-/nonexistent}/threshold" ]; then
 fi
 """
 
+# A RELATIVE read, used only by `relative-resolution`. The file it names exists under the
+# postcondition's pinned home and nowhere else, so the case fails unless the working directory the
+# loader hands the run is that home. Without it the confinement is a claim in a docstring: a
+# mutant setting the working directory to the judged tree left every other case green.
+RELATIVE_EXTRA = """
+if [ ! -f pinned-marker ]; then echo "run: a relative read missed the pinned home"; exit 2; fi
+cat pinned-marker
+"""
+
+# A run that WRITES into the tree it was handed, for `fixtures-not-mutated`.
+POISON_EXTRA = """
+: > "$1/poison"
+"""
+
 
 def clean_env() -> dict[str, str]:
     """The environment with git's own variables dropped.
@@ -148,6 +187,8 @@ def postcondition(
     run_executable: bool = True,
     run_present: bool = True,
     config: bool = False,
+    home_files: dict[str, str] | None = None,
+    fixtures_are_repos: bool = False,
 ) -> Path:
     """One postcondition under `<root>/postconditions/<name>/`, well-formed unless told otherwise.
 
@@ -163,13 +204,36 @@ def postcondition(
     if config:
         (home / "config").mkdir()
         (home / "config" / "threshold").write_text("1\n")
+    for rel, body in (home_files or {}).items():
+        (home / rel).write_text(body)
     for limb, verdict in (("red", red), ("green", green)):
         if verdict is None:
             continue
         tree = home / "fixtures" / limb
         tree.mkdir(parents=True)
         (tree / "verdict").write_text(verdict + "\n")
+        if fixtures_are_repos:
+            init_repo(tree)
     return home
+
+
+def init_repo(path: Path) -> None:
+    """Make `path` a git repository with one commit."""
+    git(path, "init", "-q", "-b", "main", ".")
+    git(path, "config", "user.email", "fixture@example.invalid")
+    git(path, "config", "user.name", "fixture")
+    git(path, "add", "-A")
+    git(path, "commit", "-qm", "baseline")
+
+
+def tree_digest(root: Path) -> str:
+    """A digest over every path and file body under `root`, for the poisoning case."""
+    h = hashlib.sha256()
+    for p in sorted(root.rglob("*")):
+        h.update(p.relative_to(root).as_posix().encode())
+        if p.is_file() and not p.is_symlink():
+            h.update(p.read_bytes())
+    return h.hexdigest()
 
 
 def kit_tree(root: Path, *, pinned: str | None, nested: bool = False,
@@ -237,19 +301,20 @@ def standard(td: Path, **kw) -> Path:
     return kit_tree(td, pinned=str(pinned_root(td, **kw)))
 
 
-def judged_repo(td: Path, *, marker: str = "SHADOW-EXAMINER", name: str = "judged") -> Path:
+def judged_repo(td: Path, *, marker: str = "SHADOW-EXAMINER", name: str = "judged",
+                at: str | None = None) -> Path:
     """A git working tree carrying its own copy of the same-named postcondition.
 
     Well-formed on purpose: a shadow that could not demonstrate would be refused for that
     reason instead of for being in the judged tree, and the case would pass for the wrong
-    reason.
+    reason. `at` puts the material in a subdirectory, which is what the root-symlink case needs.
     """
     repo = td / name
     repo.mkdir()
     git(repo, "init", "-q", "-b", "main", ".")
     git(repo, "config", "user.email", "fixture@example.invalid")
     git(repo, "config", "user.name", "fixture")
-    postcondition(repo, marker=marker)
+    postcondition(repo / at if at else repo, marker=marker)
     (repo / "README.md").write_text("the judged tree\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "baseline")
@@ -330,6 +395,61 @@ def build_pinned_in_worktree(td: Path) -> Path:
     return kit_tree(td, pinned=str(repo))
 
 
+def build_relative_resolution(td: Path) -> Path:
+    """A run reading a relative path that exists only under its own pinned home."""
+    return standard(td, run_extra=RELATIVE_EXTRA,
+                    home_files={"pinned-marker": "PINNED-HOME-REACHED\n"})
+
+
+def build_fixture_is_a_repo(td: Path) -> Path:
+    """Fixture trees that are themselves git repositories, which is the shape a postcondition
+    over a tree's porcelain requires. Containment must admit it where an up-walk would not."""
+    return standard(td, fixtures_are_repos=True)
+
+
+def build_root_symlink_legitimate(td: Path) -> Path:
+    """A pinned root that is a symlink to a real directory outside every working tree.
+
+    The deployment shape this is: a stable `/var/lib/discipline-chain` pointing at a versioned
+    release directory, swapped atomically. It must LOAD, and the case exists because nothing
+    else here requires it to: with the root's resolution removed the suite stayed 26 of 26 while
+    every material path resolved out from under an unresolved prefix and this shape was refused.
+    A machine whose temporary directory is itself a symlink meets the same refusal for the same
+    reason, which is the general form of the defect.
+    """
+    real = pinned_root(td)
+    link = td / "current"
+    link.symlink_to(real)
+    return kit_tree(td, pinned=str(link))
+
+
+def build_root_symlink_escape(td: Path) -> Path:
+    """`pinned_root` is a symlink into a SUBDIRECTORY of a judged repository.
+
+    The subdirectory matters. A symlink naming the repository's own root is already refused,
+    because the first probe of the walk resolves through the link and meets `.git` there; a
+    symlink one level down never brings the repository's root into a lexical walk at all. That
+    second shape was measured loadable, with the judged tree's examiner running.
+    """
+    judged = judged_repo(td, at="chain")
+    link = td / "link"
+    link.symlink_to(judged / "chain")
+    return kit_tree(td, pinned=str(link))
+
+
+def build_material_symlink_escape(td: Path) -> Path:
+    """A pinned root outside every worktree whose `postconditions/` is a symlink into one.
+
+    Nothing about the root is wrong, so a check that only examines the root reports nothing;
+    every path below it reaches the judged tree. Measured loadable, shadow examiner running.
+    """
+    judged = judged_repo(td)
+    clean = td / "pinned"
+    clean.mkdir()
+    (clean / "postconditions").symlink_to(judged / "postconditions")
+    return kit_tree(td, pinned=str(clean))
+
+
 def build_no_profile(td: Path) -> Path:
     pinned_root(td)
     return kit_tree(td, pinned=None, profile=False)
@@ -379,6 +499,60 @@ def shadow_case() -> bool:
     return ok
 
 
+def fixtures_not_mutated_case() -> bool:
+    """A postcondition that writes into the tree it judges must not reach the pinned fixtures.
+
+    Fixtures are examiner material (ADR-0001/D3), and a demonstration that runs a postcondition
+    against the pinned trees themselves lets any postcondition edit the evidence every later
+    demonstration is judged by. The loader therefore judges a copy. The digest is taken over both
+    fixture trees before and after the load; the run appends a file to whatever tree it is given,
+    so an in-place demonstration changes the digest and this case fails.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        kit = standard(tmp, run_extra=POISON_EXTRA)
+        home = tmp / "pinned" / "postconditions" / NAME
+        before = {limb: tree_digest(home / "fixtures" / limb) for limb in ("red", "green")}
+        got = run_tool(kit)
+        after = {limb: tree_digest(home / "fixtures" / limb) for limb in ("red", "green")}
+        changed = sorted(limb for limb in before if before[limb] != after[limb])
+        ok = got.returncode == 0 and LOADABLE_MARKER in (got.stdout + got.stderr) and not changed
+        print(f"  {'ok  ' if ok else 'FAIL'} fixtures-not-mutated: want exit 0 with both pinned "
+              f"fixture trees byte-identical, got exit {got.returncode} with "
+              f"{len(changed)} tree(s) changed")
+        if not ok:
+            print(f"       changed: {changed}")
+            print(f"       stdout: {got.stdout.strip()[:300]}")
+            print(f"       stderr: {got.stderr.strip()[:300]}")
+        return ok
+
+
+def unreadable_ancestor_case() -> bool:
+    """A directory above the pinned root at mode 000 reads could-not-run, not a verdict.
+
+    The condition is constructed rather than assumed: if the fixture can still traverse the
+    directory it just locked, it has not built the case, and it says so and fails rather than
+    reporting a pass it did not earn. That happens when the suite runs as root, where mode bits
+    do not bind.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        locked = tmp / "locked"
+        locked.mkdir()
+        postcondition(locked / "pinned")
+        kit = kit_tree(tmp, pinned=str(locked / "pinned"))
+        locked.chmod(0o000)
+        try:
+            if os.access(locked, os.R_OK | os.X_OK):
+                print("  FAIL unreadable-ancestor: the locked directory is still traversable, so "
+                      "the condition was not constructed (running as root?)")
+                return False
+            got = run_tool(kit)
+        finally:
+            locked.chmod(0o755)
+        return report("unreadable-ancestor", 2, VOID_MARKER, got)
+
+
 def hostile_env_case() -> bool:
     """The loader must not hand its own caller's git environment to a postcondition.
 
@@ -404,7 +578,14 @@ def main() -> int:
     results = [
         case("loadable", 0, LOADABLE_MARKER, build_loadable),
         case("config-exported", 0, LOADABLE_MARKER, build_config),
+        case("relative-resolution", 0, "PINNED-HOME-REACHED", build_relative_resolution),
+        case("fixture-is-a-repo", 0, LOADABLE_MARKER, build_fixture_is_a_repo),
+        case("root-symlink-legitimate", 0, LOADABLE_MARKER, build_root_symlink_legitimate),
+        fixtures_not_mutated_case(),
         hostile_env_case(),
+        case("root-symlink-escape", 2, VOID_MARKER, build_root_symlink_escape),
+        case("material-symlink-escape", 2, VOID_MARKER, build_material_symlink_escape),
+        unreadable_ancestor_case(),
         case("missing-red-fixtures", 2, "'demo' has no red fixture", build_missing_red),
         case("missing-green-fixtures", 2, "'demo' has no green fixture", build_missing_green),
         case("red-passes", 1, FAIL_MARKER, build_red_passes),

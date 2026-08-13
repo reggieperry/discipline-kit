@@ -68,8 +68,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -170,17 +172,52 @@ def declared_pinned_root(root: Path) -> Path:
                           "depends on a link it does not control")
     if not candidate.is_dir():
         raise CouldNotRun(f"{PINNED_KEY} {value} does not exist, or is not a directory")
-    return candidate
+    # Resolved here and nowhere else, so every later decision is about the directory the root
+    # reaches rather than about the string that names it.
+    return candidate.resolve()
 
 
-def refuse_judged_material(pinned: Path) -> None:
-    """ADR-0001/D3, mechanically: material inside a working tree is not pinned material."""
+def refuse_judged_root(pinned: Path) -> None:
+    """ADR-0001/D3, mechanically: a root inside a working tree does not pin anything.
+
+    `pinned` arrives resolved, and that is the whole of the fix for the escape measured here: a
+    lexical walk reads the names in the declared string rather than the directories they reach,
+    so a root symlinked into a subdirectory of a judged repository never brings that repository
+    into the walk. A symlink naming the repository's own root happened to be caught, because the
+    first probe resolves through the link and meets `.git` immediately, and one shape being
+    caught by accident is what let the other shape read loadable.
+    """
     tree = working_tree_above(pinned)
     if tree is not None:
         raise CouldNotRun(
             f"the pinned root {pinned} is inside the git working tree at {tree}, so it is "
             "material the judged party can write (ADR-0001/D3)"
         )
+
+
+def refuse_escaping_material(pinned: Path, *paths: Path | None) -> None:
+    """Every resolved material path must sit under the resolved pinned root.
+
+    The escape this closes is a clean root whose `postconditions/` (or anything under it) is a
+    symlink into a judged repository: nothing about the root is wrong, so a root-only check
+    reports nothing while every path below it reaches the judged tree.
+
+    CONTAINMENT RATHER THAN A WALK FROM EACH PATH, and the difference is a case rather than a
+    preference. A fixture tree is the SUBJECT of a postcondition, not part of the examiner's
+    apparatus, and a postcondition over a tree's porcelain needs a fixture tree that is itself a
+    git repository—so a rule refusing any material with a working tree at or under it refuses
+    exactly the shape D4 most needs. `fixture-is-a-repo` in the fixture pins that; the two
+    symlink cases pin that containment still closes the escape.
+    """
+    for path in paths:
+        if path is None:
+            continue
+        real = path.resolve()
+        if real != pinned and pinned not in real.parents:
+            raise CouldNotRun(
+                f"{path} resolves to {real}, outside the pinned root {pinned}, so what would run "
+                "is not the material the root pins (ADR-0001/D3)"
+            )
 
 
 def resolve(pinned: Path, name: str) -> tuple[Path, Path, Path | None, dict[str, Path]]:
@@ -217,37 +254,67 @@ def child_env(config: Path | None) -> dict[str, str]:
 
 def demonstrate(run: Path, home: Path, tree: Path, config: Path | None,
                 timeout: int) -> tuple[int, str]:
-    """Run the postcondition against one fixture tree; return its exit code and what it said."""
-    try:
-        done = subprocess.run(
-            [str(run), str(tree)],
-            cwd=str(home),
-            env=child_env(config),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise CouldNotRun(f"{run} did not return within {timeout}s against {tree}") from e
-    except OSError as e:
-        raise CouldNotRun(f"{run} could not be executed against {tree}: {e}") from e
-    return done.returncode, done.stdout + done.stderr
+    """Run the postcondition against a COPY of one fixture tree; return its code and its output.
+
+    A copy because the fixtures are examiner material and the postcondition is the thing being
+    examined. Demonstrating in place lets any postcondition write into the evidence that every
+    later demonstration is judged by, which is the judged party editing the examiner one level
+    down from where D3 blocked it. Symlinks inside a fixture are copied as symlinks rather than
+    followed, so copying cannot pull in whatever they point at.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        judged = Path(scratch) / tree.name
+        shutil.copytree(tree, judged, symlinks=True)
+        try:
+            done = subprocess.run(
+                [str(run), str(judged)],
+                cwd=str(home),
+                env=child_env(config),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise CouldNotRun(f"{run} did not return within {timeout}s against {tree}") from e
+        except OSError as e:
+            raise CouldNotRun(f"{run} could not be executed against {tree}: {e}") from e
+        return done.returncode, done.stdout + done.stderr
 
 
 def load(root: Path, name: str, *, timeout: int = DEFAULT_TIMEOUT,
          say: Callable[[str], None] = print) -> Postcondition:
     """Resolve `name` from the pinned root and demonstrate it, or raise saying why not.
 
+    Every `OSError` on the resolution path becomes could-not-run. A filesystem the loader cannot
+    read is a broken instrument, and ADR-0003/D2 forbids reading one as a verdict; measured
+    before this net existed, a `PermissionError` from an unreadable ancestor escaped as a
+    traceback, and an uncaught exception exits 1, which is the code for a failed demonstration.
+    The net is here rather than around the path walk because that is not where it fired: the
+    probe that raised was the `is_dir()` on the declared root, one step earlier, and a guard
+    placed at the reported site would have left the measured shape open.
+    """
+    try:
+        return demonstrated(root, name, timeout=timeout, say=say)
+    except OSError as e:
+        raise CouldNotRun(f"a filesystem read failed while loading {name!r}: {e}") from e
+
+
+def demonstrated(root: Path, name: str, *, timeout: int,
+                 say: Callable[[str], None]) -> Postcondition:
+    """The resolution and demonstration themselves, guarded by `load`.
+
     The denominators go to `say` as they are established, so a refusal reports what it did reach
     rather than only what stopped it.
     """
     pinned = declared_pinned_root(root)
-    refuse_judged_material(pinned)
+    refuse_judged_root(pinned)
     say(f"postcondition-loader: pinned root {pinned}, declared by {root / PROFILE}")
     home, run, config, fixtures = resolve(pinned, name)
+    refuse_escaping_material(pinned, home, run, config, *fixtures.values())
     say(f"postcondition-loader: resolved {name!r} at {home} "
         f"({RUN} present, {CONFIG}/ {'present' if config else 'absent'}, "
-        f"{len(fixtures)} fixture tree(s): {', '.join(sorted(fixtures))})")
+        f"{len(fixtures)} fixture tree(s) demonstrated against copies: "
+        f"{', '.join(sorted(fixtures))})")
 
     codes: dict[str, int] = {}
     broken: list[str] = []

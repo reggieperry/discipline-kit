@@ -82,7 +82,7 @@ pinned_root = "/var/lib/discipline-chain/"
 #   .claude/             this file, and the settings root it sits in. D3.2's first named omission
 #                        is the list's own file: a list that can edit itself is not a cage. The
 #                        entry is the whole `.claude/` tree rather than `chain/` because the
-#                        sibling surface is the harness's project-settings root — a story adding
+#                        sibling surface is the harness's project-settings root—a story adding
 #                        `.claude/settings.json` with hooks, or an agent definition beside it,
 #                        changes how every later phase runs, and ADR-0004/D3 pins the settings
 #                        sources per invocation precisely because settings inject. A base
@@ -118,8 +118,8 @@ pinned_root = "/var/lib/discipline-chain/"
 # (em-dash), every tracked shell file (shellcheck), the whole tree (scrub-gate), and
 # claude-project/rules/ (rule_grades). Listing a graded corpus would put the repository in its own
 # trusted base and park every story ever written. The rules directory is the one worth stating
-# on its own terms: rule_grades.py reads `*.md` under it and nothing else — no configuration
-# file, no allowlist, no exemption list — so every byte it reads is subject matter, and editing a
+# on its own terms: rule_grades.py reads `*.md` under it and nothing else—no configuration
+# file, no allowlist, no exemption list—so every byte it reads is subject matter, and editing a
 # rule changes what that court grades rather than what it will accept. ADR-0002/D4 covers the
 # separate point at the merge stage, where a rule edit could otherwise move a verdict: the
 # reviewer's lens-set denominator is re-derived from the pinned examiner copy, never from the
