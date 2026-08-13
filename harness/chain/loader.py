@@ -55,7 +55,12 @@ root-owned 0755, and that hardening is an operator checklist item that has not l
 machine here. A root-ownership assertion in this loader would fail every machine today and would
 be edited out; the property it would carry is that a phase agent cannot write the examiner, and
 until the checklist runs, that property rests on the path being outside the agent's tree and on
-nothing else. The absence is the honest state.
+nothing else. The absence is the honest state. Two shapes live inside that same gap, confirmed
+by the merge review: a HARD LINK whose inode is judged-tree material is invisible to resolve()
+and to any walk (no design catches it; it needs same-filesystem write access to the pinned
+root, which the ownership property is what would deny), and the fixture copy follows symlinks
+inside a fixture tree, so a link planted there would be copied through (the fixture is the
+postcondition's subject; robustness for the seam build to weigh, not a pinning hole).
 
 Usage:
     python3 harness/chain/loader.py <postcondition-name> [--root <repo>] [--timeout <seconds>]
