@@ -32,6 +32,7 @@ require, and that second reading is the failure this court is most exposed to.
   missing-githooks    trusted_base omits .githooks/                -> 1, .githooks/
   missing-invoked     an invoked path no entry covers              -> 1, tools/extra.sh
   missing-story-input trusted_base omits stories/                  -> 1, stories/
+  missing-sequencer-sources trusted_base omits harness/chain/      -> 1, harness/chain/
 
 THE EMPTY-EXTRACTION SEMANTICS ARE PINNED BY `no-invocations`, and they are VOID rather than
 clean on purpose. Zero extracted invocations means the derivation read nothing, so every
@@ -297,6 +298,20 @@ def build_missing_story_input(root: Path) -> Path:
     return kit_tree(root, entries=tuple(e for e in DEFAULT_BASE if e != "stories/"))
 
 
+def build_missing_sequencer_sources(root: Path) -> Path:
+    """ADR-0003/D4's path set: the sequencer's own in-repo sources, stated rather than derived.
+
+    The entries cover every path the extraction produces (the invoked file is named exactly, so
+    the wide `harness/` prefix is not there to cover its `chain/` sibling by accident) and every
+    stated input, and omit only `harness/chain/`. A court without D4's set reports this tree
+    clean, and the story that then edits the sequencer grading it merges through a covered cage.
+    """
+    return kit_tree(
+        root,
+        entries=tuple("harness/tool.py" if e == "harness/" else e for e in DEFAULT_BASE),
+    )
+
+
 def main() -> int:
     if not TOOL.is_file():
         print(f"profile_check_test: court not found at {TOOL}", file=sys.stderr)
@@ -322,6 +337,7 @@ def main() -> int:
         case("missing-githooks", 1, ".githooks/", build_missing_githooks),
         case("missing-invoked", 1, "tools/extra.sh", build_missing_invoked),
         case("missing-story-input", 1, "stories/", build_missing_story_input),
+        case("missing-sequencer-sources", 1, "harness/chain/", build_missing_sequencer_sources),
     ]
     failed = results.count(False)
     print(f"profile_check_test: {len(results) - failed}/{len(results)} cases pass")

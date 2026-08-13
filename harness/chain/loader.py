@@ -25,6 +25,19 @@ THE PINNED LAYOUT, rooted at the profile's `pinned_root`:
           fixtures/
             red/              a tree `run` must FAIL against, exit 1
             green/            a tree `run` must PASS against, exit 0
+      sequencer/              ADR-0003/D4: the sequencer's own definition and the advance
+                              scripts — the pinned copies of `harness/chain/*.py` the driver
+                              runs, resolved from here and never from the judged repository.
+                              Derived under the root by this fixed name, like `postconditions/`
+                              here and `briefs/`, `settings/` and `worktrees/` in `invoke.py`:
+                              no profile key names it, because none names any other pinned
+                              material either. Nothing resolves from it yet — the driver that
+                              will is unbuilt, and the hardening checklist that creates the
+                              root has not run — so the entry is layout, not a claim. The
+                              in-repo sources stay under `trusted_base` as the merge-time
+                              backstop: `core.py startup` refuses per module, and
+                              `scripts/profile-check.sh` requires `harness/chain/` covered on
+                              the commit path.
 
 `run` is invoked as `run <tree>`, with the tree to judge as its one argument and an absolute
 path. Its working directory is its own pinned directory and never the judged tree, so relative

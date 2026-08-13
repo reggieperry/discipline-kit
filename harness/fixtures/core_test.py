@@ -38,6 +38,10 @@ all. The full invocation audit is STORY-0012's.
   trusted-base-unset-2       no trusted_base                     -> 2, trusted-base-unset
   trusted-base-empty-2       an empty trusted_base               -> 2, trusted-base-unset
   trusted-base-incomplete-2  a base omitting the sequencer       -> 2, trusted-base-incomplete
+  trusted-base-omits-invocation-sources-2
+                             a base naming five modules by file  -> 2, trusted-base-incomplete,
+                             and omitting invoke.py + receipt.py    both omissions named
+  sequencer-sources-complete SEQUENCER_SOURCES vs harness/chain/ -> every live module listed
   pinned-root-unset-2        no pinned_root                      -> 2, pinned-root
   pinned-root-in-worktree-2  a pinned root inside a working tree -> 2, pinned-root
 
@@ -264,7 +268,7 @@ def judge(name: str, got: subprocess.CompletedProcess[str], *, want: int, marker
 
 
 def startup_case(name: str, *, want: int, marker: str, profile: str | None,
-                 pinned: str = "make") -> bool:
+                 pinned: str = "make", present: tuple[str, ...] = ()) -> bool:
     """One start-up condition, planted in a throwaway kit tree."""
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -275,7 +279,8 @@ def startup_case(name: str, *, want: int, marker: str, profile: str | None,
             path = kit / ".claude" / "chain" / "profile.toml"
             path.unlink()
             path.mkdir()
-        return judge(name, run_core("startup", "--root", str(kit)), want=want, marker=marker)
+        return judge(name, run_core("startup", "--root", str(kit)), want=want, marker=marker,
+                     present=present)
 
 
 def startup_clean_case() -> bool:
@@ -353,6 +358,50 @@ def trusted_base_incomplete_case() -> bool:
         "trusted-base-incomplete-2", want=2, marker="trusted-base-incomplete",
         profile='terminal = "open-pr"\npush = "branches-only"\n'
                 'pinned_root = "{pinned}"\ntrusted_base = [".claude/", "scripts/"]\n')
+
+
+def trusted_base_omits_invocation_sources_case() -> bool:
+    """The two modules STORY-0009's audit found outside the D4 list, each required by name.
+
+    The base below names five sequencer modules file by file and omits invoke.py and receipt.py,
+    the two that shipped without joining SEQUENCER_SOURCES. Both must be in the refusal's own
+    message: a case asserting only the marker would stay green while either one drifted back out
+    of the list, because the other's absence raises the identical refusal.
+    """
+    return startup_case(
+        "trusted-base-omits-invocation-sources-2", want=2, marker="trusted-base-incomplete",
+        present=("harness/chain/invoke.py", "harness/chain/receipt.py"),
+        profile='terminal = "open-pr"\npush = "branches-only"\n'
+                'pinned_root = "{pinned}"\n'
+                'trusted_base = [".claude/", "scripts/", "harness/chain/core.py",\n'
+                '  "harness/chain/advance.py", "harness/chain/attempt.py",\n'
+                '  "harness/chain/loader.py", "harness/chain/merge.py"]\n')
+
+
+def sequencer_sources_complete_case() -> bool:
+    """The hand-kept D4 list held to the directory it stands for, so it cannot drift silently.
+
+    STORY-0009's audit measured the drift live: SEQUENCER_SOURCES read five modules while
+    harness/chain/ held seven, so a trusted_base omitting invoke.py or receipt.py started
+    cleanly. The commit-path court now requires the whole directory covered
+    (scripts/profile-check.sh); this case holds the run-time gate's list to the same
+    denominator, and a module added to harness/chain/ without joining the list fails here.
+    """
+    sys.path.insert(0, str(CORE.parent))
+    import core
+    listed = frozenset(core.SEQUENCER_SOURCES)
+    on_disk = frozenset(f"harness/chain/{p.name}" for p in CORE.parent.glob("*.py"))
+    missing = sorted(on_disk - listed)
+    stale = sorted(listed - on_disk)
+    ok = not missing and not stale
+    detail = ""
+    if missing:
+        detail += f" (on disk and not in SEQUENCER_SOURCES: {', '.join(missing)})"
+    if stale:
+        detail += f" (in SEQUENCER_SOURCES and not on disk: {', '.join(stale)})"
+    print(f"  {'ok  ' if ok else 'FAIL'} sequencer-sources-complete: {len(listed)} listed, "
+          f"{len(on_disk)} module(s) in harness/chain/{detail}")
+    return ok
 
 
 def pinned_root_unset_case() -> bool:
@@ -892,6 +941,8 @@ def main() -> int:
         trusted_base_unset_case(),
         trusted_base_empty_case(),
         trusted_base_incomplete_case(),
+        trusted_base_omits_invocation_sources_case(),
+        sequencer_sources_complete_case(),
         pinned_root_unset_case(),
         pinned_root_in_worktree_case(),
 

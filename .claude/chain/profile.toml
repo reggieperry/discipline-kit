@@ -56,6 +56,15 @@ settings_sources = "pinned"
 # ADR-0003/D4 extends the same rule to the sequencer's definition and the advance scripts, so this
 # is one root with several kinds of material under it and not a postcondition-only path.
 #
+# THE SEQUENCER'S DEFINITION HAS NO KEY OF ITS OWN, deliberately: it lives at
+# `<pinned_root>/sequencer/`, derived under this root by a fixed name exactly as the loader's
+# `postconditions/` and the invocation layer's `briefs/`, `settings/` and `worktrees/` are — no
+# kind of pinned material is keyed, and the first key for one kind would make that kind's
+# location configurable while every other stays fixed. The layout is documented beside the
+# loader's in harness/chain/loader.py. What the courts watch is the in-repo half of D4:
+# scripts/profile-check.sh fails a trusted_base that does not cover `harness/chain/`, and
+# `core.py startup` refuses per module at run time.
+#
 # THE DIRECTORY DOES NOT EXIST ON ANY MACHINE YET, and declaring it anyway is the honest state
 # rather than an aspiration: design §4.3 puts predicate scripts at absolute paths outside any
 # working tree, root-owned 0755, and names that as an operator checklist item the kit cannot
@@ -103,7 +112,10 @@ pinned_root = "/var/lib/discipline-chain/"
 #   harness/             every python checker check.sh invokes (rule_grades, chain_graph,
 #                        comment_shape), their fixtures under harness/fixtures/, shellcheck_all.sh,
 #                        algebra/validate_note.py, and the templates and skills that
-#                        authoring_artifacts_test.py reads.
+#                        authoring_artifacts_test.py reads. Also harness/chain/, the sequencer's
+#                        own in-repo sources, which ADR-0003/D4 requires here as the merge-time
+#                        backstop — profile-check.sh requires that directory covered by name, so
+#                        narrowing this entry below chain/ fails the build.
 #   scrub-gate.sh        a root file, the first check invoked. The only check outside a directory
 #                        already listed, so it is named on its own.
 #   reference/           test_sdlc_gate.py and the sdlc-gate.py it loads by path.
