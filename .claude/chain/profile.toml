@@ -1,0 +1,104 @@
+# The chain profile: this repository's posture facts, declared here and nowhere else.
+#
+# ADR-0002/D2 decides that the posture is per repository and that no repository-class default
+# exists, because the class does not: the two first targets differ on every fact in this file.
+# So this is the kit's own instance of the schema, and a consuming repository writes its own.
+#
+# THE SCHEMA. Five keys, all top-level, all required by some court or some future one:
+#
+#   terminal          the chain's terminal act. ADR-0002/D1 names exactly two: "open-pr" and
+#                     "merge-local". Any other value fails scripts/merge-posture-check.sh.
+#   push              the push scope the terminal act is allowed. D1 pairs them: "open-pr" with
+#                     "branches-only", "merge-local" with "never". The pairing is what
+#                     merge-posture-check.sh reads, and an unpaired declaration fails the build.
+#   harness_version   the Claude Code version every enabling fact of ADR-0004 is scoped to. D5
+#                     makes a version change a re-probe obligation, review-watched rather than
+#                     mechanical, which is why the number is written down where a reviewer sees it.
+#   settings_sources  the ADR-0004/D3 declaration that a phase invocation pins its settings
+#                     sources. A marker key for now; STORY-0012 builds the enforcement.
+#   trusted_base      the path prefixes a chain story may not touch. ADR-0002/D3.2, watched by
+#                     scripts/profile-check.sh.
+#
+# Every value here is a fact about this repository, never a preference: each one is either read
+# by a live court or named by an ADR decision as owed to a future one.
+
+# ADR-0002/D1, as amended 2026-08-08: the chain's terminal act is opening a pull request, and
+# the trunk crossing runs through the operator's own merge rules rather than around them. The kit
+# is public with CI, so the PR is where its review surface already lives.
+terminal = "open-pr"
+
+# The paired scope. Story branches and the PR branch are the chain's to push; main is not, under
+# any posture. merge-posture-check.sh fails the build on any other pairing.
+push = "branches-only"
+
+# ADR-0004/D5: every enabling fact in that record is scoped to this measured version, and a bump
+# re-runs the D7 probe extended with one limb per D1 to D4 reliance before the facts carry again.
+# Read from `claude --version` on the build machine 2026-08-12, which printed
+# "2.1.224 (Claude Code)".
+harness_version = "2.1.224"
+
+# ADR-0004/D3: every phase invocation carries the sequencer's pinned settings as the only project
+# source and excludes user-scope sources entirely, because the probe measured a user-scope
+# SessionStart hook injecting operator machine identity into phase transcripts. This key is the
+# per-repository declaration that the pinning holds, so the sources are declared beside the
+# posture rather than hard-coded in whatever script builds the command line. It is a marker only
+# until STORY-0012 lands the invocation that reads it; STORY-0005 and STORY-0006 each carry a
+# criterion that the pinning holds.
+settings_sources = "pinned"
+
+# ADR-0002/D3.2. A cumulative diff touching any prefix below parks the story regardless of green,
+# so a story can neither widen its own cage, nor edit the check that clears it, nor edit the
+# inputs that check consumes. The list must contain its own file, the CI workflows, and every
+# path the commit-path check invokes or reads; scripts/profile-check.sh derives that requirement
+# from scripts/check.sh mechanically and fails on any omission, naming it.
+#
+# What each entry is here for:
+#
+#   .claude/chain/       this file. D3.2's first named omission: a list that can edit itself is
+#                        not a cage. The directory rather than the file, so a second profile
+#                        artifact cannot be added outside the list.
+#   .github/workflows/   D3.2's second. The CI workflow runs the same acceptance set as the
+#                        commit path, and a story that can edit it can green its own push.
+#   .githooks/           pre-commit is what invokes scripts/check.sh at all. D3.2's text names
+#                        what the check invokes or reads and the hook is one step upstream of
+#                        that, but editing it is the widest version of the same evasion.
+#   scripts/             check.sh itself, the four shell courts it invokes (em-dash,
+#                        revert-sufficiency, merge-posture, chain-refspec), profile-check.sh, and
+#                        em-dash-exempt.txt, which is configuration rather than graded corpus: it
+#                        decides what the em-dash court tolerates.
+#   harness/             every python checker check.sh invokes (rule_grades, chain_graph,
+#                        comment_shape), their fixtures under harness/fixtures/, shellcheck_all.sh,
+#                        algebra/validate_note.py, and the templates and skills that
+#                        authoring_artifacts_test.py reads.
+#   scrub-gate.sh        a root file, the first check invoked. The only check outside a directory
+#                        already listed, so it is named on its own.
+#   reference/           test_sdlc_gate.py and the sdlc-gate.py it loads by path.
+#   docs/adrs/           chain_graph.py reads every registered ADR, and authoring_artifacts_test.py
+#                        reads the registry README. Read inputs, never invoked, so no extraction
+#                        from check.sh can find them: they are named in profile-check.sh.
+#   stories/            chain_graph.py's other input. The graph is derived from the story files
+#                        themselves, so a story editing another story's frontmatter edits the
+#                        graph that clears it.
+#
+# WHAT IS DELIBERATELY ABSENT is the corpus each check grades: every tracked markdown file
+# (em-dash), every tracked shell file (shellcheck), the whole tree (scrub-gate), and
+# claude-project/rules/ (rule_grades). Listing a graded corpus would put the repository in its own
+# trusted base and park every story ever written. The rules directory is protected instead by
+# ADR-0002/D4, which re-derives the reviewer's denominator from the pinned examiner copy and never
+# from the judged tree.
+#
+# SELF-HOSTING NOTE. The kit is the repository whose product is its own checks, so a chain story
+# that improves a court will touch these paths and park for-cause once the merge stage exists.
+# That is the design working rather than failing: the park is an operator decision, taken with the
+# diff in hand, and the alternative is a chain that merges changes to its own judge.
+trusted_base = [
+  ".claude/chain/",
+  ".github/workflows/",
+  ".githooks/",
+  "scripts/",
+  "harness/",
+  "scrub-gate.sh",
+  "reference/",
+  "docs/adrs/",
+  "stories/",
+]

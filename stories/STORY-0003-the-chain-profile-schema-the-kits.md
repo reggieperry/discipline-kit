@@ -35,8 +35,8 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] the kit's profile exists and `merge-posture-check.sh` reports a guarded pairing—verified by `bash scripts/merge-posture-check.sh`
-- [ ] a profile whose trusted_base omits a required path fails—verified by `the profile-integrity check's known-bad fixture`
+- [x] the kit's profile exists and `merge-posture-check.sh` reports a guarded pairing—verified by `bash scripts/merge-posture-check.sh`, which read "nothing to guard" before `.claude/chain/profile.toml` existed and now reads "clean (every declared terminal act pairs with its push scope)"
+- [x] a profile whose trusted_base omits a required path fails—verified by `harness/fixtures/profile_check_test.py`, whose `missing-own-file`, `missing-workflows`, `missing-githooks`, `missing-invoked` and `missing-story-input` cases each plant one omission and require exit 1 naming the uncovered path
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
@@ -58,3 +58,14 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   whatever script happens to build the command line. `docs/probe/D7-headless-probe-2026-08-12.md`
   is why: user-scope SessionStart hooks fire in headless runs, and STORY-0005 and STORY-0006 each
   carry a criterion that the pinning holds.
+- Discharged 2026-08-12 on `feat/chain-profile`: `.claude/chain/profile.toml` (five keys, schema
+  documented in its own comments), `scripts/profile-check.sh` (ADR-0002/D3.2's court, wired into
+  `scripts/check.sh` after `merge-posture-check.sh`), and the 16-case fixture. The court derives
+  its requirement set from `check.sh`'s own invocations rather than a hand-kept list, so a check
+  added below is required automatically; `docs/adrs/`, `stories/` and `.githooks/` are named in
+  the court because no invocation reaches them. `settings_sources = "pinned"` is a marker key
+  only, per the note above; STORY-0012 builds what reads it. The anti-weakening contract holds by
+  measurement rather than assertion: the fixture is a net add of 16 cases, and the change
+  introduces no suppression and no skip marker. Two mutations were run and killed with the
+  mutants observed executing—the own-file requirement deleted (killed by `missing-own-file`) and
+  the empty-extraction guard disabled (killed by `no-invocations`).

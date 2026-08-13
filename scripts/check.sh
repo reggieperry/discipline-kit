@@ -22,6 +22,12 @@ bash scripts/em-dash-check.sh
 bash scripts/revert-sufficiency-check.sh
 bash scripts/merge-posture-check.sh
 
+# ADR-0002/D3.2's court, named future in that record and live from 2026-08-12: a chain profile
+# whose trusted_base omits its own file, the CI workflows, or any path this file invokes or reads
+# is a cage with a hole in it. The required set is derived from THIS file's invocations rather
+# than hand-kept, so adding a check below adds it to the requirement automatically.
+bash scripts/profile-check.sh
+
 # ADR-0001/D1's edge court: refs/chain/* is per-instance run state; a remote refspec or
 # mirror covering it silently resets or publishes in-flight chains. Live from the day the
 # ADR landed, sequencer or not.
@@ -40,6 +46,10 @@ python3 harness/fixtures/scope_check_test.py
 # it at throwaway trees with planted tokens, so a tier that stops scanning is caught here rather
 # than by a private identifier reaching a tarball.
 python3 harness/fixtures/scrub_gate_test.py
+# The profile court's own fixture, on the commit path for the same reason every other one is:
+# the court passes against this repository, and a court only ever observed passing is not known
+# to be watching. Its trees plant each omission ADR-0002/D3.2 names.
+python3 harness/fixtures/profile_check_test.py
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
