@@ -31,6 +31,13 @@ WHAT IT LOOKS FOR, each pattern carrying the decision it serves:
                          advancement path.
     session-resume       `--resume`, which ADR-0004/D4 rules out and which is unmeasured under
                          headless invocation.
+    session-continue     `--continue` or `--fork-session`: resumption wearing another flag.
+                         ADR-0004's falsification section widens this check by one pattern for
+                         its D1/D4 courts, and this is the shape the eight above miss — the
+                         result-string and session-resume patterns catch the wrapper's return
+                         text and the literal `--resume`, while a sequencer that continues or
+                         forks the most recent session has the same unmeasured dependence
+                         under a flag no existing pattern names.
 
 THE ONE ADMITTED READER. ADR-0001/D5 admits session ids and liveness signals, so exactly one
 function may touch a stream: `admitted_signals`. The two stream-shaped patterns are exempt
@@ -115,6 +122,9 @@ PATTERNS = (
             "no phase runs as a subagent on the advancement path (ADR-0004/D1)", False),
     Pattern("session-resume", re.compile(r"--resume\b"),
             "resumption under headless invocation is unmeasured (ADR-0004/D4)", False),
+    Pattern("session-continue", re.compile(r"--continue\b|--fork-session\b"),
+            "continuing or forking a session is resumption wearing another flag, the same "
+            "unmeasured dependence (ADR-0004/D1, D4)", False),
 )
 
 

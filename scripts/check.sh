@@ -68,11 +68,22 @@ python3 harness/fixtures/advance_test.py
 # machine here and the CLI stays off the commit path. The fixture builds its own profiles and
 # repositories, so it needs neither.
 python3 harness/fixtures/core_test.py
+# The invocation layer's fixture, on the same boundary as the loader's and the seam's: the
+# invoke CLI reads the profile's pinned root and VOIDs on every machine until the hardening
+# checklist creates it, so only the fixture is wired. It builds its own profiles, repositories,
+# pinned material and stub harness binaries — the real `claude` is never invoked here — and it
+# demonstrates the post-batch transcript audit red and green on synthetic streams.
+python3 harness/fixtures/invoke_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
-# nothing" until a sequencer source existed. Four exist now, so unlike the runtime it wires
+# nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators
 # printed on every run.
 python3 harness/sequencer_source_check.py
+# ADR-0004/D1's other court, the post-batch transcript audit (harness/transcript_audit.py), stays
+# off the commit path for the loader's reason: it reads the phase transcripts a batch wrote, no
+# chain has run on this machine, and an empty corpus reads could-not-run, never clean. It wires
+# the day a batch writes transcripts; until then invoke_test.py above is its red-and-green
+# demonstration.
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py

@@ -88,6 +88,8 @@ all. The full invocation audit is STORY-0012's.
   source-harness-json        a stream parsed outside the reader  -> 1
   source-subagent-spawn      a subagent spawned                  -> 1
   source-session-resume      --resume on an advancement path     -> 1
+  source-session-continue    --continue, resumption by another
+                             flag, on an advancement path        -> 1
   source-verdict-in-reader   the reader itself reading is_error  -> 1
   source-widened-allowlist   ADMITTED_KEYS carrying a new key    -> 1
   source-no-allowlist-2      no admitted reader to exempt        -> 2
@@ -801,6 +803,8 @@ PLANTED = {
                              '    return Task(subagent_type="worker", prompt=brief)\n',
     "source-session-resume": 'def invoke(sid):\n'
                              '    return ["claude", "-p", "go", "--resume", sid]\n',
+    "source-session-continue": 'def invoke():\n'
+                               '    return ["claude", "-p", "go", "--continue"]\n',
 }
 
 
