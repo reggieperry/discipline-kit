@@ -28,6 +28,12 @@ bash scripts/merge-posture-check.sh
 # than hand-kept, so adding a check below adds it to the requirement automatically.
 bash scripts/profile-check.sh
 
+# ADR-0002/D7's court, named future in that record and live from 2026-08-13: a consumer path
+# resolving main, HEAD, or the checkout's working tree where a release tag is owed fails the
+# build. Its patterns are grounded in the pre-fix install.sh, which copied from the working
+# tree and scraped a version from CHANGELOG.md with no tag resolved anywhere.
+bash scripts/tag-consumption-check.sh
+
 # ADR-0001/D1's edge court: refs/chain/* is per-instance run state; a remote refspec or
 # mirror covering it silently resets or publishes in-flight chains. Live from the day the
 # ADR landed, sequencer or not.
@@ -50,6 +56,10 @@ python3 harness/fixtures/scrub_gate_test.py
 # the court passes against this repository, and a court only ever observed passing is not known
 # to be watching. Its trees plant each omission ADR-0002/D3.2 names.
 python3 harness/fixtures/profile_check_test.py
+# The installer's and the D7 court's fixture: it drives the real install.sh against scratch
+# kit repositories where HEAD differs from the latest tag, and points the court at planted
+# trees carrying the pre-fix defect verbatim — the only way either is ever observed failing.
+python3 harness/fixtures/install_test.py
 # The postcondition loader's fixture, on the commit path; the loader itself deliberately is not,
 # for the reason the chain graph's checker was held back until its triage closed. The loader
 # resolves examiner material from the profile's out-of-tree `pinned_root`, that directory is

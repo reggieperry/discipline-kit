@@ -32,6 +32,19 @@ which existed only because the ledger did.
 
 ## Unreleased
 
+- **STORY-0002 built: the installer resolves a release tag, and the D7 court watches consumer paths.**
+  `install.sh --refresh-rules` now resolves the newest v-prefixed tag by version sort (or the one named with
+  `--tag`) and copies the rules from that tag's tree via `git archive`, never from whatever the checkout's
+  working tree holds — ADR-0002/D7's rule that a bad merge on `main` must not reach a consuming repository
+  before the backstop can act. The version it reports is the tag itself; the CHANGELOG scrape is gone. A
+  checkout with no `.git`, or with none of the release tags, is refused by name with nothing copied — there
+  is no working-tree fallback, because the fallback would be exactly the path D7 removes. The court that
+  record named future is live: `scripts/tag-consumption-check.sh` on the commit path fails a consumer path
+  that copies from the checkout tree, scrapes a version from CHANGELOG.md, resolves no tag, or resolves
+  `main`/`HEAD` where a tag is owed. Its patterns are grounded in the pre-fix install.sh, kept verbatim as
+  the known-bad plant in `harness/fixtures/install_test.py` (fourteen cases, red-first, on the commit path),
+  and an empty corpus or a vanished refresh region reads could-not-run, never clean.
+
 - **STORY-0007 built: the merge stage — merge_ok's eight conjuncts, the merge record, and both terminal acts.**
   `harness/chain/merge.py` is where ADR-0002's D3, D5 and the terminal-act half of D1 become mechanism, over the
   seams that already exist: position and the start-up posture are `core.py`'s, pinned-material resolution is the
