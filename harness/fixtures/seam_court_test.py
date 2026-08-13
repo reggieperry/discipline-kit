@@ -26,10 +26,20 @@ surface and cannot act, which is the probe's shape moved to the seam.
   did-nothing-fails-1      clean committed tree, no artifact  -> 1, FAIL, seam ran, no ref
   known-good-passes-0      the artifact present and committed -> 0, PASS, ref = graded sha
   tools-disabled-void-2    the examiner's interpreter denied  -> 2, VOID, nothing ran, no ref
+  self-sabotage-void-2     demonstrates, then drops its x bit -> 2, VOID naming the graded run
 
 `tools-disabled-void-2` grades the KNOWN-GOOD tree, and that is deliberate: a tree that would
 pass cannot pass when nothing could examine it, so could-not-run is demonstrably not derived
 from the tree, and the pass marker is required absent rather than merely unexpected.
+
+THE SEAM HAS TWO EXEC SITES and a denial at each must read could-not-run: the loader's
+demonstration, and `seam_run`'s own exec against the graded tree. `tools-disabled-void-2`
+denies the first, so it proves nothing about the second—a `seam_run` whose OSError arm returned
+a pass would sign a phase no examiner examined, and it would survive every case whose denial
+lands at the demonstration. `self-sabotage-void-2` is the examiner that reaches the second
+site: it demonstrates red and green correctly and then drops its own exec bit, so the one exec
+that is denied is the graded run, and the VOID reason must name the graded repository rather
+than a fixture copy.
 
 Run: python3 harness/fixtures/seam_court_test.py   (exit 0 = pass).
 """
@@ -76,6 +86,26 @@ exit 1
 # proof the case was not constructed.
 DENIED_RUN = """#!{interpreter}
 exit 0
+"""
+
+# The self-sabotaging examiner: demonstrates red and green correctly, then drops its own exec
+# bit once both limbs have run, so the one exec that is denied is the graded run. Its working
+# directory is its own pinned home for every invocation, which is where the seen markers land;
+# the judged copy's basename is the fixture limb's name during a demonstration and the graded
+# directory's name at the seam.
+SABOTEUR_RUN = f"""#!/usr/bin/env bash
+set -uo pipefail
+echo "{EXAMINER}"
+if [ "$#" -lt 1 ]; then echo "run: no tree argument"; exit 2; fi
+touch "seen-$(basename "$1")"
+if [ -e seen-green ] && [ -e seen-red ]; then chmod 0644 "$0"; fi
+if [ ! -f "$1/{ARTIFACT}" ]; then echo "run: the artifact does not exist"; exit 1; fi
+if grep -qF "{WORK}" "$1/{ARTIFACT}"; then
+  echo "run: the artifact carries its declared content"
+  exit 0
+fi
+echo "run: the artifact exists without its declared content"
+exit 1
 """
 
 
@@ -298,6 +328,33 @@ def tools_disabled_case() -> bool:
         return ok
 
 
+def self_sabotage_case() -> bool:
+    """The seam run is its own exec site, and a denial there must read could-not-run.
+
+    The examiner demonstrates red and green correctly and then drops its own exec bit, so the
+    demonstration proves nothing about the one exec that is denied: the graded run. The VOID
+    reason must name the graded repository rather than a fixture copy, the seam relay must be
+    absent because nothing ran against the graded tree, and the store must hold nothing—a seam
+    whose denied graded exec read as a pass would sign a phase no examiner examined.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        kit, repo = bench(tmp, work=True, run_text=SABOTEUR_RUN)
+        got = run_advance(kit, repo)
+        ok = judge("self-sabotage-void-2", got, want=2,
+                   markers=(VOID_MARKER, f"could not be executed against {repo.resolve()}"),
+                   absent=(PASS_MARKER, FAIL_MARKER, SEAM_RELAY),
+                   repo=repo, want_ref="none")
+        home = tmp / "pinned" / "postconditions" / NAME
+        if not ((home / "seen-green").is_file() and (home / "seen-red").is_file()):
+            print("       a demonstration limb never ran, so the sabotage was never reached")
+            ok = False
+        if os.access(home / "run", os.X_OK):
+            print("       run is still executable, so the graded exec was never denied")
+            ok = False
+        return ok
+
+
 def main() -> int:
     if not TOOL.is_file():
         print(f"seam_court_test: tool not found at {TOOL}", file=sys.stderr)
@@ -306,6 +363,7 @@ def main() -> int:
         did_nothing_case(),
         known_good_case(),
         tools_disabled_case(),
+        self_sabotage_case(),
     ]
     failed = results.count(False)
     print(f"seam_court_test: {len(results) - failed}/{len(results)} cases pass")
