@@ -38,9 +38,9 @@ Story-specific criteria—each dischargeable by a named check:
 - [ ] a failed ref write forces a nonzero exit—verified by `an advance-script fixture with update-ref forced to fail`
 - [ ] a dirty tree at the seam reads could-not-run—verified by `the porcelain-precondition fixture`
 - [ ] red-proof's native exit 2 reads as fail, not could-not-run—verified by `the adaptation fixture`
-- [ ] a parent repository holding live phase worktrees still reads porcelain-empty at the seam, either because the precondition accounts for the worktree path or because the worktrees are placed outside the parent—verified by `a porcelain-precondition fixture case with a phase worktree materialized and the tree otherwise clean`
+- [ ] a parent repository holding a live phase worktree still reads porcelain-empty at the seam because the worktree is placed outside the parent (ADR-0004/D2 decided the arm)—verified by `a porcelain-precondition fixture case with a sequencer-created outside worktree materialized and the parent otherwise clean`
 - [ ] the phase invocation pins its settings sources, so a user-scope hook cannot inject into a phase transcript—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from the phase transcript`
-- [ ] a pinned phase type that does not resolve fails the seam closed rather than being substituted—verified by `an invocation fixture naming a phase type absent from the pinned payload, asserting a nonzero exit and no spawned phase`
+- [ ] a phase brief that does not resolve from pinned material fails closed before any invocation launches—verified by `an invocation fixture with the pinned brief absent, asserting a nonzero exit and no session started` (rewritten for ADR-0004/D1: there is no phase type to substitute; the brief is the composed prompt)
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 

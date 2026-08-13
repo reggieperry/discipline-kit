@@ -33,6 +33,31 @@ context behavior, the strongest resume story, worktree custody with the grader, 
 fence re-homed to per-invocation pinned settings hooks, which the probe measured firing
 under bypass permissions.
 
-## Pass 2 (draft attack)
+## Pass 2 (draft attack), 2026-08-12: REVISE, four blockers, all taken
 
-Recorded after the draft attack runs.
+A fresh-context adversary against the committed draft. B1: "documented main-session
+behavior" for context overflow was unsourced and contradicted by the design's own open item;
+the claim is withdrawn as a ground—context overflow is unmeasured for every candidate—and
+replaced by the fail-closed rule (a compaction event in a phase transcript reads as
+mid-phase death) plus a compaction limb in D5's re-probe. B2: leg 1 was misattributed—its
+invocation was a bare main agent, substrate (ii)'s own shape, so the improvisation evidence
+cuts at every candidate with a main agent on the path; the discriminator is honestly
+restated (one model layer to fence instead of two, one composed channel instead of a
+relayed one) and D3 now denies the spawn tool to phases, with a post-batch transcript audit
+added to D1's courts. B3: the orphaned-worktree question ADR-0003 delegated here was
+undecided; D2 now clears the pinned worktree path at every attempt start, closing the
+measured missing-but-already-registered retry failure. B4: two story criteria carried
+wrapper-era referents; STORY-0005's unresolvable-type criterion is rewritten for the brief,
+and STORY-0006's sequencer-transcript wording now names phase transcripts. Mediums taken:
+leg-3 citation hedged to the corrected record's own wording; the fence mechanism stated as
+the measured project-scope form materialized by the sequencer, unconditional per invocation,
+with the flag-supplied path named unmeasured; STORY-0005's disjunctive worktree criterion
+narrowed to the decided outside arm. Lows taken: the resume wording recast as a choice
+within ADR-0001/D5; the dozen-site walkthrough breadth stated; check.sh's stale
+chain-graph comments corrected. STORY-0012's criteria rebuilt: a positive
+one-invocation-composed-from-pinned-brief criterion, the fresh-attempt criterion, both-trees
+porcelain at the seam, and the spawn-audit court.
+
+## Pass 3 (fix confirmation)
+
+Recorded after the confirmation pass runs.

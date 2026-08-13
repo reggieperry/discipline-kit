@@ -21,21 +21,27 @@ subagents—and it is enumerated here so the record does not decide a fork it ne
 
 Three measured facts discriminate where the capability probe could not:
 
-- **The wrapper is not disinterested.** Leg 1 measured the wrapper's own main agent, told its
-  pinned type was missing, improvising: it substituted another agent type, granted isolation
-  on its own initiative, and took the phase brief from the judged tree—ADR-0001/D3's
-  judged-party-supplies-the-examiner, reached by initiative, inside the candidate substrate.
-  A model layer between the sequencer and the phase is a judgment holder wherever it sits.
+- **A headless main agent improvises, and it holds spawn powers.** Leg 1's invocation was a
+  bare `claude -p`—substrate (ii)'s own shape—and its main agent, told its named type was
+  missing, improvised: substituted another of its five registered spawn targets, granted
+  isolation on its own initiative, and took the brief from the judged tree. That is evidence
+  about *every* candidate that puts a main agent on the path: under (iii) the wrapper holds
+  those powers and additionally relays the brief through a model; under (ii) the phase holds
+  them itself. The discriminator is not that (ii) removes the risk—it is that (ii) has one
+  model layer to fence instead of two. D3 therefore fences it explicitly: the spawn tool is
+  denied to phases.
 - **Worktree custody cannot rest on the harness.** The design's claim that agent worktrees
   are git-excluded is measured false at 2.1.224: the parent's porcelain shows
   `.claude/worktrees/`, which lands directly on ADR-0003/D6's porcelain-empty seam
   precondition. A worktree the sequencer creates itself, outside the parent, has neither
   problem.
 - **The instruction channel must be single-source.** Leg 3 showed the pinned `--agents`
-  definition governs only as the sole source, and the invoking prompt's relayed content
-  overrides it. Under a subagent-spawning substrate the prompt and the definition are two
-  channels to police; under a bare invocation the prompt is the one channel, and the
-  sequencer composes it from the pinned brief.
+  definition governs as the sole source; leg 2 measured that the invoking prompt's relayed
+  content *can* override it and was confounded on where the relay originated (no leg measured
+  the disagreement with the repo file absent). Under a subagent-spawning substrate the brief
+  passes through a model's relay before it reaches the phase; under a bare invocation the
+  prompt is the one channel and the sequencer composes it from the pinned brief—nothing
+  relays.
 
 ## Decisions
 
@@ -45,14 +51,21 @@ Each phase runs as its own `claude -p` invocation; the phase *is* that session's
 No wrapper session, no persistent main loop, no subagent spawn on the advancement path. The
 sequencer (the pinned script of ADR-0003/D2–D4) composes the invocation from pinned
 material, waits for exit, and runs the seam per ADR-0001/D2. Disinterest holds with no
-intermediary to trust; context is bounded at one phase per session with documented
-main-session behavior; a dead phase is re-run under a fresh attempt rather than resumed.
+intermediary relay to police; a dead phase is re-run under a fresh attempt rather than
+resumed. Context overflow is honestly unmeasured for every candidate—the design's own open
+item—so it is not a ground here: instead, a compaction event observed in a phase transcript
+is treated as mid-phase death (D4), the fail-closed reading of the one event that may have
+lost the composed prompt's constraints, and D5's re-probe gains a compaction limb.
 
 ### D2: Attest-only isolation is sequencer-owned worktrees, outside the parent
 
 Where a phase must not touch the primary tree (tester, reviewer), the sequencer creates a
 git worktree at a pinned location outside the parent repository, invokes the phase with that
-working directory, and removes the worktree after the seam. The harness's agent-worktree
+working directory, and removes the worktree after the seam. Death is decided too, because a
+dead phase never reaches the seam: every attempt start first clears the pinned worktree path
+(`git worktree remove --force` where registered, then prune), so the measured
+missing-but-already-registered failure cannot block a retry—fresh attempt, fresh worktree,
+closing the orphan question ADR-0003 delegated here. The harness's agent-worktree
 feature is not on the advancement path: its placement inside the parent and its measured
 non-exclusion are ADR-0003/D6 violations waiting to happen, and custody of the judged tree
 belongs to the thing that grades it.
@@ -62,23 +75,33 @@ belongs to the thing that grades it.
 The invocation carries the sequencer's pinned settings as the only project source and
 excludes user-scope sources entirely—the probe measured a user-scope SessionStart hook
 injecting operator machine identity into phase transcripts, and a phase fence that the
-phased agent's own tree can edit is no fence. The phase brief is composed from the pinned
-brief file (ADR-0003/D4 material); the judged tree carries no `.claude/agents/` directory at
-all, asserted from the filesystem before each phase, so no competing definition source
-exists to be found or improvised from.
+phased agent's own tree can edit is no fence. The fence is delivered by the mechanism the
+probe measured—a project-scope settings file—materialized by the sequencer from pinned
+material into the workspace it owns (the worktree it created, or the dedicated clone), and
+it applies unconditionally per invocation, never keyed on the presence or absence of an
+agent-type field, which the design forbids keying on. It denies the spawn tool to phases:
+no phase may start a subagent (leg 1 measured a headless main agent improvising a spawn),
+and the flag-supplied settings path is unmeasured—if ever relied on, D5's re-probe gains
+that limb first. The phase brief is composed from the pinned brief file (ADR-0003/D4
+material); the judged tree carries no `.claude/agents/` directory at all, asserted from the
+filesystem before each phase, so no competing definition source exists to be found or
+improvised from.
 
 ### D4: Mid-phase death is a fresh attempt, never a resume
 
-A phase that dies mid-run is re-run under a new attempt per ADR-0001/D1's re-walk rule; the
-sequencer never resumes a half-dead phase session. Session ids stay admitted for diagnosis
-per ADR-0001/D5. `--resume` under headless invocation is unmeasured and nothing here may
-come to depend on it without a probe first.
+A phase that dies mid-run—including a phase whose transcript shows a compaction event—is
+re-run under a new attempt per ADR-0001/D1's re-walk rule; the sequencer never resumes a
+half-dead phase session. ADR-0001/D5 admits session ids for resumption; this record simply
+does not use resumption, which is a choice within D5, not a narrowing of it—ids stay read
+for diagnosis. `--resume` under headless invocation is unmeasured and nothing here may come
+to depend on it without a probe first.
 
 ### D5: The enabling facts are version-scoped, and a harness bump re-runs the probe
 
 Every enabling fact is scoped to the measured 2.1.224. A harness version change re-runs the
-D7 probe extended with one limb per D1–D3 reliance (headless completion behavior, worktree
-creation from a pinned path, settings-source pinning taking effect). A future harness
+D7 probe extended with one limb per D1–D4 reliance (headless completion behavior, worktree
+creation from a pinned path, settings-source pinning taking effect, spawn denial holding,
+and compaction behavior under a deliberately oversized phase). A future harness
 restoring repo-level agent registration does not reopen this choice—it tightens D3's
 no-agents-directory assertion, since judged-tree definitions would become live again.
 
@@ -86,8 +109,11 @@ no-agents-directory assertion, since judged-tree definitions would become live a
 
 - The walkthrough's substrate assertion ("the main loop drives") retires: the pinned
   sequencer drives, and phases are sessions. What survives, reworded, is its true half—the
-  merge stage is not an agent, it is the sequencer's (ADR-0002/D1). The surfaces table and
-  Stage D prose inherit the correction with the sequencer build.
+  merge stage is not an agent, it is the sequencer's (ADR-0002/D1). The assertion lives at
+  roughly a dozen walkthrough sites (the surfaces table, its Stage C/D prose, and the
+  D3/D5/D7 rows), all of which inherit the correction with the sequencer build. And
+  ADR-0003/D6's "a dedicated session" reads per-phase under this record—a run owns its
+  sessions, plural; the obligation is unchanged.
 - ADR-0003/D7 is fulfilled, not superseded: this is the successor record its closure clause
   names, and D1–D6 of ADR-0003 bind this substrate unchanged.
 - The `agent_type`-keyed PreToolUse fence the design sketched for attest-only phases is
@@ -113,8 +139,10 @@ no-agents-directory assertion, since judged-tree definitions would become live a
 - **One-shot wrapper sessions spawning one phase subagent each** (this record's own
   pre-draft hypothesis): keeps every verified session property, but the wrapper is a model
   layer holding judgment on the advancement path—measured improvising a brief from the
-  judged tree when its pinned type was missing—and it keeps the subagent context-overflow
-  hole open while doubling the instruction channels to police. Its one distinct purchase,
+  judged tree when its pinned type was missing—and it doubles the instruction channels to
+  police, adding a model-relayed brief (the measured override channel) to the composed one.
+  Context overflow is unmeasured under every candidate and discriminates nothing. Its one
+  distinct purchase,
   the `agent_type`-keyed fence, is replaced by D3's per-invocation settings hooks. Rejected
   as dominated once the fence is re-homed.
 - **Harness-managed agent worktrees for isolation** (under any substrate): placement inside
@@ -130,9 +158,11 @@ no-agents-directory assertion, since judged-tree definitions would become live a
 Per decision, courts named honestly—future checks are future, unwatched conditions read as
 unwatched:
 
-- **D1**: a phase executed as a subagent, or any wrapper return string consumed on an
-  advancement path. Court: the D5 grep-shaped source check of ADR-0001 (STORY-0006), one
-  pattern wider—future, named in STORY-0012.
+- **D1**: a phase executed as a subagent, a spawn event in any phase transcript, or any
+  wrapper return string consumed on an advancement path. Courts: the D5 grep-shaped source
+  check of ADR-0001 (STORY-0006), one pattern wider; and the post-batch transcript audit
+  (audit, not control flow, per ADR-0001/D5's shape) flagging any task-start event in a
+  phase transcript—both future, named in STORY-0012.
 - **D2**: a seam evaluation with a worktree present inside the parent, or an attest-only
   phase run in the primary tree. Court: STORY-0005's porcelain fixture gains a required
   live-worktree case; the worktree-custody fixture lands with STORY-0012—future.

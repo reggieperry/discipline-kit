@@ -44,16 +44,25 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
+- [ ] each phase runs as exactly one headless invocation whose prompt is composed from the
+      pinned brief file and nothing else—verified by `the invocation-builder fixture comparing
+      the composed prompt byte-for-byte against the pinned brief`
 - [ ] a phase run with a decoy user-scope SessionStart hook shows no injected content in its
-      transcript—verified by `the invocation-audit fixture ADR-0004/D3 names`
+      transcript—verified by `the settings-pinning fixture (the per-invocation twin of
+      STORY-0006's sequencer-level case, cross-referenced there)`
 - [ ] a `.claude/agents/` directory in the judged tree at phase start is a named finding,
       absence asserted from the filesystem—verified by `the pre-phase assertion's known-bad fixture`
 - [ ] an attest-only phase runs in a sequencer-created worktree outside the parent, removed
-      after the seam, with the parent porcelain empty throughout—verified by `the
-      worktree-custody fixture, including STORY-0005's required live-worktree porcelain case`
-- [ ] no advancement-path source spawns a subagent, consumes a wrapper return string, or
-      depends on --resume—verified by `the D5 grep-shaped source check, one pattern wider per
-      ADR-0004/D1 and D4`
+      after the seam, with porcelain empty in BOTH trees at the seam (the parent, and the
+      worktree the phase ran in, per ADR-0003/D6's every-seam rule)—verified by `the
+      worktree-custody fixture, including STORY-0005's live-worktree porcelain case`
+- [ ] a dead or compaction-marked phase is re-run under a fresh attempt with the pinned
+      worktree path cleared first—verified by `the fresh-attempt fixture killing a phase
+      mid-run and asserting the retry succeeds at the same pinned path`
+- [ ] no phase can spawn a subagent, and no advancement-path source consumes a wrapper
+      return string or depends on --resume—verified by `the D5 grep-shaped source check, one
+      pattern wider, plus the post-batch transcript audit flagging any task-start event in a
+      phase transcript`
 - [ ] a harness version differing from the profile's pin re-runs the extended probe before
       any phase—verified by `the version-gate fixture`
 

@@ -37,7 +37,7 @@ Story-specific criteria—each dischargeable by a named check:
 
 - [ ] derived position equals planted refs across the fixture repository—verified by `the position fixture named in ADR-0001's Falsification section`
 - [ ] no sequencer source reads the log, status frontmatter, or stream verdict fields for control flow—verified by `the D5 grep-shaped source check`
-- [ ] the sequencer's own invocation pins its settings sources, so a user-scope hook cannot inject into the run it drives—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from the sequencer's transcript`
+- [ ] the sequencer's own invocation pins its settings sources, so a user-scope hook cannot inject into the run it drives—verified by `an invocation fixture run with a decoy user-scope SessionStart hook, asserting the hook's marker is absent from every phase transcript the run produced (the sequencer itself is a script under ADR-0004/D1 and has no transcript)`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each before hand-off:
 
