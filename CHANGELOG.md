@@ -4,6 +4,8 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 ## Unreleased — the dev-ledger removed
 
+- **The chain's first end-to-end walk ran live (2026-08-14), and the pinned root is provisioned.** Two headless phases under `invoke.py run` at harness 2.1.224 (the pin—no re-probe owed), the advance seam recording both phase refs, position clean, and `merge.py merge` passing all eight conjuncts before the merge-local act advanced a dedicated zero-remote clone's `main` by compare-and-swap with the `Merged-Story` trailer; the record, the transcript audit (clean, no spawn event), and a revert sanity check all landed. The receipt-complete wrapper STORY-0007 recorded as owed now exists as pinned material fixing the `chain/receipt.txt` convention. The walk record with seven findings—the stream-naming/audit-glob coupling, the driver-harvest pattern owed to the sequencer story, repointed-HOME git-identity, the honest spawn-denial bound—is `docs/probe/first-walk-2026-08-14.md`.
+
 **Removed the dev-ledger and everything that prompted for it.** Its own record decided this: 284
 entries, 140 signed, and every one of the 140 cited the same authority — `repo-check`, i.e. the
 repo's mechanical check. There was never a second signing authority, so the claim algebra over the
