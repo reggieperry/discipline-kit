@@ -72,3 +72,28 @@ would answer for; the two adversary passes above inform that read and substitute
 record's uncomfortable finding—that on the reference host the trust boundary the session had
 assumed is false, and a phase can reach the real trunk with the ambient credential even
 attended—is accepted as the measured state, and INSTALL-HARDENING.md is the owed path out of it.
+
+## Pass 3 (D7 amendment, operator-directed), 2026-08-15: REVISE taken; the parking lifted as a superseding Decision, not an edit
+
+The operator directed that the unattended-run envelope be specified and built ahead of the
+hardening. A fresh-context adversary attacked the amendment before it committed. Verdict REVISE,
+both blockers taken:
+
+- **Instrument.** The proposal to replace D2's parking clause violated the kit's supersede-never-edit
+  rule. Taken as a new Decision D7 that supersedes D2's drafting-parking clause in part: D2's text
+  stays, marked in place; the Status line carries the amendment; the registry reflects the
+  self-supersession; D2's isolation precondition and its four conditions stand. This deep-reason
+  pass is D7's acceptance gate; the operator's direction is its acceptance.
+- **Safety.** "The runner calls the gate" was under-specified. D7 now requires the start gate built
+  and fixture-tested before the runner; the runner starting only on an affirmative exit-0 clear, with
+  an absent/non-executable/unreadable gate a refuse condition (never a missing result read as clear);
+  and an out-of-band integrity precheck (the gate root-owned and not writable by the run-user or
+  operator), because a stubbed gate cannot run its own examiner-ownership check—the circular guard
+  the precheck closes. Build and test run against fixtures and stubbed gate results only, never a
+  live unattended run and never a real-gate stub-to-clear on the reference host.
+
+The adversary confirmed the substance is safe: a phase on the unhardened host already reaches the
+trunk with the ambient credential (D4/D3), so building the envelope ahead does not widen the
+malicious blast radius; the strengthenings guard the accident, drift, and self-inflicted-in-testing
+paths. The honest ceiling is restated in D7: this trades defense-by-nonexistence for
+defense-by-fail-closed-gate, a weaker guarantee, and a built, ready envelope is not a blessing to run.

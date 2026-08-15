@@ -1,6 +1,8 @@
 # ADR-0005: The containment posture—the fence is friction, and isolation is the precondition for unattended work
 
-**Status:** Accepted (2026-08-15), on the operator's read.
+**Status:** Accepted (2026-08-15), on the operator's read; amended 2026-08-15, D2's
+drafting-parking clause superseded in part by D7 (operator-directed, deep-reason gate recorded in
+the review file). D2's isolation precondition, its four conditions, and D1/D3/D4/D5/D6 stand.
 Acceptance gate: two deep-reason passes recorded in
 [reviews/ADR-0005-deep-reason.md](reviews/ADR-0005-deep-reason.md)—the pre-draft pass that
 measured the framing's blast-radius bound false on the reference host and reset the record's
@@ -91,7 +93,9 @@ operation is refused there now, and the honest posture is attended-only—a huma
 briefs and watching the run, accepting in real time a risk no fence bounds. The unattended-run
 envelope record (cron, locking, budget) is downstream of this one and may not be drafted until
 D2's gate and D5's sandbox both exist, because an unattended chain over an unhardened host is the
-exact configuration this record refuses.
+exact configuration this record refuses. **[This drafting-parking clause is superseded in part by
+D7: the envelope may be built ahead of the hardening, gate-enforced at runtime. D2's isolation
+precondition and its four conditions stand.]**
 
 Covered-by: none—its court, the unattended-start gate, is owed with the unattended-run envelope and blocked on this record's acceptance; no story is written until then.
 
@@ -179,6 +183,45 @@ have it scrubbed and fail loudly; the reference host uses `ANTHROPIC_API_KEY`, w
 
 Covered-by: none—it labels the shipped deny list and the sequencer's environment scrub as friction; both already exist.
 
+### D7: The unattended-run envelope may be built ahead of the hardening, because a fail-closed start gate keeps the refused configuration refused at runtime, on conditions that preserve the refusal
+
+By operator decision (2026-08-15), the unattended-run envelope (cron, locking, budget) may be
+specified and built ahead of the hardening, superseding D2's clause that parked its drafting until
+D2's gate and D5's sandbox exist. What that clause protected—that an unattended chain over an
+unhardened host is the configuration this record refuses—is preserved not by the envelope's
+nonexistence but by the envelope's runner enforcing the unattended-start gate at runtime, on all of
+the following conditions:
+
+1. The start gate (INSTALL-HARDENING Step 6) is built and fixture-tested before the envelope
+   runner—one planted hole per condition, each alone yielding exit 2 naming that condition—so the
+   runner has a real, tested gate to call rather than a specced absence. The gate is buildable now
+   and, being fail-closed, refuses on the reference host (exit 2); building it first lifts nothing
+   D2 refuses.
+2. The runner invokes the gate as its first act, as the declared run-user in Step 6's
+   `sudo -u RUN_USER env -i …` form, and starts the run only on an affirmative exit-0 clear. Every
+   other outcome refuses: a nonzero exit, and equally an absent, non-executable, or unreadable
+   gate—absence is a refuse condition, never a missing result read as clear.
+3. Before trusting a clear, the runner verifies the gate's own integrity—the gate binary is
+   root-owned and not writable by the run-user or the operator (Step 3 applied to the `sequencer/`
+   path the gate lives under)—and refuses otherwise. Without this, a phase on the unhardened host,
+   where the pinned root is still owner-writable, stubs the gate to `exit 0` and the runner reads
+   the stub as clear; a stubbed gate does not run its own examiner-ownership check, so the integrity
+   precheck is the only non-circular guard, and it folds the stub into fail-closed.
+4. Building and testing the envelope run against fixtures and stubbed gate results only—a throwaway
+   pinned root, gate stubs returning each of clear, exit 2, and absent, asserting the runner starts
+   only on clear. It never performs a live unattended run against the reference host, and never
+   stubs the real gate to clear to exercise the runner there—that self-inflicted stub is the exact
+   refused configuration.
+
+The gate is therefore not a precondition for writing the envelope but a precondition the envelope
+enforces at runtime, with the gate's integrity checked out-of-band by the runner. This trades D2's
+defense-by-nonexistence for defense-by-fail-closed-gate—a weaker guarantee, honestly labeled: it
+holds only while the runner fails closed on an absent, stubbed, or non-clear gate, and
+permissibility to run remains the gate's clear, reachable only on a hardened host, not the
+envelope's readiness. A built, ready envelope is not a blessing to run.
+
+Covered-by: none—owed to the Step-6 start-gate story and the unattended-run envelope story, written next; the runner's gate-invocation-and-integrity check is D7's falsifier's court.
+
 ## Consequences
 
 - Unattended operation is gated behind an OS-isolation precondition the reference host does not
@@ -186,7 +229,7 @@ Covered-by: none—it labels the shipped deny list and the sequencer's environme
   reach are fixed. This is a cost accepted deliberately: the alternative—unattended work over a
   host where a phase runs as the operator with passwordless root—is the configuration D2 exists
   to refuse.
-- The unattended-run envelope record is blocked on D2's gate and inherits it as a precondition.
+- The unattended-run envelope may be built ahead of the hardening per D7, with its runner enforcing the start gate at runtime; the start gate is built and fixture-tested first.
 - The forged-ref and record-tamper residues stay open and disclosed in the merge record's
   `not-established` lines, now with a record that consciously owns them rather than a defer with
   no destination.
@@ -261,6 +304,12 @@ dressed as mechanical.
 - **D6**: a spawn vector not covered by the deny list, or a `CLAUDE`-named auth variable broken by
   the scrub. Court: the D5 probe re-run on a harness version bump (ADR-0004/D5), which enumerates
   the phase's tool list; future, version-gated.
+- **D7**: a built envelope runner starting an unattended run on a host where the start gate is
+  absent, stubbed, non-root-owned, or returns non-clear. Court: the runner's fail-closed gate
+  invocation (exit-0-only, gate-integrity precheck) plus the gate's own fixture tests (one planted
+  hole per condition yields exit 2); it shares D2's court, the unattended-start gate, and inherits
+  the standard it must beat—a partial or bypassable gate is worse than none. Named here, built with
+  the start-gate and envelope stories.
 
 ## Cross-references
 
@@ -274,7 +323,7 @@ dressed as mechanical.
 - Superseded by: None.
 - Related: `docs/probe/d5-limbs-probe-2026-08-15.md` (the spawn-surface and scrub measurements),
   `docs/probe/first-walk-2026-08-14.md` (the dedicated-clone model and repo-local identity), and
-  the owed unattended-run envelope record (blocked on D2's gate). The `INSTALL-HARDENING.md` of
+  the owed unattended-run envelope (built ahead per D7, gate-enforced at runtime, the start gate built first). The `INSTALL-HARDENING.md` of
   D5 is the owed deliverable this record specifies.
 
 
