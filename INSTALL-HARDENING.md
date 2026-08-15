@@ -38,7 +38,11 @@ precondition ADR-0005/D2 gates unattended operation behind.
 
 Placeholders used throughout: `RUN_USER` is the dedicated account (suggested `chainrunner`);
 `ROOT` is the pinned root from `profile.toml` (`/var/lib/discipline-chain`); `OPERATOR` is the
-operator's login and `~OPERATOR` their home.
+operator's login and `~OPERATOR` their home. Substitute them in every pasteable block before
+running it—an unsubstituted `RUN_USER` makes `sudo -u RUN_USER` error "unknown user", which
+most measurements catch fail-closed but which is noise you do not want to debug mid-apply. The
+measurement blocks use bash features (`< <(…)` process substitution, `$(( 8#$mode … ))` base
+notation); run them under bash, not dash or an interactive zsh, or the octal read is wrong.
 
 ## Step 1—a dedicated unprivileged run-user
 
@@ -70,10 +74,20 @@ and nothing else rides along:
 
 ```
 sudo -u RUN_USER env -i \
-     HOME=/home/RUN_USER PATH=/usr/bin:/bin \
+     HOME=/home/RUN_USER PATH=/usr/bin:/bin:/opt/claude/bin \
      ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
      claude -p "<phase prompt>" --output-format stream-json --verbose ...
 ```
+
+Two things about that invocation. The `claude` binary must be on the allowlisted `PATH` and
+readable by the run-user: a per-user install under the operator's `0750` home is unreachable, so
+install it system-wide or give the run-user its own copy and name its directory in `PATH` (shown
+as `/opt/claude/bin`). And the invocation contract changes once Steps 4 and 5 land: the current
+`--dangerously-skip-permissions` flag the invocation layer uses is blocked when launched via
+`sudo` on Linux and is disabled outright by Step 4's `disableBypassPermissionsMode`, so under the
+hardened posture the phase relies on the sandbox and the managed allow-rules instead of the skip
+flag. Plan that change into the sequencer with the hardening; the flag and the hardened posture
+cannot both hold.
 
 **The measurement.** Three checks, and their polarities differ—do not conflate them:
 
@@ -247,6 +261,7 @@ JSON
 
 ```
 stat -c '%U %G %a %n' /etc/claude-code/managed-settings.json   # expect: root root 644 ...
+# run AS THE OPERATOR, never as root—root's sudo -n always exits 0 and reads a false FAIL:
 sudo -n true 2>/dev/null && echo "FAIL: NOPASSWD present" || echo "PASS: sudo needs a password"
 python3 - <<'PY'
 import json; d=json.load(open('/etc/claude-code/managed-settings.json'))
@@ -346,8 +361,17 @@ The conditions, each with its exit-2-on-failure probe:
 3. the run-user resolves no push credential—`gh auth token` empty, `git credential fill` returns
    no secret, no token in the environment (Step 2's real test, not a file stat).
 4. the per-run directories are run-user owned (Step 3).
-5. a `bwrap --unshare-user` probe succeeds (Step 5).
+5. a `bwrap --unshare-user` probe succeeds AND the pinned or managed settings carry
+   `sandbox.enabled: true` and `sandbox.failIfUnavailable: true` (Step 5). The bwrap probe alone
+   is insufficient and would reproduce Step 5's own trap: Claude Code fails open, so a host where
+   bwrap can start but the sandbox is not enabled runs the phase unsandboxed while a gate checking
+   only the probe reports the tier in place. The settings assertion is what closes it.
 6. the clone's remotes match the declared expectation (`--expect-remotes`).
+
+These six omit Step 4's managed-settings tier deliberately, matching ADR-0005/D2's falsifier: a
+clear gate means unattended operation may begin, not that every step in this file is applied.
+Step 4 is a defense-in-depth tier the operator verifies with its own measurement, not a condition
+the start gate reads.
 
 It follows the kit's three-valued court convention (exit 0 clear, 2 could-not-run) and is testable
 the way `profile-check.sh` is: point it at a throwaway pinned root with one planted hole per
