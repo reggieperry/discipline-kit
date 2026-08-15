@@ -69,21 +69,21 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] each of the six conditions, planted as a lone hole against an otherwise-clear throwaway host,
+- [x] each of the six conditions, planted as a lone hole against an otherwise-clear throwaway host,
       yields exit 2 naming exactly that condition—verified by `the gate fixture's one-planted-hole-per-condition
       cases (six known-bad, one all-clear)`
-- [ ] a fully-clear throwaway host yields exit 0—verified by `the gate fixture's all-clear case`
-- [ ] the gate run as root or as an identity other than the declared run-user refuses (exit 2),
+- [x] a fully-clear throwaway host yields exit 0—verified by `the gate fixture's all-clear case`
+- [x] the gate run as root or as an identity other than the declared run-user refuses (exit 2),
       never a false clear—verified by `the gate fixture's wrong-identity known-bad case`
-- [ ] an unmeasurable condition (a missing probe tool, an unreadable path) exits 2, never a
+- [x] an unmeasurable condition (a missing probe tool, an unreadable path) exits 2, never a
       skip-to-clear—verified by `the gate fixture's unmeasurable-condition known-bad case`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each
 before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 
