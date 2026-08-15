@@ -36,3 +36,30 @@ held; the load-bearing half did not. Findings taken into the draft:
 
 The draft lands Proposed. The second deep-reason pass attacks the drafted record before the
 operator's read; its verdict is recorded below this entry.
+
+## Pass 2 (draft attack), 2026-08-15: REVISE, two blockers, all findings taken
+
+A fresh-context adversary against the drafted record re-ran the host probes (all held) and
+attacked the reasoning. Two blockers, both taken:
+
+- **B1—D2 over-scoped its own bound.** The draft said run-identity isolation "makes any
+  blast-radius bound true"; it does not, because with the sandbox unavailable a phase still reads
+  world-readable files and reaches the network within the run-user's authority, and D5 itself
+  names the sandbox a separate tier. D2 now scopes its bound to what run-identity buys
+  (escalation, examiner, credential, cross-run) and states the read/network/exec bound rests on
+  D5's sandbox, so unattended requires D2 and the sandbox together—reconciling the D2/D5
+  disagreement the pass flagged.
+- **B2—D4 misstated the trunk boundary and courted the wrong actor.** The draft said the trunk
+  is reached "only through a human act"; on the reference host a phase pushes to `main` with the
+  ambient token, no human act, independent of terminal posture. The D4 falsifier cited merge.py's
+  guarded push, which binds the sequencer's terminal act, not a phase's own `git`. D4 now states
+  the human act is the sole crossing only under D2's credential isolation, that the reference host
+  is compromised at the trunk even attended, and the falsifier distinguishes the sequencer-push
+  court from the phase-push path that only D2 closes. A Consequences line makes the attended-host
+  trunk exposure explicit.
+
+Refinements taken: the D2 court now enumerates all four conditions plus the sandbox probe (a
+partial gate is worse than none); the D3 audit citation corrected to ADR-0003's D2/D3 falsifier
+and called a future court; the Context examiner-root descriptor corrected to owner-writable
+(measured `0755`, not group-writable). D1's prose-watched court is kept as a labeled review
+discipline. The revised record lands Proposed for the operator's read.

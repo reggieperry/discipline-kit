@@ -35,8 +35,8 @@ clone to be false there, which is the fact this record is built around:
   The sandbox is the only surveyed mechanism that reaches inside `bash -c` and `python -c`.
 - `/etc/claude-code/managed-settings.json` is absent, and its tier is a trust root only if
   passwordless sudo is removed first, which it is not.
-- The pinned examiner root `/var/lib/discipline-chain` is owner- and group-writable by that uid
-  and is shared across the operator's real clone and every dedicated clone.
+- The pinned examiner root `/var/lib/discipline-chain` is writable by that uid (its owner) and is
+  shared across the operator's real clone and every dedicated clone.
 - The operator's real checkout is reachable by absolute path and carries a public GitHub `origin`;
   the gh push token at the operator home's `.config/gh/hosts.yml` is readable by that uid via an
   absolute path, which the invocation layer's HOME repoint does not protect—it defeats `~`-relative and
@@ -79,13 +79,19 @@ dedicated unprivileged run-identity holds, established and checked, not assumed:
 - the per-run writable directories (`worktrees/`, `streams/`, `records/`) are owned by the
   run-user or mounted per run, so one run cannot corrupt another's evidence.
 
-This is the decision that makes any blast-radius bound true: only under it does "the worst a
-phase does is corrupt its own run's writable set" hold. On the reference host none of these
-holds today, so unattended operation is refused there now, and the honest posture is
-attended-only—a human authoring the briefs and watching the run, accepting the un-contained risk
-in real time. The unattended-run envelope record (cron, locking, budget) is downstream of this
-one and may not be drafted until D2's gate exists, because an unattended chain over an unhardened
-host is the exact configuration this record refuses.
+Run-identity isolation is necessary but not sufficient, and the record states which half it buys.
+It bounds privilege escalation, examiner poisoning, publish-credential reach, and cross-run
+corruption—the writes and reaches that leave the run. It does not bound what a phase reads or
+does within the run-user's own authority: with the sandbox unavailable, `bash -c` still runs
+arbitrary code as the run-user, so world-readable operator files are still readable and the
+network is still reachable. That in-interpreter read/network/exec bound is D5's sandbox tier, not
+this one. So unattended operation requires D2's run-identity isolation and D5's sandbox together;
+either alone leaves the other half open. On the reference host neither holds, so unattended
+operation is refused there now, and the honest posture is attended-only—a human authoring the
+briefs and watching the run, accepting in real time a risk no fence bounds. The unattended-run
+envelope record (cron, locking, budget) is downstream of this one and may not be drafted until
+D2's gate and D5's sandbox both exist, because an unattended chain over an unhardened host is the
+exact configuration this record refuses.
 
 Covered-by: none—its court, the unattended-start gate, is owed with the unattended-run envelope and blocked on this record's acceptance; no story is written until then.
 
@@ -105,23 +111,34 @@ agent-writable.
 
 Covered-by: none—it consumes a residue rather than closing it; the audit it names is ADR-0003/D2's.
 
-### D4: The trust boundary is the operator's own act at the trunk, per terminal posture, and it is unmechanizable acceptance rather than containment
+### D4: The intended trunk crossing is the operator's own act, unmechanizable acceptance rather than containment—and it is the sole crossing only under D2's credential isolation
 
-What a phase produces reaches the real trunk only through a human act, and which act depends on
-the terminal posture ADR-0002/D1 sets:
+The crossing the chain is designed around is a human act, and which act depends on the terminal
+posture ADR-0002/D1 sets:
 
 - under `merge-local`, the operator reads the chain-built commit's diff and cherry-picks it into
   the real checkout (the transplant the first production story used);
 - under `open-pr`, the chain publishes the story branch and the operator merges the PR.
 
 Neither act is forced and both can be rubber-stamped; nothing mechanically compels the read.
-ADR-0002/D1 already states the trunk crossing is a judgment act by design, and this record keeps
-it as exactly that—the residual acceptance of the risk the fence did not contain, honestly
-labeled, not dressed as a mechanism. On an unhardened host this human act is stacked on a broken
-blast-radius bound, so it is one thin layer over another, not one thin over one solid—the second
-reason D2 is a precondition rather than a nicety.
+ADR-0002/D1 already holds the trunk crossing as a judgment act, and this record keeps it as
+exactly that—the residual acceptance of the risk the fence did not contain, honestly labeled.
 
-Covered-by: none—it labels an existing human act as the acceptance of record, not a mechanism, so nothing is built.
+But this is the *sole* trunk crossing only when the run-identity cannot reach a publish
+credential—D2's third condition. On the reference host it can: a phase holding Bash reads the
+ambient gh token by absolute path and runs `git push` to the public `origin`'s `main`, or `sudo
+-n` to root, advancing the trunk with no human act, no PR, and no merge stage. This path is
+independent of the terminal posture: `merge-local`'s "the chain never pushes" and `open-pr`'s
+guarded push both bind only the sequencer's terminal act, never a phase's own `git`. So on this
+host the human act is not the trunk boundary—it is one boundary a phase can route around, and
+attendance narrows the window to notice an atomic push after it lands, not to prevent it. The
+honest statement: under `open-pr` or `merge-local` alike, on a host where the run-identity can
+read a push token, the trunk is reachable without the operator's act, and the only remedy is
+D2's credential isolation, which is host hardening and not a posture toggle. This is the second
+reason D2 is a precondition and not a nicety, and it holds for attended operation too, not only
+unattended.
+
+Covered-by: none—it labels an existing human act as the acceptance of record and names where a phase routes around it; the remedy is D2's credential isolation, and nothing new is built here.
 
 ### D5: The hardening is an install checklist the machine supplies and the kit cannot, each step carrying the measurement that says whether it took
 
@@ -178,6 +195,12 @@ Covered-by: none—it labels the shipped deny list and the sequencer's environme
   they are not.
 - The human trunk act stays the acceptance of record and is never presented as a mechanism, so a
   green chain run is never a reason to skip the diff read.
+- On the reference host the trunk is reachable by a phase's own `git push` with the ambient token,
+  independent of terminal posture and of attendance, so attended operation here accepts a
+  direct-to-trunk risk mitigated only by operator-authored briefs and the operator's watch—not by
+  any fence or by the human merge. Closing it is D2's credential-isolation condition, which is why
+  a dedicated no-credential run-user is the highest-value hardening step even before unattended
+  operation is contemplated.
 
 ## Alternatives
 
@@ -208,18 +231,28 @@ dressed as mechanical.
 - **D1**: a phase escaping a friction layer that the record had counted as containment—vacuous by
   construction, since D1 counts none; the standing check is that no downstream record or code
   comment cites a fence as containment. Court: review of any such citation; future, prose-watched.
-- **D2**: an unattended run beginning on a host where `sudo -n true` succeeds for the run-user, or
-  where a pinned examiner path is group- or other-writable. Court: the unattended-start gate—a
-  fail-closed startup check that runs `sudo -n true` and `stat`s the examiner material and refuses
-  to run otherwise—named here, built with the unattended-run envelope, and its absence is why
-  unattended operation is refused until it exists.
+- **D2**: an unattended run beginning on a host that meets fewer than all four of D2's conditions
+  plus D5's sandbox. Court: the unattended-start gate—a fail-closed startup check that must
+  enumerate every condition, not a representative subset, because a gate checking two of them
+  blesses a host that fails the other two: `sudo -n true` fails for the run-user; every pinned
+  examiner path is root-owned and not writable by the run-user; the run-user cannot read any
+  publish-credential path (`stat` the known token locations for run-user readability—the bound
+  the sandbox-absent host most needs); the per-run directories are run-user-owned; and a bwrap
+  map probe succeeds. Named here, built with the unattended-run envelope; its absence, and the
+  fact that a partial gate is worse than none, is why unattended operation is refused until the
+  whole gate exists.
 - **D3**: a forged or deleted `refs/chain` ref reaching a signed outcome undetected. Court: the
-  offline `refs/chain`-versus-event-log reconciliation ADR-0003/D2 names as audit; honest bound,
-  the log is agent-writable, so the court narrows evidence, not capability—review-watched.
-- **D4**: a chain-built commit reaching the real trunk with no human act. Under `merge-local` the
-  chain never pushes and the transplant is a hand cherry-pick, so this is structurally refused;
-  under `open-pr` the guard that the chain never pushes `main` (merge.py's composed-destination
-  refusal, live) is the court, with the human PR merge the acceptance beyond it—review-watched.
+  offline `refs/chain`-versus-event-log reconciliation ADR-0003's D2/D3 falsifier names as audit,
+  a future court; honest bound, the log is agent-writable, so it narrows evidence, not
+  capability—review-watched.
+- **D4**: a chain-built commit, or any commit, reaching the real trunk with no human act. The
+  named guard—merge.py's composed-destination refusal, live—binds only the *sequencer's* terminal
+  push, so it is the court for the chain's own act and nothing more. It does not bind a *phase's*
+  own `git push` with an ambient token, which reaches `main` directly on the reference host; that
+  path is closed only by D2's credential-isolation condition, whose absence is exactly why the
+  trunk boundary is compromised here even under attended operation—review-watched, and the honest
+  reading is that on this host there is no mechanical trunk court against a phase, only D2's
+  hardening once it lands.
 - **D5**: an install step asserted applied whose measurement was not run. Court: each checklist
   step carries its own probe (`sudo -n true`, `stat`, a bwrap map attempt), and the startup gate
   re-runs the mechanical ones; a step with no measurement is the defect.
