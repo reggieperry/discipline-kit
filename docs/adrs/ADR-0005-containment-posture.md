@@ -235,9 +235,11 @@ dressed as mechanical.
   plus D5's sandbox. Court: the unattended-start gate—a fail-closed startup check that must
   enumerate every condition, not a representative subset, because a gate checking two of them
   blesses a host that fails the other two: `sudo -n true` fails for the run-user; every pinned
-  examiner path is root-owned and not writable by the run-user; the run-user cannot read any
-  publish-credential path (`stat` the known token locations for run-user readability—the bound
-  the sandbox-absent host most needs); the per-run directories are run-user-owned; and a bwrap
+  examiner path is root-owned and not writable by the run-user; the run-user resolves no
+  publish credential (`gh auth token` and `git credential fill` return nothing and no token
+  stands in the environment—the test that exercises the credential path, since
+  INSTALL-HARDENING.md Step 2 found the reference host's token in the secret-service keyring, so
+  a file stat reads clean vacuously); the per-run directories are run-user-owned; and a bwrap
   map probe succeeds. Named here, built with the unattended-run envelope; its absence, and the
   fact that a partial gate is worse than none, is why unattended operation is refused until the
   whole gate exists.
