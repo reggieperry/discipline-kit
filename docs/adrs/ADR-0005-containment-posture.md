@@ -97,8 +97,6 @@ exact configuration this record refuses. **[This drafting-parking clause is supe
 D7: the envelope may be built ahead of the hardening, gate-enforced at runtime. D2's isolation
 precondition and its four conditions stand.]**
 
-Covered-by: none—its court, the unattended-start gate, is owed with the unattended-run envelope and blocked on this record's acceptance; no story is written until then.
-
 ### D3: The forged-ref residue is consumed, not closed
 
 A phase holds Bash in the same clone whose `refs/chain/*` the seam writes, so it can forge a
@@ -166,7 +164,7 @@ On the reference host the checklist's honest output is that the two real-contain
 containment is not established and D2 refuses unattended operation—recorded as the machine's
 measured state, not as a step deferred to someday.
 
-Covered-by: none—INSTALL-HARDENING.md is the owed deliverable this record specifies, blocked on acceptance; no story is written until then.
+Covered-by: none—INSTALL-HARDENING.md is the deliverable this record specifies; it is written, and being a doc it is covered by its own existence, not by a story. Its Step-6 gate is built by STORY-0015 (which covers D2).
 
 ### D6: Tool-availability deny and the environment scrub are hygiene the sequencer owns, counted as friction
 
@@ -219,8 +217,6 @@ defense-by-nonexistence for defense-by-fail-closed-gate—a weaker guarantee, ho
 holds only while the runner fails closed on an absent, stubbed, or non-clear gate, and
 permissibility to run remains the gate's clear, reachable only on a hardened host, not the
 envelope's readiness. A built, ready envelope is not a blessing to run.
-
-Covered-by: none—owed to the Step-6 start-gate story and the unattended-run envelope story, written next; the runner's gate-invocation-and-integrity check is D7's falsifier's court.
 
 ## Consequences
 
