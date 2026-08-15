@@ -4,6 +4,8 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 ## Unreleased — the dev-ledger removed
 
+- **ci.yml delegates to check.sh; the mirror retires.** The recorded follow-up (CI mirrored 5 of 30 invocations while every push read green) is closed by the drift-killing form: CI installs shellcheck and runs `scripts/check.sh` whole, so a check added to the commit path is in CI the same commit and there is no list to keep identical. Check-surface work, landed operator-side—the chain's own conjunct 2 parks any story diff touching `.github/workflows/`, and profile-check inside conjunct 1 refuses the trusted-base narrowing that would evade it, which is the anti-weakening architecture composing as designed.
+
 - **STORY-0013 built: the sequencer script — one pinned driver from start-attempt to the terminal
   act.** `harness/chain/sequencer.py`, one act (`run`), encoding the first walk's order so nothing
   is re-derived by hand: per phase `invoke run` → `seam-check` → the harvest (lineage-checked

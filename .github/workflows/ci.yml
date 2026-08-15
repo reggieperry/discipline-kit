@@ -2,11 +2,14 @@ name: ci
 
 # A discipline kit whose own repo has no gate is an argument against itself. This runs the kit's
 # acceptance suite on every push and PR. Read-only permissions and no secrets, so fork PRs are safe
-# by default (the jobs never need any). No external toolchains — bash, python3, and git only.
+# by default (the jobs never need any).
 #
-# Keep this list identical to `scripts/check.sh`, which is what the commit path runs. A check that
-# runs locally but not in CI passes review and fails nobody; a check that runs in CI but not locally
-# is discovered at push time. CONTRIBUTING.md tells contributors these are the same set.
+# CI runs `scripts/check.sh` — the same script the commit path runs — rather than mirroring its
+# invocations step by step. The mirror was the defect: it drifted to 5 of 30 invocations while
+# every push read green, and no court reads this file to catch it. Delegation kills the class; a
+# check added to check.sh is in CI the same commit, with no list to keep identical. Toolchain:
+# bash, python3 (3.11+ for tomllib), git, and shellcheck — the one tool the suite needs that the
+# runner does not carry, installed below from the distribution archive.
 on:
   push:
     branches: [main]
@@ -20,20 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: scrub-gate (no private identifiers anywhere)
-        run: bash scrub-gate.sh
+      - name: install shellcheck
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
 
-      - name: rule enforcement grades declared and in-vocabulary
-        run: python3 harness/rule_grades.py
-
-      - name: rule-grade checker discriminates (fixture)
-        run: python3 harness/fixtures/rule_grades_test.py
-
-      - name: differential gate unit tests (36 stdlib tests, incl. the Java toolchain)
-        run: python3 reference/test_sdlc_gate.py
-
-      # Fails closed if any base law or laundering exhibit in the algebra note regresses — a
-      # reintroduced glut-identity laundering fails CI by name rather than by a silent diff.
-      - name: algebra-note validator
-        run: python3 harness/algebra/validate_note.py
+      - name: the commit-path suite, whole
+        run: bash scripts/check.sh
