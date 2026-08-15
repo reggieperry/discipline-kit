@@ -56,11 +56,11 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] the walkthrough contains zero occurrences of "main loop" and remains a substantially intact
+- [x] the walkthrough contains zero occurrences of "main loop" and remains a substantially intact
       document naming the sequencer as the driver—verified by `the walkthrough-corrected pinned
       postcondition (grep zero, length floor, the sequencer named), graded at the phase seam and
       re-graded at the merged tree by conjunct 1's suite`
-- [ ] the correction is chain-built: two live phases under sequencer.py run, phase refs recorded,
+- [x] the correction is chain-built: two live phases under sequencer.py run, phase refs recorded,
       the coverage receipt complete, all eight merge conjuncts passing, and the merge-local act
       advancing the dedicated clone's main—verified by `the composed merge record's merge_ok line
       and the sequencer's exit 0`
@@ -68,9 +68,9 @@ Story-specific criteria—each dischargeable by a named check:
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each
 before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 

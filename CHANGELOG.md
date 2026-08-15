@@ -4,6 +4,8 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 ## Unreleased — the dev-ledger removed
 
+- **STORY-0014: the chain's first production story, built by the sequencer.** One invocation of `sequencer.py run` in a fresh dedicated clone walked the walkthrough's substrate correction end to end: two live phases (the builder reworded all 13 "main loop" sites to the sequencer substrate per ADR-0004's Consequences, preserving every true claim and the document's exact length; the reviewer emitted the 53-rule receipt), both phase refs recorded, all eight merge conjuncts passing, the merge-local act advancing the clone's main with the trailer, the post-batch audit clean — exit 0. The walkthrough commit is transplanted here by operator cherry-pick, the merge-local posture's trunk crossing. The run's own preamble shows the walk findings enforced by code: seven session variables scrubbed by name, identity and posture gated, streams composed `*.jsonl`.
+
 - **ci.yml delegates to check.sh; the mirror retires.** The recorded follow-up (CI mirrored 5 of 30 invocations while every push read green) is closed by the drift-killing form: CI installs shellcheck and runs `scripts/check.sh` whole, so a check added to the commit path is in CI the same commit and there is no list to keep identical. Check-surface work, landed operator-side—the chain's own conjunct 2 parks any story diff touching `.github/workflows/`, and profile-check inside conjunct 1 refuses the trusted-base narrowing that would evade it, which is the anti-weakening architecture composing as designed.
 
 - **STORY-0013 built: the sequencer script — one pinned driver from start-attempt to the terminal
