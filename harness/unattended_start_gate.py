@@ -110,7 +110,8 @@ EXAMINER_SUBDIRS = ("settings", "briefs", "postconditions", "phases", "rules", "
 PER_RUN_SUBDIRS = ("worktrees", "streams", "records")
 
 MANAGED_SETTINGS = Path("/etc/claude-code/managed-settings.json")
-CREDENTIAL_ENV_KEYS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+CREDENTIAL_ENV_KEYS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN",
+                       "GITHUB_ENTERPRISE_TOKEN", "SSH_AUTH_SOCK")
 PROBE_TIMEOUT = 30
 LISTED = 20
 
@@ -218,11 +219,18 @@ def identity_probe(run_user: str) -> ProbeResult:
     return holds(IDENTITY, f"this process runs as {run_user!r} (uid {current})")
 
 
-def sudo_probe(run_user: str) -> ProbeResult:
-    """Step 1: no passwordless sudo, and no sudo at all, read at both polarities."""
+def sudo_probe(run_user: str, env: dict[str, str] | None = None) -> ProbeResult:
+    """Step 1: no passwordless sudo, and no sudo at all, read at both polarities.
+
+    `env` defaults to the process environment, which is the real measurement; the fixture passes a
+    shimmed environment to drive the definitive-no-sudo HOLDS branch and the password-required
+    UNMEASURABLE branch, neither of which a non-root host can otherwise produce.
+    """
+    world = os.environ if env is None else env
     try:
         passwordless = subprocess.run(
-            ["sudo", "-n", "true"], capture_output=True, text=True, timeout=PROBE_TIMEOUT
+            ["sudo", "-n", "true"], capture_output=True, text=True, timeout=PROBE_TIMEOUT,
+            env=dict(world),
         )
     except FileNotFoundError:
         return unmeasurable("run-identity-sudo", "sudo is not installed, so the no-sudo condition "
@@ -235,7 +243,7 @@ def sudo_probe(run_user: str) -> ProbeResult:
     try:
         listing = subprocess.run(
             ["sudo", "-n", "-l", "-U", run_user], capture_output=True, text=True,
-            timeout=PROBE_TIMEOUT,
+            timeout=PROBE_TIMEOUT, env=dict(world),
         )
     except (OSError, subprocess.TimeoutExpired) as e:
         return unmeasurable("run-identity-sudo", f"sudo -l -U {run_user} could not be "
@@ -316,18 +324,22 @@ def credential_probe(run_user: str, env: dict[str, str] | None = None) -> ProbeR
 
     `env` defaults to the process environment, which is the real measurement; the fixture passes a
     shimmed environment to prove the probe consults `gh` and `git` rather than statting a file, the
-    reversion Step 2 names as vacuous here.
+    reversion Step 2 names as vacuous here. A forwarded ssh-agent socket (`SSH_AUTH_SOCK`) is a
+    reachable push credential too, so it is among the environment keys that fail this condition:
+    with `--expect-remotes none` an explicit `ssh://` or `git@` push URL plus a forwarded agent
+    reaches the trunk while the remote list reads clean.
     """
     cond = "credential-reach"
     world = dict(os.environ) if env is None else dict(env)
     reaches: list[str] = []
+    gh_present = True
     try:
         gh = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, env=world,
                             timeout=PROBE_TIMEOUT)
         if gh.returncode == 0 and gh.stdout.strip():
             reaches.append("gh auth token resolves a token")
     except FileNotFoundError:
-        pass
+        gh_present = False
     except (OSError, subprocess.TimeoutExpired) as e:
         return unmeasurable(cond, f"gh auth token could not be measured: {e}")
     try:
@@ -345,11 +357,12 @@ def credential_probe(run_user: str, env: dict[str, str] | None = None) -> ProbeR
         return unmeasurable(cond, f"git credential fill could not be measured: {e}")
     present = [k for k in CREDENTIAL_ENV_KEYS if world.get(k)]
     if present:
-        reaches.append(f"a push token stands in the environment ({', '.join(present)})")
+        reaches.append(f"a publish credential stands in the environment ({', '.join(present)})")
     if reaches:
         return failed(cond, "the run-user reaches a publish credential: " + "; ".join(reaches))
-    return holds(cond, "no publish credential resolves: gh auth token empty, git credential fill "
-                 "returns no secret, no token in the environment")
+    gh_note = "gh auth token empty" if gh_present else "gh absent"
+    return holds(cond, f"no publish credential resolves: {gh_note}, git credential fill returns "
+                 "no secret, no publish credential in the environment")
 
 
 def per_run_ownership_probe(pinned_root: Path, run_user: str) -> ProbeResult:

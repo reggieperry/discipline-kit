@@ -29,6 +29,11 @@ be tested without root is tested directly.
   credential-gh-token-fails  a shim gh that resolves a token       -> FAILED, the token unprinted
   credential-clean-holds     shims that resolve nothing            -> HOLDS
   credential-env-token-fails a token in the environment            -> FAILED, the value unprinted
+  credential-git-absent-2    an empty PATH resolves no git         -> UNMEASURABLE, never clean
+  credential-ssh-agent-fails SSH_AUTH_SOCK in the environment      -> FAILED, the agent named
+  sudo-holds                 a shim reporting no sudo at all       -> HOLDS
+  sudo-password-required-2   a shim needing a password to query    -> UNMEASURABLE, never clean
+  sudo-passwordless-fails    a shim where sudo -n true succeeds    -> FAILED
   identity-current-holds     the current euid's own account        -> HOLDS
   identity-root-fails        a run-user of root                    -> FAILED, uid 0 named
   identity-mismatch-fails    a real account that is not this one   -> FAILED
@@ -36,6 +41,7 @@ be tested without root is tested directly.
   per-run-owned-holds        per-run dirs owned by the run-user    -> HOLDS
   per-run-missing-2          a per-run dir absent                  -> UNMEASURABLE
   examiner-scope-excludes-per-run  a sentinel under worktrees      -> never read, examiner is
+  examiner-write-none-unmeasurable  a dangling link in the examiner-> UNMEASURABLE, never skipped
   settings-carry-sandbox     enabled+failIfUnavailable, or not     -> True, False, None
   sandbox-holds              a succeeding bwrap and enabled settings-> HOLDS
   sandbox-bwrap-fails        a failing bwrap                       -> FAILED, bwrap named
@@ -226,6 +232,8 @@ def credential_gh_token_case() -> bool:
         shim(bindir, "gh", "#!/usr/bin/env bash\necho FAKE-TOKEN-VALUE\n")
         shim(bindir, "git", "#!/usr/bin/env bash\ncat >/dev/null 2>&1\nexit 0\n")
         env = clean_env()
+        for key in gate.CREDENTIAL_ENV_KEYS:
+            env.pop(key, None)
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
         res = gate.credential_probe("someuser", env=env)
         ok = (res.status is FAILED and "gh auth token resolves a token" in res.detail
@@ -256,6 +264,8 @@ def credential_env_token_case() -> bool:
         shim(bindir, "gh", "#!/usr/bin/env bash\nexit 1\n")
         shim(bindir, "git", "#!/usr/bin/env bash\ncat >/dev/null 2>&1\nexit 0\n")
         env = clean_env()
+        for key in gate.CREDENTIAL_ENV_KEYS:
+            env.pop(key, None)
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
         env["GH_TOKEN"] = "FAKE-ENV-TOKEN"
         res = gate.credential_probe("someuser", env=env)
@@ -378,6 +388,81 @@ def sandbox_cases() -> list[bool]:
     ]
 
 
+def examiner_write_none_case() -> bool:
+    """The mandatory fail-closed branch: an undecidable write attempt reads UNMEASURABLE, not clean.
+
+    A broken symlink in an examiner subtree makes `writable_by_write_attempt` return None (the write
+    could not be decided). The gate must fail closed on that, not skip it. A dangling link is a real
+    way the probe cannot prove a path not-writable, and skipping it is the surviving mutant this
+    pins.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td) / "pinned"
+        root.mkdir()
+        for name in gate.EXAMINER_SUBDIRS:
+            (root / name).mkdir()
+        for name in gate.PER_RUN_SUBDIRS:
+            (root / name).mkdir()
+        (root / "settings" / "dangling").symlink_to(Path(td) / "nonexistent-target")
+        res = gate.examiner_ownership_probe(root, "someuser")
+        ok = res.status is UNMEAS and "could not be decided" in res.detail
+    return show("examiner-write-none-unmeasurable", ok, f": {res.status.value}")
+
+
+SUDO_HOLDS = ('#!/usr/bin/env bash\n'
+              'for a in "$@"; do [ "$a" = "-l" ] && { '
+              'echo "User someuser is not allowed to run sudo on host."; exit 0; }; done\n'
+              'exit 1\n')
+SUDO_PASSWORD_REQUIRED = ('#!/usr/bin/env bash\n'
+                          'for a in "$@"; do [ "$a" = "-l" ] && { '
+                          'echo "sudo: a password is required" >&2; exit 1; }; done\n'
+                          'exit 1\n')
+SUDO_PASSWORDLESS = '#!/usr/bin/env bash\nexit 0\n'
+
+
+def sudo_shim_case(name: str, script: str, want, marker: str) -> bool:
+    with tempfile.TemporaryDirectory() as td:
+        bindir = Path(td) / "bin"
+        bindir.mkdir()
+        shim(bindir, "sudo", script)
+        env = clean_env()
+        env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
+        res = gate.sudo_probe("someuser", env=env)
+        ok = res.status is want and marker in res.detail
+    return show(name, ok, f": {res.status.value}")
+
+
+def credential_git_absent_case() -> bool:
+    """git absent reads UNMEASURABLE, never a skip-to-clear: an empty PATH resolves no git."""
+    with tempfile.TemporaryDirectory() as td:
+        bindir = Path(td) / "bin"
+        bindir.mkdir()
+        env = clean_env()
+        for key in gate.CREDENTIAL_ENV_KEYS:
+            env.pop(key, None)
+        env["PATH"] = str(bindir)
+        res = gate.credential_probe("someuser", env=env)
+        ok = res.status is UNMEAS and "git is not installed" in res.detail
+    return show("credential-git-absent-2", ok, f": {res.status.value}")
+
+
+def credential_ssh_agent_case() -> bool:
+    """A forwarded ssh-agent socket is a reachable push credential, so credential-reach FAILS."""
+    with tempfile.TemporaryDirectory() as td:
+        bindir = Path(td) / "bin"
+        bindir.mkdir()
+        shim(bindir, "gh", "#!/usr/bin/env bash\nexit 1\n")
+        shim(bindir, "git", "#!/usr/bin/env bash\ncat >/dev/null 2>&1\nexit 0\n")
+        env = clean_env()
+        for key in gate.CREDENTIAL_ENV_KEYS:
+            env.pop(key, None)
+        env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
+        env["SSH_AUTH_SOCK"] = "/run/ssh-agent.sock"
+        res = gate.credential_probe("someuser", env=env)
+        ok = res.status is FAILED and "SSH_AUTH_SOCK" in res.detail
+    return show("credential-ssh-agent-fails", ok, f": {res.status.value}")
+
+
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, str(GATE), *args], capture_output=True, text=True,
                           env=clean_env())
@@ -388,7 +473,8 @@ def cli_wrong_identity_case() -> bool:
         got = run_cli("--run-user", "root", "--pinned-root", td, "--clone", td,
                       "--expect-remotes", "none")
     said = got.stdout + got.stderr
-    ok = got.returncode == gate.REFUSED and gate.IDENTITY in said and "REFUSED" in said
+    ok = (got.returncode == gate.REFUSED and gate.IDENTITY in said
+          and "the identity self-guard did not hold" in said)
     return show("cli-wrong-identity-root-2", ok, f": exit {got.returncode}")
 
 
@@ -416,6 +502,11 @@ def main() -> int:
         credential_gh_token_case(),
         credential_clean_case(),
         credential_env_token_case(),
+        credential_git_absent_case(),
+        credential_ssh_agent_case(),
+        sudo_shim_case("sudo-holds", SUDO_HOLDS, HOLDS, "may not run sudo"),
+        sudo_shim_case("sudo-password-required-2", SUDO_PASSWORD_REQUIRED, UNMEAS, "password"),
+        sudo_shim_case("sudo-passwordless-fails", SUDO_PASSWORDLESS, FAILED, "passwordless"),
         identity_current_case(),
         identity_root_case(),
         identity_mismatch_case(),
@@ -423,6 +514,7 @@ def main() -> int:
         per_run_holds_case(),
         per_run_missing_case(),
         examiner_scope_case(),
+        examiner_write_none_case(),
         settings_carry_case(),
         *sandbox_cases(),
 
