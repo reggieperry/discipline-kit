@@ -861,6 +861,32 @@ PLANTED = {
 }
 
 
+# The second named exemption site, and its two still-fires companions. The stream-file pattern
+# is exempt inside `composed_stream` and nowhere else, for that pattern ONLY: the sequencer
+# COMPOSES the stream names the audit globs (the write side of the walk's finding 2), and
+# composing the suffix from fragments to evade the court would be the composed-key evasion the
+# check's own docstring names. A stream literal outside that function must still fire, and a
+# parse inside it must still fire — the exemption never reaches harness-json.
+COMPOSER_OK = '''def composed_stream(pinned, story, number, phase):
+    return pinned / "streams" / story / f"attempt-{number}" / f"p{phase}.jsonl"
+'''
+
+COMPOSER_LEAK = '''def composed_stream(pinned, story, number, phase):
+    return pinned / f"p{phase}.jsonl"
+
+
+def elsewhere(pinned):
+    return pinned / "stray.jsonl"
+'''
+
+COMPOSER_PARSES = '''import json
+
+
+def composed_stream(pinned, line):
+    return json.loads(line)
+'''
+
+
 def source_tree(td: Path, files: dict[str, str]) -> Path:
     directory = td / "chain"
     directory.mkdir(parents=True)
@@ -985,6 +1011,15 @@ def main() -> int:
         source_case("source-allowlist-exempt-0", {"core.py": CLEAN_CORE}, want=0,
                     marker="1 admitted reader"),
         *[source_planted_case(name) for name in sorted(PLANTED)],
+        source_case("source-stream-in-composer-0",
+                    {"core.py": CLEAN_CORE, "seq.py": COMPOSER_OK},
+                    want=0, marker="file(s) examined"),
+        source_case("source-stream-outside-composer-1",
+                    {"core.py": CLEAN_CORE, "seq.py": COMPOSER_LEAK},
+                    want=1, marker="stream-file"),
+        source_case("source-json-in-composer-1",
+                    {"core.py": CLEAN_CORE, "seq.py": COMPOSER_PARSES},
+                    want=1, marker="harness-json"),
         source_verdict_in_reader_case(),
         source_widened_allowlist_case(),
         source_no_allowlist_case(),
