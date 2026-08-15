@@ -1,12 +1,12 @@
 # ADR-0005: The containment posture—the fence is friction, and isolation is the precondition for unattended work
 
-**Status:** Proposed (2026-08-15).
-Pre-draft acceptance gate: one deep-reason pass, recorded in
-[reviews/ADR-0005-deep-reason.md](reviews/ADR-0005-deep-reason.md), which measured the framing's
-blast-radius bound false on the reference host and reset the record's spine. Acceptance is
-reserved for the operator's own read, because this record's subject is exactly how much a phase
-can reach that the operator would answer for; an adversary pass informs that read and substitutes
-for nothing.
+**Status:** Accepted (2026-08-15), on the operator's read.
+Acceptance gate: two deep-reason passes recorded in
+[reviews/ADR-0005-deep-reason.md](reviews/ADR-0005-deep-reason.md)—the pre-draft pass that
+measured the framing's blast-radius bound false on the reference host and reset the record's
+spine, and the draft-attack pass that rescoped D2's bound and corrected D4's trunk boundary—and,
+because this record's subject is exactly how much a phase can reach that the operator would answer
+for, the operator's own reading, given 2026-08-15, which no adversary pass substitutes for.
 
 ## Context
 

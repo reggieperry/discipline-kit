@@ -63,3 +63,12 @@ partial gate is worse than none); the D3 audit citation corrected to ADR-0003's 
 and called a future court; the Context examiner-root descriptor corrected to owner-writable
 (measured `0755`, not group-writable). D1's prose-watched court is kept as a labeled review
 discipline. The revised record lands Proposed for the operator's read.
+
+## Accepted, 2026-08-15
+
+The operator read the revised record and accepted it. The read is the acceptance gate this record
+reserved from the first draft, because its subject is how much a phase can reach that the operator
+would answer for; the two adversary passes above inform that read and substitute for nothing. The
+record's uncomfortable finding—that on the reference host the trust boundary the session had
+assumed is false, and a phase can reach the real trunk with the ambient credential even
+attended—is accepted as the measured state, and INSTALL-HARDENING.md is the owed path out of it.
