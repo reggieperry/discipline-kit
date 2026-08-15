@@ -359,7 +359,8 @@ The conditions, each with its exit-2-on-failure probe:
 2. every pinned examiner path is root-owned and not run-user-writable, proven by a write attempt
    as the run-user, not only by octal mode (Step 3).
 3. the run-user resolves no push credential—`gh auth token` empty, `git credential fill` returns
-   no secret, no token in the environment (Step 2's real test, not a file stat).
+   no secret, no token and no forwarded ssh-agent socket (`SSH_AUTH_SOCK`) in the environment
+   (Step 2's real test, not a file stat).
 4. the per-run directories are run-user owned (Step 3).
 5. a `bwrap --unshare-user` probe succeeds AND the pinned or managed settings carry
    `sandbox.enabled: true` and `sandbox.failIfUnavailable: true` (Step 5). The bwrap probe alone

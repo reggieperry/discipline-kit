@@ -112,6 +112,13 @@ python3 harness/fixtures/merge_test.py
 # whole two-phase story through one invocation: phases, seams, harvest, merge-local, and the
 # post-batch transcript audit, with the walk's four findings each pinned by a named case.
 python3 harness/fixtures/sequencer_test.py
+# STORY-0015's unattended-start gate (ADR-0005/D2, INSTALL-HARDENING Step 6), on the same boundary
+# as the loader's and the core's: the gate reads host state and REFUSES on an unhardened host
+# (exit 2), so wiring the TOOL onto the commit path would block every commit rather than report a
+# defect, exactly as core.py and loader.py VOID until the pinned root exists. Only the fixture is
+# wired; it injects probe results to drive the orchestration and tests the root-free probe logic
+# against throwaway trees, so it needs no run-user, no removed sudo, and no sandbox.
+python3 harness/fixtures/unattended_start_gate_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
 # nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators

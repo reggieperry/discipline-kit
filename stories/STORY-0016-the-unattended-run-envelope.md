@@ -108,6 +108,11 @@ before hand-off:
   on a stubbed-clear or writable gate, which the criteria catch).
 - Depends on STORY-0015 (the start gate must be built and fixture-tested first, per D7 condition 1)
   and STORY-0013 (the sequencer it wraps).
+- The runner must invoke the gate with the same environment a phase gets. The gate's
+  credential-reach condition measures reachability under the gate's own `PATH` and environment, so
+  a `gh` or credential present to a phase but absent to the gate would read clear while the phase
+  can still push. Invoke the gate in Step 6's `sudo -u RUN_USER env -i …` form, the same allowlist a
+  phase is spawned under, so the gate measures the environment it is certifying.
 - ADR-0005/D7's honest ceiling holds here: this runner being built and ready is not a blessing to
   run. Permissibility to run remains the gate's clear, reachable only on a hardened host, and on the
   reference host the runner refuses.
