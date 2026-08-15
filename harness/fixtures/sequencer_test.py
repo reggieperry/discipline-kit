@@ -563,10 +563,15 @@ def phase_death_resume_case() -> bool:
             faults.append(f"expected two phase-2 spawns in all, saw {b.logged('ran phase-2')}")
         if not (b.stream_dir(1) / "p2.prior1.jsonl").is_file():
             faults.append("the dead phase's stream was not preserved aside")
+        if not (b.stream_dir(1) / "p2.prior1.jsonl.stderr").is_file():
+            faults.append("the dead phase's stderr sidecar was not preserved aside")
         if not (b.stream_dir(1) / "p2.jsonl").is_file():
             faults.append("the re-run phase left no fresh stream")
+        # The prior stream is IN the audit corpus (three transcripts) and the sidecars stay
+        # OUT of it: the .jsonl.stderr suffix never matches the audit's glob.
         resumed = judge("phase-death-resume (resume)", second, want=0,
-                        marker="resuming attempt 1", present=("renamed aside",),
+                        marker="resuming attempt 1",
+                        present=("renamed aside", "3 transcript(s) examined"),
                         faults=tuple(faults))
         return died and resumed
 
@@ -595,8 +600,12 @@ def rewalk_trio_case() -> bool:
         faults = merged_faults(b, 2)
         if not (b.stream_dir(2) / "p1.jsonl").is_file():
             faults.append("attempt 2 composed no streams of its own")
+        # The audit must be scoped to the CURRENT attempt's directory, asserted on its own
+        # examined-under line: an audit pointed one level up still reads a plausible
+        # denominator through the recursive glob while mixing attempts' evidence.
         r2 = judge("fresh-attempt-0", third, want=0, marker="deleting the branch",
-                   present=("fresh attempt 2 of",), faults=tuple(faults))
+                   present=("fresh attempt 2 of", f"examined under {b.stream_dir(2)},"),
+                   faults=tuple(faults))
         return r0 and r1 and r2
 
 
@@ -643,6 +652,28 @@ def table_case(name: str, manifest: str | None, *, marker: str,
         elif manifest is None:
             present = (str(b.pinned / "phases" / STORY),)
         return judge(name, got, want=2, marker=marker, present=present, faults=faults)
+
+
+def record_preplanted_case() -> bool:
+    """A pre-planted merge record for the selected attempt refuses before any spend.
+
+    Without the walk-entry check, both phases run (full live spend), both refs record, and the
+    merge stage VOIDs record-refused — the attempt is then permanently wedged out of merge,
+    because a re-run reads attempt-concluded. The refusal must land with the stub log absent.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        b = Bench(Path(td))
+        planted = b.record(1)
+        planted.parent.mkdir(parents=True)
+        planted.write_text("PLANTED-BEFORE-THE-RUN\n")
+        got = b.run()
+        faults = []
+        if b.log.is_file():
+            faults.append("a phase was spawned although the record already existed")
+        if planted.read_text() != "PLANTED-BEFORE-THE-RUN\n":
+            faults.append("the pre-planted record was overwritten")
+        return judge("record-preplanted-2", got, want=2, marker="record-preexists",
+                     present=(str(planted), "--record"), faults=tuple(faults))
 
 
 def hostile_branch_case() -> bool:
@@ -702,6 +733,7 @@ def main() -> int:
         phase_death_resume_case(),
         rewalk_trio_case(),
         park_rerun_reconcile_case(),
+        record_preplanted_case(),
 
         table_case("table-absent-2", None, marker="phase-table-absent"),
         table_case("table-malformed-2", "1 phase-1-build\n",

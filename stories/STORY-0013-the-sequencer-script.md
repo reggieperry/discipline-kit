@@ -136,3 +136,9 @@ before hand-off:
   2, criteria 2, reference pattern 2, verification 2, frontmatter 2—tight band; the two open
   questions above are design-pass inputs, not spec gaps, and are recorded here rather than
   silently repaired.
+- Review finding F4, left as recorded (reviewer-adjudicated, no action here): the D5 source
+  check's two named exemption sites (`admitted_signals`, `composed_stream`) are matched by
+  function NAME, not by file, so any source defining a function under either name gains that
+  exemption—a pre-existing shared class, and the check prints every site in its denominators on
+  every run, which is the loud half. Bounding the site count (or pinning each site to its one
+  file) is a candidate future court story.

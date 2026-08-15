@@ -31,6 +31,13 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
   still fires). `SEQUENCER_SOURCES` gains the module (the completeness case forced it),
   `harness/fixtures/sequencer_test.py` joins check.sh with 18 cases over stub harnesses that
   dispatch on the composed prompt itself, and the eight-module live source check runs clean.
+  Post-review (MERGE_SAFE, both ratified calls upheld, three findings taken): a pre-planted
+  merge record for the selected attempt now refuses zero-spend at walk entry
+  (`record-preexists` — previously both phases were spent before the merge stage VOIDed and the
+  attempt wedged), the dead phase's stderr sidecar is renamed aside with its stream so the
+  death diagnosis survives a re-run, and the fresh-attempt case pins the post-batch audit to
+  the current attempt's directory on its own examined-under line — the reviewer's surviving
+  mutant (the audit pointed one level up, hidden by the recursive glob), now killed.
 
 - **STORY-0013 authored: the sequencer script.** The first walk was driven by hand, and the story turns its runbook and findings into the spec for the pinned driver ADR-0004/D1 names: one module chaining startup, start-attempt, the per-phase invoke/seam/harvest/advance sequence, position, the merge stage, and the post-batch audit, with the walk's four operator-discipline findings (jsonl stream naming, harvest ordering, the session-environment scrub, repo-local identity) as named fixture cases. Grounded at HEAD file:line, tight-band scored, two design-pass questions recorded rather than repaired; status draft pending that pass.
 

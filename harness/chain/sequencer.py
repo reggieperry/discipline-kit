@@ -83,6 +83,10 @@ miscount — the table is the operator's declaration, the same trust class as th
 court is review of pinned material. A Bash-holding phase can write into `streams/` from its own
 worktree's path — it can manufacture alarm and truncate its own live stream; the audit's honest
 bound already discloses the class, and closure is the containment posture's, not this module's.
+The same reach extends to `records/`: the selected attempt's record is checked absent at walk
+entry, so a PRE-planted record refuses with nothing spent, but one planted MID-run still wedges
+the merge stage after the phases were spent (record-refused; the re-entry is the manual merge
+with an explicit --record), and closure is the same hardening's.
 
 Usage:
     python3 harness/chain/sequencer.py run --root <kit> --repo <clone> --story <id>
@@ -492,14 +496,39 @@ def composed_stream(pinned: Path, story: str, number: int, phase: int) -> Path:
             prior += 1
         aside = directory / f"p{phase}.prior{prior}.jsonl"
         path.rename(aside)
-        say(f"sequencer: prior stream at {path} renamed aside to {aside}; a dead phase's "
-            "evidence stays in the audit corpus")
+        # The stderr sidecar the spawn writes beside the stream moves with it: the re-run's
+        # spawn re-opens the sidecar name truncating, and a dead phase's stderr can carry the
+        # death diagnosis. The aside name keeps the .stderr tail, so it stays outside the
+        # audit's stream glob.
+        sidecar = directory / (path.name + ".stderr")
+        if sidecar.exists():
+            sidecar.rename(directory / (aside.name + ".stderr"))
+        say(f"sequencer: prior stream at {path} renamed aside to {aside}, its stderr sidecar "
+            "with it; a dead phase's evidence stays in the audit corpus")
     return path
 
 
 def merge_record(pinned: Path, story: str, number: int) -> Path:
     """The composed record path merge.py arms for one attempt; presence means concluded."""
     return pinned / merge.RECORDS / story / f"merge-{number}.record"
+
+
+def refuse_preexisting_record(pinned: Path, story: str, number: int) -> None:
+    """A record already standing at the SELECTED attempt's composed path stops the walk cold.
+
+    The merge stage writes each record exactly once and refuses an existing file, so a walk
+    into an attempt whose record pre-exists would spend every phase and then VOID at the merge
+    — and the re-run would read attempt-concluded, wedging the attempt out of merge entirely.
+    Refusing here costs nothing and names the remedy.
+    """
+    record = merge_record(pinned, story, number)
+    if record.exists():
+        raise CouldNotRun(
+            f"record-preexists: {record} exists before attempt {number} has run, and the "
+            "merge stage writes each record exactly once, so it would refuse after every "
+            "phase was spent; delete the foreign file, or take the merge by hand with an "
+            "explicit --record"
+        )
 
 
 def selected_attempt(a: argparse.Namespace, repo: Path, story: str, pinned: Path,
@@ -517,11 +546,13 @@ def selected_attempt(a: argparse.Namespace, repo: Path, story: str, pinned: Path
                 "concluded and re-invoking without the flag resumes it; a fresh attempt "
                 "abandons graded phases only after the merge stage has spoken"
             )
+        refuse_preexisting_record(pinned, story, derived + 1)
         number, _ = core.start_attempt(repo, story, invoke.worktree_root(pinned))
         say(f"sequencer: fresh attempt {number} of {story}; attempt {derived} concluded at "
             f"{record}")
         return number, 0
     if derived == 0:
+        refuse_preexisting_record(pinned, story, derived + 1)
         number, _ = core.start_attempt(repo, story, invoke.worktree_root(pinned))
         say(f"sequencer: attempt {number} of {story} starts at phase 1")
         return number, 0
