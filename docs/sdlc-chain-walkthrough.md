@@ -20,12 +20,12 @@ Everything below happens on one of four, and which one matters more than it look
 | Surface | Can it check a fact? | Notes |
 |---|---|---|
 | **Operator** | yes | Decides, agrees, merges. The only surface with authority over what reaches main. |
-| **Main loop** | **yes** | The interactive session. Holds context, runs git and the suite. Sequences the chain and computes every phase verdict. |
+| **Sequencer** | **yes** | The pinned script, not a session. Runs git and the suite. Sequences the chain and computes every phase verdict. |
 | **Subagent** | yes, but reports as testimony | Fresh context. Optional worktree. Must commit or its work is auto-cleaned. |
 | **Workflow script** | **no** | No filesystem, no subprocess, no network. Deterministic control flow only. Admissible *inside* a phase, never as the spine. |
 | **Git hook** | yes | Runs on the bytes being committed, fires inside subagent worktrees, regardless of which agent acts. |
 
-The rule that follows from the table: **the main loop drives.** A workflow cannot sequence the
+The rule that follows from the table: **the sequencer drives.** A workflow cannot sequence the
 phases, because it runs to completion before returning and a re-derived verdict is needed *between*
 them.
 
@@ -57,7 +57,7 @@ summing to 21 only by leaving the one `built` row out of its own arithmetic.
 | D4 tester | **partial** | the differential exists — `reference/sdlc-gate.py`, 1619 lines, Checks A/B/D, suppressions and skip markers — and is wired into no phase |
 | D5 reviewer | not built | |
 | D6 documenter | not built | |
-| D7 merge stage (main loop, not an agent) | not built | **build this first** — incl. trusted-base exclusion and sha pinning |
+| D7 merge stage (the sequencer's, not an agent) | not built | **build this first** — incl. trusted-base exclusion and sha pinning |
 | E1 the verdict | not built | the conjunct set of §4.12 |
 | E2 veto window, then merge | **partial** | `git merge --no-ff` works; the refusing wrapper, the `Merged-Story:` trailer, and the window do not exist |
 | E3 archive | not built | |
@@ -225,24 +225,24 @@ go false by routine maintenance, since a `git mv` would un-land a merged story.
 The strict witness decides; a loose scan exists only to catch it reading false. Disagreement is named
 and loud: `SQUASHED`, or `MERGED-UNRECORDED` when a tip is an ancestor with no merge record.
 
-**The main loop branches on the exit code, never the prose** — and treats exit 0 with empty stdout, or
+**The sequencer branches on the exit code, never the prose** — and treats exit 0 with empty stdout, or
 a missing terminal OK line, as a **broken instrument** rather than "nothing to do". `git for-each-ref`
 on an empty namespace and `git ls-tree` on a missing path both print nothing and exit 0.
 
 ### C2 · Take the first READY story
 
-The main loop spawns phase 1. Stage D runs once per story.
+The sequencer invokes phase 1. Stage D runs once per story.
 
 ---
 
 ## Stage D — One story through the chain
 
-Five agent phases, then a main-loop merge stage. The pattern is identical each time and is the design's central property: **the main loop
-spawns the subagent, the subagent returns, the main loop cuts its own scratch worktree from that
-phase's ref and evaluates the predicate itself, then spawns the next.** No agent computes whether the
-chain advances.
+Five agent phases, then a merge stage the sequencer runs itself. The pattern is identical each time
+and is the design's central property: **the sequencer invokes the phase as its own session, the
+session exits, the sequencer cuts its own scratch worktree from that phase's ref and evaluates the
+predicate itself, then invokes the next.** No agent computes whether the chain advances.
 
-Two conditions hold on every main-loop verdict:
+Two conditions hold on every verdict the sequencer signs:
 
 - **Pin the environment at the point of signing.** Scripts that read tunables from the environment,
   with a gitignored `.envrc` in play, mean the signing surface is weakenable by state no `git diff`
@@ -251,7 +251,7 @@ Two conditions hold on every main-loop verdict:
   relative to its own path runs the *worktree's* copy — letting the judged party supply its own
   examiner. `git checkout $BASE -- scripts .githooks build.sbt` into the scratch tree first.
 - **Pin the verdict against a phase that could not act, before trusting it.** Run a phase with every
-  write path withheld and assert the main loop reports FAILURE. This is not optional and it is not
+  write path withheld and assert the sequencer reports FAILURE. This is not optional and it is not
   defensive: measured, such a phase reports `subtype: "success"`, `is_error: false`, an empty
   `permission_denials`, and exit 0 while doing nothing at all. A verdict without this test is
   verified only by never having been given a phase that could not act.
@@ -260,15 +260,15 @@ Two conditions hold on every main-loop verdict:
 
 Subagent, no worktree. Reads the ADR and its cited sources; parks the plan and its obligation rows.
 
-**Before it starts, the main loop derives the completeness mode** from what the story cites —
+**Before it starts, the sequencer derives the completeness mode** from what the story cites —
 `enumerable` if it cites a document and a locus, `listed` if whole documents, `prose` if nothing.
 Derived, never declared: a planner that chose its own mode would be the party judged picking its own
 standard, and the incentive runs one way. Derivation is monotonic toward the strong end; nobody
 reaches a weaker mode than their citations support.
 
 **Completion:** every unit extracted from the source is accounted for by at least one plan row, with
-the denominator printed — "47 numbered results in §8 examined, 0 unclaimed". Re-derived by the main
-loop. **No source resolves → VOID, not a pass.**
+the denominator printed — "47 numbered results in §8 examined, 0 unclaimed". Re-derived by the
+sequencer. **No source resolves → VOID, not a pass.**
 
 **On failure:** not-plannable is a typed park, never a bounce. There is nothing upstream.
 
@@ -285,16 +285,16 @@ check" are the same output and different facts.
 The commit fires the repo's `pre-commit` hook, which runs the gate on the actual bytes. That makes a
 commit partly self-certifying — but only partly, which is why the next step exists.
 
-**Completion:** the commit exists, and the main loop **re-runs the gate on that tree** with a
+**Completion:** the commit exists, and the sequencer **re-runs the gate on that tree** with a
 base-provided examiner. The hook is not the verdict; it is a first line that runs in the right place.
 
 **On failure:** back to the worker within the bounce budget.
 
 ### D3 · Completeness check — plan to code
 
-Main loop, no agent. A set difference: did every obligation the plan parked get an answer? Mechanical
-and re-derivable, and it runs **here**, before the tester, because it is grep-shaped and the tester is
-a full suite run. Cheapest gate first.
+The sequencer runs this one itself, with no agent. A set difference: did every obligation the plan
+parked get an answer? Mechanical and re-derivable, and it runs **here**, before the tester, because
+it is grep-shaped and the tester is a full suite run. Cheapest gate first.
 
 This check is only as complete as the rows it reads — which is exactly why D1's seam matters. A thin
 plan produces a chain where everything passes.
@@ -313,7 +313,7 @@ absolute gate greener.
 ### D5 · Reviewer
 
 A **workflow inside the phase** — one subagent per lens, each committing its own findings to its own
-branch. The main loop unions from refs, never from the workflow's return string.
+branch. The sequencer unions from refs, never from the workflow's return string.
 
 **The lenses are computed rather than chosen, from the repo's own rules.** The lens list is the
 grade-partitioned rule set: one subagent per `review and convention` rule, because nothing else will
@@ -354,7 +354,7 @@ onto three dispositions:
 
 The third state is why the output is three-valued. A reviewer restricted to refute-or-absence, when
 blocked from reading, must either fabricate a rejection or emit a clean report — and the clean report
-is likelier and worse. **The main loop enumerates the lenses it expected** rather than unioning
+is likelier and worse. **The sequencer enumerates the lenses it expected** rather than unioning
 whatever refs it finds, which is what makes a lens that never ran visible.
 
 **The non-blocking finding goes back down the loop, and is not filed.** A review can be clean on its
@@ -398,10 +398,10 @@ auto-merge its glance tier and this chain never can.
 Kept as its own step rather than folded into the merge stage: a documenter once shipped a clean feature
 doc and silently deleted eleven unrelated story specs in the same commit, and it reached a PR.
 
-### D7 · The merge stage — main loop, not an agent
+### D7 · The merge stage — the sequencer's, not an agent
 
-**No subagent here.** The finalizer's warrant was *package and park for operator merge*; §4.12 retired
-the parking, §4.9 moved the briefing to the documenter, and every verdict is the main loop's by
+**No agent here.** The finalizer's warrant was *package and park for operator merge*; §4.12 retired
+the parking, §4.9 moved the briefing to the documenter, and every verdict is the sequencer's by
 §4.2(a). What was left was integration plus predicates — an agent there is a shallow module that turns
 mechanical facts into testimony on the way past, and the one non-mechanical case, a merge conflict, is
 already a stale-baseline escalation (§4.10).
