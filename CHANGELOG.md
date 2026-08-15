@@ -4,6 +4,41 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 ## Unreleased — the dev-ledger removed
 
+- **STORY-0013 built: the sequencer script — one pinned driver from start-attempt to the terminal
+  act.** `harness/chain/sequencer.py`, one act (`run`), encoding the first walk's order so nothing
+  is re-derived by hand: per phase `invoke run` → `seam-check` → the harvest (lineage-checked
+  create-or-fast-forward, never `update-ref` on a checked-out branch) → `seam-close` → checkout →
+  the advance seam with `--tree-ref`; then `merge.py merge` (advance and merge spawned as
+  subprocesses, their words relayed verbatim line by line — the verdict channel stays the exit
+  code); then the post-batch transcript audit, reported and never deciding advancement. The
+  per-story phase table is a new pinned-material kind at `<pinned_root>/phases/<story>` (3-field
+  lines, contiguity enforced, walk-entry presence pre-flight), and its row count is what
+  `--expected-phases` receives. Resume derives from refs and never invents an attempt number: a
+  concluded attempt (its merge record exists) refuses to resume and re-walks only under an
+  explicit `--fresh-attempt`; a parked branch is reconciled hard back to the last graded sha with
+  every discarded commit listed, closing the fail-open where rejected work rides into the merge
+  candidate (pinned red-first by the park-then-rerun-reconcile case). The four walk findings are
+  encoded, not remembered: streams composed as `p<n>.jsonl` under `streams/<story>/attempt-<a>`
+  with a rename-aside for a dead phase's evidence; the `CLAUDE`-prefix environment scrub in place
+  at act start (names printed, `ANTHROPIC_*` surviving — the decoy case guards the false-drop
+  direction); the harvest ordering; and the repo-local identity gate (`identity-unset` /
+  `identity-signing`) before any spend. Exit contract: 0 terminal-and-audit-clean, 1 a relayed
+  verdict (never originated here), 2 could-not-run at the first stop — widened, operator-ratified,
+  to cover a non-clean post-batch audit after a completed terminal act, with the
+  outcome-stands-refs-stay line printed. The D5 source court gains its second named exemption
+  site, also ratified: the stream-file pattern alone is exempt inside `composed_stream`, pinned
+  red-first in both directions (a stream literal outside it still fires; `json.loads` inside it
+  still fires). `SEQUENCER_SOURCES` gains the module (the completeness case forced it),
+  `harness/fixtures/sequencer_test.py` joins check.sh with 18 cases over stub harnesses that
+  dispatch on the composed prompt itself, and the eight-module live source check runs clean.
+  Post-review (MERGE_SAFE, both ratified calls upheld, three findings taken): a pre-planted
+  merge record for the selected attempt now refuses zero-spend at walk entry
+  (`record-preexists` — previously both phases were spent before the merge stage VOIDed and the
+  attempt wedged), the dead phase's stderr sidecar is renamed aside with its stream so the
+  death diagnosis survives a re-run, and the fresh-attempt case pins the post-batch audit to
+  the current attempt's directory on its own examined-under line — the reviewer's surviving
+  mutant (the audit pointed one level up, hidden by the recursive glob), now killed.
+
 - **STORY-0013 authored: the sequencer script.** The first walk was driven by hand, and the story turns its runbook and findings into the spec for the pinned driver ADR-0004/D1 names: one module chaining startup, start-attempt, the per-phase invoke/seam/harvest/advance sequence, position, the merge stage, and the post-batch audit, with the walk's four operator-discipline findings (jsonl stream naming, harvest ordering, the session-environment scrub, repo-local identity) as named fixture cases. Grounded at HEAD file:line, tight-band scored, two design-pass questions recorded rather than repaired; status draft pending that pass.
 
 - **The chain's first end-to-end walk ran live (2026-08-14), and the pinned root is provisioned.** Two headless phases under `invoke.py run` at harness 2.1.224 (the pin—no re-probe owed), the advance seam recording both phase refs, position clean, and `merge.py merge` passing all eight conjuncts before the merge-local act advanced a dedicated zero-remote clone's `main` by compare-and-swap with the `Merged-Story` trailer; the record, the transcript audit (clean, no spawn event), and a revert sanity check all landed. The receipt-complete wrapper STORY-0007 recorded as owed now exists as pinned material fixing the `chain/receipt.txt` convention. The walk record with seven findings—the stream-naming/audit-glob coupling, the driver-harvest pattern owed to the sequencer story, repointed-HOME git-identity, the honest spawn-denial bound—is `docs/probe/first-walk-2026-08-14.md`.

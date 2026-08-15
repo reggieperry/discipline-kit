@@ -48,6 +48,15 @@ including inside it. The check refuses to report clean when that function is abs
 nothing to exempt it has not established the property it exists for, and that reads
 could-not-run rather than pass.
 
+THE ONE COMPOSITION SITE. The sequencer COMPOSES stream names so the audit's `*.jsonl` corpus
+exists by construction — the write side of the walk's finding 2, not a read — and that duty
+collides with the stream-file pattern head on. Building the suffix from fragments would grep
+clean, which is the composed-key evasion this docstring already names, deliberately aimed at
+our own court. The honest route is one more named exemption: the stream-file pattern is exempt
+inside `composed_stream` and nowhere else, for that pattern ONLY — harness-json is exempt in
+the admitted reader alone, so a `composed_stream` that PARSES a stream is a finding exactly as
+anywhere else. Both directions are pinned red-first in `harness/fixtures/core_test.py`.
+
 THE ALLOWLIST IS DATA, AND IT IS READ. The reader keeps `ADMITTED_KEYS` and drops every other
 field, so widening that set widens what the runtime admits without changing a line of control
 flow. The set is parsed out of the source and compared against what the record admits, which is
@@ -86,6 +95,7 @@ FINDING = 1
 COULD_NOT_RUN = 2
 
 ADMITTED_READER = "admitted_signals"
+COMPOSITION_SITE = "composed_stream"
 ALLOWLIST_CONSTANT = "ADMITTED_KEYS"
 
 # What ADR-0001/D5 admits from harness-written state: the session id, for resumption and
@@ -100,6 +110,9 @@ class Pattern:
     regex: re.Pattern[str]
     why: str
     exempt_in_reader: bool
+    # Exempt inside the one composition site. Only the stream-file pattern carries this:
+    # composing where a stream will land is a write, and nothing in that function may parse.
+    exempt_in_composer: bool = False
 
 
 PATTERNS = (
@@ -119,7 +132,8 @@ PATTERNS = (
     Pattern("harness-json", re.compile(r"\bjson\.loads?\s*\("),
             "harness-written state parsed outside the admitted reader (ADR-0001/D5)", True),
     Pattern("stream-file", re.compile(r"\.jsonl\b"),
-            "a harness stream named outside the admitted reader (ADR-0001/D5)", True),
+            "a harness stream named outside the admitted reader and the composition site "
+            "(ADR-0001/D5)", True, exempt_in_composer=True),
     Pattern("subagent-spawn", re.compile(r"\bTask\s*\(|subagent"),
             "no phase runs as a subagent on the advancement path (ADR-0004/D1)", False),
     Pattern("session-resume", re.compile(r"--resume\b"),
@@ -140,6 +154,7 @@ class Source:
     code: dict[int, str]
     dropped: int
     reader: tuple[int, int] | None
+    composer: tuple[int, int] | None
     allowlist: frozenset[str] | None
 
 
@@ -159,10 +174,9 @@ def docstring_lines(tree: ast.AST) -> set[int]:
     return held
 
 
-def reader_span(tree: ast.AST) -> tuple[int, int] | None:
+def named_span(tree: ast.AST, name: str) -> tuple[int, int] | None:
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
-                and node.name == ADMITTED_READER:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             return node.lineno, node.end_lineno or node.lineno
     return None
 
@@ -223,7 +237,9 @@ def code_view(path: Path) -> Source:
 
     code = {n: line for n, line in enumerate(view, start=1) if line.strip()}
     return Source(path=path, code=code, dropped=len(held) + comment_lines,
-                  reader=reader_span(tree), allowlist=declared_allowlist(tree))
+                  reader=named_span(tree, ADMITTED_READER),
+                  composer=named_span(tree, COMPOSITION_SITE),
+                  allowlist=declared_allowlist(tree))
 
 
 def sources(directory: Path) -> list[Source]:
@@ -241,8 +257,12 @@ def sweep(source: Source) -> list[str]:
     out: list[str] = []
     for number, line in sorted(source.code.items()):
         inside = source.reader is not None and source.reader[0] <= number <= source.reader[1]
+        composing = source.composer is not None \
+            and source.composer[0] <= number <= source.composer[1]
         for pattern in PATTERNS:
             if pattern.exempt_in_reader and inside:
+                continue
+            if pattern.exempt_in_composer and composing:
                 continue
             if pattern.regex.search(line):
                 out.append(f"{pattern.name}: {source.path}:{number}: {line.strip()[:90]} "
@@ -260,6 +280,11 @@ def examine(directory: Path, say) -> int:
     say(f"source-check: {len(PATTERNS)} pattern(s) applied, {len(readers)} admitted reader(s)"
         + (": " + ", ".join(f"{s.path.name}::{ADMITTED_READER} lines {s.reader[0]}-{s.reader[1]}"
                             for s in readers) if readers else ""))
+    composers = [s for s in found if s.composer is not None]
+    say(f"source-check: {len(composers)} composition site(s)"
+        + (": " + ", ".join(f"{s.path.name}::{COMPOSITION_SITE} lines "
+                            f"{s.composer[0]}-{s.composer[1]}" for s in composers)
+           if composers else " (none; the stream-file exemption reaches nothing)"))
 
     if not readers:
         raise CouldNotRun(

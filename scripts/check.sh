@@ -105,6 +105,13 @@ python3 harness/fixtures/receipt_test.py
 # local remotes, pinned material and stub commit-check/forge binaries — no real forge is ever
 # invoked — and it asserts the record's forged-ref residue line verbatim, per posture.
 python3 harness/fixtures/merge_test.py
+# The sequencer's fixture, on the same boundary as the merge stage's: the sequencer CLI reads
+# the profile's pinned root and VOIDs on every machine until the hardening checklist creates it,
+# so only the fixture is wired. It builds its own dedicated clones, pinned material, phase
+# tables and stub harness binaries — the real `claude` is never invoked — and it drives the
+# whole two-phase story through one invocation: phases, seams, harvest, merge-local, and the
+# post-batch transcript audit, with the walk's four findings each pinned by a named case.
+python3 harness/fixtures/sequencer_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
 # nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators

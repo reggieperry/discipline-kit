@@ -77,24 +77,24 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] one invocation runs a two-phase story end to end against a stub harness—worktrees, fence,
+- [x] one invocation runs a two-phase story end to end against a stub harness—worktrees, fence,
       harvest, phase refs, merge evaluate, and the composed record all real—verified by `the
       sequencer fixture's walk-replay case, asserting the phase refs, the story branch, the
       advanced main, and the record's merge_ok line`
-- [ ] the four walk findings are encoded, not remembered: streams composed as `*.jsonl` under the
+- [x] the four walk findings are encoded, not remembered: streams composed as `*.jsonl` under the
       pinned root; the harvest ordered after seam-check and before seam-close with a checked-out
       branch never moved by update-ref; the spawn environment scrubbed of the driving session's
       `CLAUDE_CODE_*` variables; a clone without repo-local identity refused by name at
       start-up—verified by `one fixture case per finding, each red-first (the decoy-env case
       plants CLAUDECODE and asserts the stub harness never sees it; the identity case asserts the
       could-not-run marker)`
-- [ ] a phase FAIL parks the run: advance exit 1 stops the sequence, no later phase spawns, no
+- [x] a phase FAIL parks the run: advance exit 1 stops the sequence, no later phase spawns, no
       merge is attempted, and the sequencer's exit relays 1 with the seam's own words—verified by
       `the park-relay fixture case, asserting the stub for phase 2 was never invoked`
-- [ ] the transcript audit runs post-batch as audit, not control flow: a planted spawn event in a
+- [x] the transcript audit runs post-batch as audit, not control flow: a planted spawn event in a
       phase stream yields the audit's finding in the sequencer's output while refs already
       written stay written—verified by `the audit-report fixture case`
-- [ ] the sequencer joins the watched source set: `SEQUENCER_SOURCES` gains the module (the
+- [x] the sequencer joins the watched source set: `SEQUENCER_SOURCES` gains the module (the
       completeness case forces this), the D5 source check reads it clean over 8 modules, and no
       new admitted reader appears—verified by `core_test's sequencer-sources-complete and the
       source check's live run inside check.sh`
@@ -102,9 +102,9 @@ Story-specific criteria—each dischargeable by a named check:
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each
 before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 
@@ -136,3 +136,9 @@ before hand-off:
   2, criteria 2, reference pattern 2, verification 2, frontmatter 2—tight band; the two open
   questions above are design-pass inputs, not spec gaps, and are recorded here rather than
   silently repaired.
+- Review finding F4, left as recorded (reviewer-adjudicated, no action here): the D5 source
+  check's two named exemption sites (`admitted_signals`, `composed_stream`) are matched by
+  function NAME, not by file, so any source defining a function under either name gains that
+  exemption—a pre-existing shared class, and the check prints every site in its denominators on
+  every run, which is the loud half. Bounding the site count (or pinning each site to its one
+  file) is a candidate future court story.
