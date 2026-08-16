@@ -119,6 +119,13 @@ python3 harness/fixtures/sequencer_test.py
 # wired; it injects probe results to drive the orchestration and tests the root-free probe logic
 # against throwaway trees, so it needs no run-user, no removed sudo, and no sandbox.
 python3 harness/fixtures/unattended_start_gate_test.py
+# STORY-0016's unattended-run envelope runner (ADR-0005/D7), on the same boundary as the gate's:
+# the runner integrity-checks and invokes the start gate, which REFUSES on this unhardened host
+# (exit 2), so the TOOL stays off the commit path exactly as the gate, core.py, and loader.py do.
+# Only the fixture is wired; it drives the orchestration with injected gate results and integrity
+# readings, exercises the lock, meter, and argv seams against throwaway directories, and never
+# invokes the real gate, the real sequencer, or sudo.
+python3 harness/fixtures/unattended_run_test.py
 # ADR-0001/D5's court, named future in that record because it "would grep nothing and prove
 # nothing" until a sequencer source existed. Five exist now, so unlike the runtime it wires
 # directly: it reads sources rather than a pinned root, and it passes today with its denominators
