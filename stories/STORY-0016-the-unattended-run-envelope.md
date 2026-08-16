@@ -71,24 +71,24 @@ Out of scope:
 
 Story-specific criteria—each dischargeable by a named check:
 
-- [ ] the runner starts the sequencer only on an exit-0 clear from the gate; a gate returning
+- [x] the runner starts the sequencer only on an exit-0 clear from the gate; a gate returning
       exit 2, or absent, non-executable, or unreadable, refuses without starting the sequencer—verified
       by `the envelope fixture's gate-result cases (stubs returning clear, exit 2, and absent),
       asserting the sequencer stub is invoked only on clear`
-- [ ] a gate that is not root-owned or is run-user- or operator-writable is refused before its
+- [x] a gate that is not root-owned or is run-user- or operator-writable is refused before its
       result is trusted—verified by `the envelope fixture's gate-integrity known-bad case (a
       writable gate stub returning clear is still refused)`
-- [ ] two concurrent invocations on one story do not both run: the second blocks or refuses—verified
+- [x] two concurrent invocations on one story do not both run: the second blocks or refuses—verified
       by `the envelope fixture's concurrent-invocation case asserting exactly one sequencer run`
-- [ ] a run reaching its budget ceiling stops launching phases with a named recorded outcome, not a
+- [x] a run reaching its budget ceiling stops launching phases with a named recorded outcome, not a
       silent cap—verified by `the envelope fixture's budget-ceiling case asserting the stop is named`
 
 Anti-weakening contract—the change does not weaken the suite versus the merge-base. Confirm each
 before hand-off:
 
-- [ ] The assertion count is not reduced versus the merge-base.
-- [ ] No new suppressions are introduced versus the merge-base.
-- [ ] No new skipped tests versus the merge-base.
+- [x] The assertion count is not reduced versus the merge-base.
+- [x] No new suppressions are introduced versus the merge-base.
+- [x] No new skipped tests versus the merge-base.
 
 # Risks and rollback
 
