@@ -26,6 +26,8 @@ defect this repository has paid for four times.
                       naming it) and 0 after mkdir, printing the per-target root
   terminal-open-pr    the other terminal posture pairs the other way               -> correct
   collision           two targets take DISTINCT default pinned roots               -> distinct
+  collision-same-basename  same basename under different parents stay apart        -> distinct
+  collision-sanitizer 'my repo' vs 'my-repo' (sanitizer many-to-one) stay apart    -> distinct
   idempotency         a second identical run leaves the profile byte-identical,    -> untouched
                       backs it up, and re-uses the snapshot
   existing-profile    a pre-existing target profile is never clobbered: it is      -> preserved
@@ -147,9 +149,8 @@ KIT_SHA = git(KIT, "rev-parse", BRANCH)
 RULE_NAMES = {p.name for p in RULES_SRC.glob("*.md")}
 
 
-def scratch_target(td: Path, name: str = "widget") -> Path:
-    """A committed scratch target repository holding an empty `.claude/`."""
-    target = td / name
+def make_target(target: Path) -> Path:
+    """A committed scratch target repository, at an arbitrary path, holding an empty `.claude/`."""
     (target / ".claude").mkdir(parents=True)
     git(target, "init", "-q", "-b", "main", ".")
     git(target, "config", "user.email", "fixture@example.invalid")
@@ -158,6 +159,10 @@ def scratch_target(td: Path, name: str = "widget") -> Path:
     git(target, "add", "-A")
     git(target, "commit", "-qm", "empty .claude")
     return target
+
+
+def scratch_target(td: Path, name: str = "widget") -> Path:
+    return make_target(td / name)
 
 
 def install_chain(target: Path, td: Path, *extra: str,
@@ -308,6 +313,33 @@ def collision(td: Path) -> None:
            "a default root is the kit's own bare default -- the collision is not dissolved")
 
 
+def collision_same_basename(td: Path) -> None:
+    # The blocker: two repositories with the SAME basename under different parents. A basename-only
+    # default slug folds them to one root and crosses their story-id spaces; the path digest must
+    # keep them apart.
+    a = make_target(td / "parentA" / "proj")
+    b = make_target(td / "parentB" / "proj")
+    ra = install_chain(a, td)
+    rb = install_chain(b, td)
+    expect(ra.returncode == 0 and rb.returncode == 0, f"install failed: a={ra.returncode} b={rb.returncode}")
+    pa = profile_of(a)["pinned_root"]
+    pb = profile_of(b)["pinned_root"]
+    expect(pa != pb, f"same basename under different parents collided on one root: {pa!r}")
+
+
+def collision_sanitizer(td: Path) -> None:
+    # The sanitizer's many-to-one: 'my repo' and 'my-repo' both sanitize to the slug 'my-repo', so a
+    # slug-only default collides them under one parent. The path digest disambiguates.
+    a = make_target(td / "my repo")
+    b = make_target(td / "my-repo")
+    ra = install_chain(a, td)
+    rb = install_chain(b, td)
+    expect(ra.returncode == 0 and rb.returncode == 0, f"install failed: a={ra.returncode} b={rb.returncode}")
+    pa = profile_of(a)["pinned_root"]
+    pb = profile_of(b)["pinned_root"]
+    expect(pa != pb, f"'my repo' and 'my-repo' collided on one root (sanitizer many-to-one): {pa!r}")
+
+
 def idempotency(td: Path) -> None:
     target = scratch_target(td)
     root = td / "root"
@@ -360,6 +392,8 @@ def main() -> int:
         case("wiring", wiring),
         case("terminal-open-pr", terminal_open_pr),
         case("collision", collision),
+        case("collision-same-basename", collision_same_basename),
+        case("collision-sanitizer", collision_sanitizer),
         case("idempotency", idempotency),
         case("existing-profile-preserved", existing_profile_preserved),
     ]

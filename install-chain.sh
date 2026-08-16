@@ -62,7 +62,8 @@ fi
 if [ ! -d "$DIR" ]; then
   echo "✖ target '$DIR' is not a directory." >&2; exit 1
 fi
-DIR="$(cd "$DIR" && pwd)"
+# The PHYSICAL path, symlinks resolved, so two paths to one directory pin one root rather than two.
+DIR="$(cd "$DIR" && pwd -P)"
 
 # The terminal act and its paired push scope (ADR-0002/D1). The pairing is a genuine per-repo fact
 # supplied by the operator, never invented here: open-pr pushes story and PR branches, merge-local
@@ -73,11 +74,18 @@ case "$TERMINAL" in
   *) echo "✖ --terminal must be 'open-pr' or 'merge-local', got '$TERMINAL'." >&2; exit 2 ;;
 esac
 
-# The per-target pinned root, default derived so no two repositories share one story-id space.
+# The per-target pinned root, default derived so no two repositories share one story-id space. The
+# default folds an 8-hex digest of the target's ABSOLUTE PHYSICAL path into the slug: a readable
+# basename alone collides (two repos named 'proj' under different parents, or 'my repo' and
+# 'my-repo' which the sanitizer both fold to 'my-repo'), and crossing those story-id spaces is the
+# exact hazard this root exists to prevent. The digest is over $DIR after `pwd -P`, so distinct
+# directories give distinct roots while two symlinks to one directory give one. An explicit
+# --pinned-root is the operator's own choice and is left exactly as given.
 slug="$(basename "$DIR")"
 slug="${slug//[^A-Za-z0-9._-]/-}"
 if [ -z "$PINNED_ROOT" ]; then
-  PINNED_ROOT="/var/lib/discipline-chain/$slug/"
+  digest="$(printf '%s' "$DIR" | sha256sum | cut -c1-8)"
+  PINNED_ROOT="/var/lib/discipline-chain/${slug}-${digest}/"
 fi
 
 # g: git confined to the kit checkout, immune to the redirecting variables an inherited hook
@@ -191,7 +199,11 @@ if [ -e "$profile" ]; then
   echo "    Merge the derived posture by hand: terminal=\"$TERMINAL\", push=\"$PUSH\","
   echo "    harness_version=\"$HARNESS_VERSION\", pinned_root=\"$PINNED_ROOT\"."
 else
-  cat > "$profile" <<EOF
+  # Write to a sibling temp then atomic-rename, so a crash mid-write never leaves a half-profile
+  # the next run's guard would mistake for operator content and refuse over.
+  ptmp="$(mktemp "$DIR/.claude/chain/.profile.XXXXXX")"
+  TMPDIRS+=("$ptmp")
+  cat > "$ptmp" <<EOF
 # The chain profile for '$slug', written by install-chain.sh from discipline-kit
 # $BRANCH ($short) on $stamp. It declares THIS repository's chain posture -- the keys
 # harness/chain/core.py startup and harness/chain/loader.py read at run time.
@@ -225,6 +237,7 @@ trusted_base = [
   "harness/chain/",
 ]
 EOF
+  mv "$ptmp" "$profile"
   echo "install-chain: profile written to $profile"
 fi
 
@@ -245,7 +258,16 @@ fi
 # --- Act 6: the run wrapper (a generated pointer to the shared snapshot) and the checklist ---
 run_wrapper="$DIR/.claude/chain/run.sh"
 if [ -e "$run_wrapper" ]; then
-  echo "install-chain: run.sh EXISTS -- the snapshot is $SNAPSHOT; update it if you re-pinned."
+  # An operator-editable file, never clobbered. But a re-pin mints a new snapshot, and a run.sh
+  # still naming the old one runs the old tools silently -- so if it does not already reference this
+  # SHA, say so loudly and name the new path rather than leaving the staleness to be discovered.
+  if grep -q "$SHA" "$run_wrapper" 2>/dev/null; then
+    echo "install-chain: run.sh EXISTS and already points at snapshot $short (no change)."
+  else
+    echo "install-chain: !! run.sh EXISTS but points at an OLDER snapshot -- NOT clobbered."
+    echo "install-chain: !! the new snapshot is $SNAPSHOT"
+    echo "install-chain: !! update the SNAPSHOT= line in $run_wrapper before the next run."
+  fi
 else
   cat > "$run_wrapper" <<EOF
 #!/usr/bin/env bash
