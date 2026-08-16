@@ -54,7 +54,13 @@ or the merge conjuncts. What it owns is above that core: the assignment of stori
 the ready frontier over the DAG, the batch-level concurrency ceiling and spend budget (D5), and—only
 where a cheap re-merge is wanted—the direct `merge.py merge` retry loop the sequencer's own `run`
 does not expose (its `run` concludes an attempt on a merge park and would force a whole-story
-re-spend). The scheduler is orchestration; the grading stays exactly where it is.
+re-spend). That retry pays only where re-merging is genuinely cheaper than a fresh attempt: the tip
+of `main` moved between grade and CAS (conjunct 7 lost its race), or a conjunct could-not-run on a
+transient (a scan process died), never a real conjunct FAIL—a refutation, a park, a failed
+commit-check is a true refusal and re-running it just re-refuses. And the retry is not a bypass of
+the grade: each `merge.py merge` it drives passes its own `--record`, so a retried merge is graded
+afresh, not waved through on the prior attempt's say-so. The scheduler is orchestration; the grading
+stays exactly where it is.
 
 Covered-by: none—owed to the batch-scheduler story, not yet written; the scheduler reuses the graded core it schedules over, so nothing in that core is built here.
 
@@ -62,13 +68,32 @@ Covered-by: none—owed to the batch-scheduler story, not yet written; the sched
 
 Independent stories (no dependency edge, and file-disjoint per D4) run in SEPARATE dedicated clones
 and produce N independent merge-ready candidates. There is no shared integration `main` to swap
-into, and no join. A dependency edge is served one of two ways, both without a cross-story CAS:
-same-clone-serial—the dependency's terminal act advances that clone's `main`, and the dependent's
-phase-1 worktree is cut from the post-dependency tip—or a seeded clone whose base already carries
-the dependency's result. In either the CAS is trivial, because nothing races. The within-clone CAS
-(conjunct 7) keeps exactly its existing job: protecting a single clone against a re-invocation of
-the same story and against a phase forging refs. It is not, and was never, cross-story
-serialization; treating it as such was the category error the pre-draft gate caught.
+into, and no join. A dependency edge is served by SEEDING, and the seed placement is the detail that
+decides whether it composes with the merge conjuncts, so it is fixed here: the dependency's result
+is placed as the dependent's clone `main`, which is the dependent's phase-1 base. Then
+`merge-base(main, candidate)` is that seed, `story_diff` (merge-base to candidate) is the dependent's
+diff ALONE, and the dependency's paths sit inside the merge-base—invisible to conjunct 2
+(trusted-base) and conjunct 3 (plan-paths), which is exactly what must hold. Any other placement
+(the dependency on a side branch, phase-1 cut from the original `main`) either fails to carry the
+dependency or drags its paths into the diff and trips conjunct 2/3; the scheduler, which owns clone
+topology (D1), produces the seed as the clone's `main` and no other way.
+
+Under `merge-local` the seed is producible in place—the dependency's terminal act advanced its
+clone's `main`, so the dependent's clone is cut from that post-dependency `main`; note the scheduler
+must re-seat HEAD at `main` (checkout or detach) before launching, because a merge-local run leaves
+the clone on `story/<dep>` and the sequencer refuses a clone whose HEAD is not `main`
+(`clone-not-at-main`). Under `open-pr` the terminal act opens a PR and never advances the clone's
+`main`, so same-clone reuse is unavailable and seeding is the only route: the dependent's clone is
+cut from the dependency's candidate sha directly. Either way, nothing races across clones, so the
+within-clone CAS (conjunct 7) keeps exactly its existing job—protecting a single clone against a
+re-invocation of the same story and against a phase forging refs. It is not, and was never,
+cross-story serialization; treating it as such was the category error the pre-draft gate caught.
+
+Two consequences of the seed follow and are disclosed rather than hidden: the dependent's candidate
+DESCENDS FROM the dependency (its base carries it), so the crossing is not order-free—the dependency
+must cross the real trunk before the dependent, or the dependent brings the dependency onto the trunk
+prematurely; and for a dependency edge the commit-path check does run on the combined tree (the seed
+plus the dependent's diff), which is the opposite of the parallel-disjoint case D4 addresses.
 
 Covered-by: none—owed to the batch-scheduler story; it is the topology the scheduler implements, built on the existing per-clone merge unchanged.
 
@@ -92,27 +117,45 @@ Covered-by: none—owed to the batch-scheduler story; it records the product per
 ### D4: The parallel frontier must be file-disjoint, checked before launch; a runtime conflict is a fail-closed backstop
 
 The scheduler refuses to launch two stories concurrently if their declared changed paths overlap.
-Overlap is read pre-launch from the stories' own declarations (the plan path lists and
-`sensitive_files`), and a same-file pair is treated as a dependency edge (predecessor-first), never
-a parallel pair—`story-tighten` already holds this rule for a decomposition, and the scheduler
-enforces it for an execution. A merge conflict that nonetheless reaches integration is a fail-closed
-park (re-integration against the current tip, or escalation), never a silent drop. The residual is
-disclosed: file-disjoint stories can still interact BEHAVIORALLY, and the only court for that is the
-merged-tree commit-path check the merge stage already runs—as good as the repository's own tests,
-generic to all merging, not specific to the batch.
+Overlap is read pre-launch from the stories' declared touch-list—the same per-story `--plan` path
+declaration conjunct 3 reconciles against the diff, with `sensitive_files` as the flagged subset,
+not a substitute (a non-flagged shared file would slip a `sensitive_files`-only check). That
+declaration is operator-authored today and its producer is unbuilt (conjunct 3 is fail-closed until
+one exists), so D4's pre-launch check consumes what conjunct 3 consumes, and disjoint plans plus
+per-story conjunct-3 coverage imply disjoint diffs, verified at merge as the backstop. A same-file
+pair is treated as a dependency edge (predecessor-first), never a parallel pair—`story-tighten`
+already holds this rule for a decomposition, and the scheduler enforces it for an execution. A merge
+conflict that nonetheless reaches integration is a fail-closed park (re-integration against the
+current tip, or escalation), never a silent drop.
+
+The behavioral-interaction residual is disclosed accurately, because it is worse than a naive
+reading suggests: file-disjoint stories can still interact BEHAVIORALLY, and in the default
+N-candidate model there is NO batch court for it. Each candidate merges and gates in its own clone
+against its own base—candidate A's commit-check runs on A-onto-its-base, B's on B-onto-its-base, and
+nothing runs the check on A-plus-B combined. The sharpening irony: file-disjointness is REQUIRED for
+a parallel launch, and file-disjoint stories are exactly the ones with no dependency edge, so they
+are never integrated within the batch, which is precisely the case with no combined-tree court. The
+only batch path that runs a commit-check on a combined tree is the opt-in single-integrated
+candidate (D3); otherwise the interaction of two parallel candidates is caught only at the operator's
+serial real-trunk crossing and the real repository's own CI. This is the same serial-and-human
+crossing the Consequences name, stated here so the parallel win is not read as behavioral safety.
 
 Covered-by: none—owed to the batch-scheduler story; the pre-launch disjointness matrix is its check, the runtime park reuses the merge stage's existing conflict handling.
 
 ### D5: The batch is fail-closed and unattended-gated, with a batch-level concurrency ceiling and spend budget derived from a measured token rate
 
 Every per-story launch inherits STORY-0016's start-gate invocation and gate-integrity precheck
-unchanged, so the batch refuses on an unhardened host exactly as a single unattended run does. On
-top of the envelope's PER-STORY lock and meter—which bound duplicate runs of one story and nothing
-more—the scheduler adds a BATCH-level concurrency ceiling (how many stories run at once) and a batch
-spend budget, the ceiling ADR-0003 and ADR-0004 already anticipate and the per-story envelope does
-not provide. The concurrency ceiling is derived from a measured tokens-per-minute budget, never a
-story count—the model tier's rate is looked up, not guessed—so the batch paces to the account's real
-throughput rather than saturating it.
+unchanged, so the batch refuses on an unhardened host exactly as a single unattended run does. But
+the start gate checks only the six host-hardening conditions and nothing about concurrency, so
+"gate-enforced" covers the hardening refusal alone; the batch's own bounds are new scheduler code,
+courted by future fixtures, not by any gate. On top of the envelope's PER-STORY lock and meter—which
+bound duplicate runs of one story and nothing more—the scheduler adds a BATCH-level aggregate spend
+throttle and a concurrency ceiling, the throttle ADR-0003 and ADR-0004 already anticipate and the
+per-story envelope does not provide. The throttle paces the batch's aggregate spend to the account's
+rate limit, which is an operator lookup of the tier's tokens-per-minute; turning that into a
+concurrency COUNT additionally needs per-story token consumption, which is unmeasured—the same
+profile gap D6 defers—so the concurrency count is derived once that profile exists, and until then
+the aggregate-spend throttle is the bound that holds.
 
 Covered-by: none—owed to the batch-scheduler story; the batch concurrency ceiling and budget are new, the per-launch gate/lock/integrity are STORY-0016's, reused.
 
@@ -125,7 +168,13 @@ gate results only, never a live unattended batch. And because the whole premise�
 concurrency completes a set quicker—rests on an UNMEASURED per-phase wall-clock profile, a
 measure-first obligation is a precondition of relying on the scheduler for speed: record per-phase
 and per-story wall-clock over a few real stories before the batch is trusted to be faster. A
-scheduler that is built and correct is not yet a scheduler that is known to help.
+scheduler that is built and correct is not yet a scheduler that is known to help. That obligation is
+given teeth rather than left as prose: the scheduler prints `profile unmeasured—speedup unproven` on
+every run until a measurement record exists in the pinned root, so a reader cannot mistake a built
+scheduler for a proven one. And the gate-enforcement it inherits is narrow: the start gate certifies
+only the six host-hardening conditions, so it refuses an unhardened host but says nothing about the
+batch's own concurrency ceiling or spend throttle—those are new scheduler code, and their courts are
+the scheduler story's own fixtures, not the gate.
 
 Covered-by: none—owed to the batch-scheduler story and a measurement record; it records a build-ordering and a precondition and builds nothing here.
 
