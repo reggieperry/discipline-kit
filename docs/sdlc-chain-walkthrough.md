@@ -22,7 +22,7 @@ Everything below happens on one of four, and which one matters more than it look
 | **Operator** | yes | Decides, agrees, merges. The only surface with authority over what reaches main. |
 | **Sequencer** | **yes** | The pinned script, not a session. Runs git and the suite. Sequences the chain and computes every phase verdict. |
 | **Subagent** | yes, but reports as testimony | Fresh context. Optional worktree. Must commit or its work is auto-cleaned. |
-| **Workflow script** | **no** | No filesystem, no subprocess, no network. Deterministic control flow only. Admissible *inside* a phase, never as the spine. |
+| **Workflow script** | **no** | No filesystem, no subprocess, no network. Deterministic control flow only. Denied to phases by the fence (ADR-0005/D6), and never the spine — so it has no role inside the chain. |
 | **Git hook** | yes | Runs on the bytes being committed, fires inside subagent worktrees, regardless of which agent acts. |
 
 The rule that follows from the table: **the sequencer drives.** A workflow cannot sequence the
@@ -312,12 +312,16 @@ absolute gate greener.
 
 ### D5 · Reviewer
 
-A **workflow inside the phase** — one subagent per lens, each committing its own findings to its own
-branch. The sequencer unions from refs, never from the workflow's return string.
+**The sequencer drives the lenses; the phase spawns nothing.** The pinned settings deny `Task`,
+`Agent`, and `Workflow` (ADR-0005/D6), so a phase cannot fan itself out. Each lens commits its
+findings to its own ref, and the sequencer unions from refs, never from a session's return string.
+Whether the sequencer launches one fenced session per lens or a single reviewer session walks the
+computed lenses in sequence is a build-time choice — either way the phase spawns nothing and any
+concurrency lives in the driver (ADR-0006), never in the phase.
 
 **The lenses are computed rather than chosen, from the repo's own rules.** The lens list is the
-grade-partitioned rule set: one subagent per `review and convention` rule, because nothing else will
-ever check those; one per `partly mechanical` rule, pointed at the remainder and required to state
+grade-partitioned rule set: one lens per `review and convention` rule, because nothing else will
+ever check those; one lens per `partly mechanical` rule, pointed at the remainder and required to state
 which part it treated as covered; `mechanically enforced` rules skipped and recorded as skipped.
 Then the language-neutral core, the craft lens and the simplification lens over the same files.
 
