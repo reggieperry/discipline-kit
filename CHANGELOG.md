@@ -4,6 +4,8 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
 
 ## Unreleased — the dev-ledger removed
 
+- **docs/using-the-chain-in-another-repo.md — the handoff guide.** Written for a Claude Code instance handed another repo on this machine: upgrade it with install-chain.sh, author the per-project pinned material, mint the dedicated clone, run a story through the sequencer, and transplant the result. Carries a complete copy-pasteable worked example (a two-phase HELLO story with both postconditions, briefs, phase table, plan, and the receipt-complete wrapper) whose mechanical setup was executed against a throwaway target before shipping — install, provision, both postconditions demonstrated loadable, startup passing, briefs expanding. Front-loads the honest ceiling: attended-only, spends real API, the human transplant is the trust boundary, and the graders are the operator's to author honestly. The live run itself is the same shape the kit's first walk and first production story already ran.
+
 - **install-chain.sh: a same-machine, branch-sourced chain upgrade for another repository.** A
   standalone script beside `install.sh`, letting another repo ON THIS MACHINE take on the SDLC chain
   capability from a branch of the kit, in three moves and zero chain-code changes. First a SHARED,
