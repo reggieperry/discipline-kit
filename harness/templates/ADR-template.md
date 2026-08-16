@@ -12,7 +12,7 @@
     section reads "None." rather than being deleted.
 -->
 
-**Status:** Proposed | Accepted | Superseded-in-part | Superseded | Deprecated (<date>).
+**Status:** Proposed | Accepted | Rejected | Superseded-in-part | Superseded | Deprecated (<date>).
 Acceptance gate: <deep-reason | committee> pass (<link to the review>).
 
 <!--

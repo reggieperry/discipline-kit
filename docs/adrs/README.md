@@ -31,8 +31,12 @@ than being dropped. The template is authoritative on the shape.
 
 ## The Status line
 
-A Status line near the top records the ADR's state — Proposed, Accepted, Superseded-in-part,
-Superseded, or Deprecated — and cites the verdict that admitted it. An acceptance-gate pass, a
+A Status line near the top records the ADR's state — Proposed, Accepted, Rejected,
+Superseded-in-part, Superseded, or Deprecated — and cites the verdict that admitted it.
+**Rejected** is a proposal declined before it was ever accepted, in favor of a named successor;
+unlike Superseded (which overturns a decision that once governed), a rejected ADR never governed.
+Its record is retained, never deleted, per the supersede-never-delete rule, so the declined path
+stays legible to the next person who proposes it. An acceptance-gate pass, a
 deep-reason adversary or a committee review, is *testimony*; testimony
 attests but never signs, so the Status line links the recorded review (under `reviews/`) rather
 than reporting the pass in prose. A verdict linked to its record is followable and checkable; a
@@ -75,4 +79,5 @@ highest `ADR-NNNN` in the table.
 | [ADR-0003](ADR-0003-sequencer-obligations.md) | The sequencer's obligations, with the substrate left open pending one measurement | Accepted | all courts future or unwatched, named per decision | None | 2026-08-08 |
 | [ADR-0004](ADR-0004-substrate-choice.md) | Each phase is its own headless invocation, and the sequencer owns the worktrees | Accepted | courts future, named per decision; the probe record is the standing observation | None | 2026-08-12 |
 | [ADR-0005](ADR-0005-containment-posture.md) | The containment posture—the fence is friction, isolation is the precondition for unattended work | Accepted (D2 parking superseded in part by D7) | INSTALL-HARDENING.md written; start gate + envelope stories next; per-decision courts named | Self (D7 supersedes D2 parking clause) | 2026-08-15 |
-| [ADR-0006](ADR-0006-batch-scheduler.md) | The batch scheduler—DAG-driven clone topology, N merge-ready candidates, no join | Proposed | the batch-scheduler story + a measurement record, owed; per-decision courts named | None | 2026-08-15 |
+| [ADR-0006](ADR-0006-batch-scheduler.md) | The batch scheduler—DAG-driven clone topology, N merge-ready candidates, no join | Rejected | moot: rejected before acceptance | Rejected by ADR-0007 | 2026-08-15 |
+| [ADR-0007](ADR-0007-story-factory-fork.md) | The story-factory fork—reuse an external orchestration substrate, not a hand-built scheduler | Accepted | reuse-pack gate-seam test (standing, future); economics judged after the pack exists; per-decision courts named | Rejects ADR-0006 | 2026-08-16 |

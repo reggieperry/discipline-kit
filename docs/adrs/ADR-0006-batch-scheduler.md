@@ -1,11 +1,14 @@
 # ADR-0006: The batch scheduler—DAG-driven clone topology, N merge-ready candidates, no join
 
-**Status:** Proposed (2026-08-15).
-Pre-draft acceptance gate: one deep-reason pass, recorded in
+**Status:** Rejected (2026-08-16), in favor of [ADR-0007](ADR-0007-story-factory-fork.md): the
+operator declined the hand-built scheduler to reuse an external orchestration substrate and carry
+only the chain's discipline onto it. This proposal was never accepted; its record, decisions, and
+deep-reason pass are retained per the supersede-never-delete rule as the declined alternative, so the
+next person to propose building the scheduler inherits why it was declined.
+Original pre-draft gate (historical): one deep-reason pass, recorded in
 [reviews/ADR-0006-deep-reason.md](reviews/ADR-0006-deep-reason.md), which found the proposed central
 decision a category error and reset the spine from a compare-and-swap serial integration to
-DAG-driven clone topology. A five-lens committee informs the record and is cited as an input.
-Acceptance is the operator's.
+DAG-driven clone topology. A five-lens committee informed the record as an input.
 
 ## Context
 
@@ -245,7 +248,9 @@ review-watched.
   story). Builds above [STORY-0013](../../stories/STORY-0013-the-sequencer-script.md) (the sequencer),
   [STORY-0015](../../stories/STORY-0015-the-unattended-start-gate.md) (the gate), and
   [STORY-0016](../../stories/STORY-0016-the-unattended-run-envelope.md) (the per-story runner).
-- Superseded by: None.
+- Superseded by: None—this proposal was Rejected, not superseded (it never governed). Rejected by
+  [ADR-0007](ADR-0007-story-factory-fork.md) (2026-08-16), which decides reuse of an external
+  orchestration substrate over building the scheduler in the chain.
 - Related: `harness/chain_graph.py` (the DAG is expressed via `deps:` and validated for cycles, but
   emits no frontier and does not read the planned set—the scheduler's frontier plumbing is new above
   it); the owed batch-scheduler story and the owed measurement record; the five-lens committee run
