@@ -13,14 +13,17 @@ driven with injected results; the seam logic that can be tested without root is 
 
   THE ORCHESTRATION, injected seam results
   clear-runs-0               integrity ok, gate clear             -> 0, sequencer invoked, relayed,
-                                                                     order integrity<gate<sequencer
+                                                                     order integrity<gate<preflight<seq
   gate-exit2-refuses-2       integrity ok, gate exit 2            -> 2, gate-not-clear, no sequencer
   gate-absent-refuses-2      integrity ok, gate absent            -> 2, gate-absent, no sequencer
   writable-gate-refused-2    integrity BAD, gate would clear      -> 2, gate-integrity, no sequencer
+  writable-runner-dir-refuses-2  the runner-dir preflight BAD     -> 2, runner-dir, no sequencer
   budget-ceiling-refuses-2   the meter already at the ceiling     -> 2, budget-exhausted NAMED and
                                                                      RECORDED, no sequencer
   budget-records-spend-0     a run under the ceiling              -> 0, the run's cost recorded
   meter-unreadable-refuses-2 a present unparseable meter          -> 2, meter-unreadable, fail closed
+  meter-nonfinite-refuses-2  a meter holding nan                  -> 2, meter-unreadable, ceiling not
+                                                                     disabled
   concurrent-invocation      one holds via a slow sequencer, a    -> the second refuses lock-held,
                              second hits the lock                   exactly one sequencer run
 
@@ -28,17 +31,23 @@ driven with injected results; the seam logic that can be tested without root is 
   integrity-not-root-mech    a fixture-owned gate file            -> BAD, not root-owned
   integrity-writable-mech    a group/other-writable gate file     -> BAD, writable named
   integrity-absent-mech      a gate path that does not exist      -> BAD, unmeasurable, never ok
+  runner-dir-ok-mech         a fixture-owned dir, distinct run-user-> ok
+  runner-dir-runuser-owned-mech  a dir owned by the run-user      -> BAD, owned by the run-user
+  runner-dir-writable-mech   an other-writable runner dir         -> BAD, writable named
+  runner-dir-unresolved-mech an unresolvable run-user             -> BAD, unmeasurable, never ok
   gate-absent-real-mech      real gate seam on an absent path     -> not clear, absent, no subprocess
   gate-nonexec-real-mech     real gate seam on a non-exec file    -> not clear, non-executable
   gate-argv-shape            the Step 6 sudo -u env -i form        -> run-user, allowlist, key, gate
   sequencer-argv-shape       the sequencer.py run relay            -> root, repo, story, commit-check
-  read-meter-mech            absent, a number, empty, garbage      -> 0.0, value, 0.0, None
+  read-meter-mech            absent, number, empty, garbage, nan   -> 0.0, value, 0.0, None, None
   story-lock-mech            a held lock, then a nested attempt    -> acquired, then refused
 
   THE REAL CLI, end to end through main
   cli-refuses-on-this-host-2 main against a non-root gate file     -> 2, gate-integrity, no run:
                                                                      the real runner cannot be
                                                                      talked into a clear
+  cli-budget-nan-refuses-2   --budget nan through argparse         -> 2, budget-invalid, no run
+  cli-runcost-negative-refuses-2  --run-cost -1                    -> 2, budget-invalid, no run
 
 The writable-gate and absent-gate cases carry the mechanism the mutation table names: a stub gate
 returning clear is still refused when the out-of-band integrity read fails, and an absent gate is a
@@ -50,7 +59,9 @@ from __future__ import annotations
 
 import io
 import os
+import pwd
 import stat
+import subprocess
 import sys
 import tempfile
 import threading
@@ -65,6 +76,11 @@ import unattended_run as ur  # noqa: E402
 RUNNER = HARNESS / "unattended_run.py"
 STORY = "STORY-0042"
 REFUSED = ur.REFUSED
+
+ME = pwd.getpwuid(os.geteuid()).pw_name
+# A real account that is neither root nor the current user, so a fixture-owned directory reads as
+# NOT run-user-owned and the runner-directory OK branch is reachable without privileges.
+OTHER_USER = next((u.pw_name for u in pwd.getpwall() if u.pw_uid not in (0, os.geteuid())), None)
 
 
 def clean_env(base: dict[str, str] | None = None) -> dict[str, str]:
@@ -132,6 +148,26 @@ def gate_result(clear: bool, code: int | None, detail: str, order: list[str] | N
     return probe
 
 
+def ok_preflight(order: list[str] | None = None):
+    def probe() -> "ur.IntegrityResult":
+        if order is not None:
+            order.append("preflight")
+        return ur.IntegrityResult(True, "runner-dir ok (stub)")
+    return probe
+
+
+def bad_preflight(detail: str):
+    def probe() -> "ur.IntegrityResult":
+        return ur.IntegrityResult(False, detail)
+    return probe
+
+
+def mk_seams(integrity, gate, seq, preflight=None) -> "ur.Seams":
+    return ur.Seams(integrity=integrity, gate=gate,
+                    preflight=preflight if preflight is not None else ok_preflight(),
+                    sequencer=seq)
+
+
 def run_capturing(seams: "ur.Seams", cfg: "ur.Config") -> tuple[int, str]:
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
@@ -144,11 +180,13 @@ def clear_runs_case() -> bool:
         cfg = make_cfg(td)
         order: list[str] = []
         seq = SeqSpy(0, order=order)
-        seams = ur.Seams(ok_integrity(order),
-                         gate_result(True, 0, "the gate exited 0 (stub)", order), seq)
+        seams = mk_seams(ok_integrity(order),
+                         gate_result(True, 0, "the gate exited 0 (stub)", order), seq,
+                         preflight=ok_preflight(order))
         code, said = run_capturing(seams, cfg)
         outcomes = cfg.outcomes_path.read_text() if cfg.outcomes_path.is_file() else ""
-        ok = (code == 0 and seq.calls == 1 and order == ["integrity", "gate", "sequencer"]
+        ok = (code == 0 and seq.calls == 1
+              and order == ["integrity", "gate", "preflight", "sequencer"]
               and "sequencer returned 0" in said and "ran" in outcomes)
     return show("clear-runs-0", ok, f": exit {code}, order={order}")
 
@@ -157,7 +195,7 @@ def gate_exit2_case() -> bool:
     with tempfile.TemporaryDirectory() as td:
         cfg = make_cfg(td)
         seq = SeqSpy(0)
-        seams = ur.Seams(ok_integrity(), gate_result(False, 2, "the gate exited 2 (stub)"), seq)
+        seams = mk_seams(ok_integrity(), gate_result(False, 2, "the gate exited 2 (stub)"), seq)
         code, said = run_capturing(seams, cfg)
         ok = code == REFUSED and seq.calls == 0 and "gate-not-clear" in said
     return show("gate-exit2-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
@@ -167,7 +205,7 @@ def gate_absent_case() -> bool:
     with tempfile.TemporaryDirectory() as td:
         cfg = make_cfg(td)
         seq = SeqSpy(0)
-        seams = ur.Seams(ok_integrity(),
+        seams = mk_seams(ok_integrity(),
                          gate_result(False, None, "gate-absent: no gate (stub)"), seq)
         code, said = run_capturing(seams, cfg)
         ok = code == REFUSED and seq.calls == 0 and "gate-absent" in said
@@ -178,7 +216,7 @@ def writable_gate_case() -> bool:
     with tempfile.TemporaryDirectory() as td:
         cfg = make_cfg(td)
         seq = SeqSpy(0)
-        seams = ur.Seams(bad_integrity("the gate is group- or other-writable (mode 0o777)"),
+        seams = mk_seams(bad_integrity("the gate is group- or other-writable (mode 0o777)"),
                          gate_result(True, 0, "the gate exited 0 (stub)"), seq)
         code, said = run_capturing(seams, cfg)
         ok = code == REFUSED and seq.calls == 0 and "gate-integrity" in said
@@ -191,7 +229,7 @@ def budget_ceiling_case() -> bool:
         cfg.runner_dir.mkdir(parents=True, exist_ok=True)
         cfg.meter_path.write_text("5.0\n")
         seq = SeqSpy(0)
-        seams = ur.Seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
         code, said = run_capturing(seams, cfg)
         recorded = cfg.outcomes_path.read_text() if cfg.outcomes_path.is_file() else ""
         ok = (code == REFUSED and seq.calls == 0 and "budget-exhausted" in said
@@ -204,7 +242,7 @@ def budget_records_spend_case() -> bool:
     with tempfile.TemporaryDirectory() as td:
         cfg = make_cfg(td, budget=10.0, run_cost=3.0)
         seq = SeqSpy(0)
-        seams = ur.Seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
         code, _ = run_capturing(seams, cfg)
         meter = cfg.meter_path.read_text().strip() if cfg.meter_path.is_file() else "<absent>"
         ok = code == 0 and seq.calls == 1 and meter == "3.0"
@@ -217,7 +255,7 @@ def meter_unreadable_case() -> bool:
         cfg.runner_dir.mkdir(parents=True, exist_ok=True)
         cfg.meter_path.write_text("not-a-number\n")
         seq = SeqSpy(0)
-        seams = ur.Seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
         code, said = run_capturing(seams, cfg)
         ok = code == REFUSED and seq.calls == 0 and "meter-unreadable" in said
     return show("meter-unreadable-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
@@ -249,8 +287,8 @@ def concurrent_case() -> bool:
                 ran.append("second")
             return 0
 
-        holder_seams = ur.Seams(ok_integrity(), gate_result(True, 0, "clear"), slow_sequencer)
-        second_seams = ur.Seams(ok_integrity(), gate_result(True, 0, "clear"), second_sequencer)
+        holder_seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear"), slow_sequencer)
+        second_seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear"), second_sequencer)
         holder_result: list[int] = []
 
         def hold() -> None:
@@ -369,19 +407,22 @@ def sequencer_argv_case() -> bool:
 def read_meter_case() -> bool:
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
+
+        def meter(text: str) -> "float | None":
+            path = base / f"m{abs(hash(text))}.meter"
+            path.write_text(text)
+            return ur.read_meter(path)
+
         absent = ur.read_meter(base / "nope.meter")
-        five = base / "five.meter"
-        five.write_text("5.0\n")
-        five_val = ur.read_meter(five)
-        empty = base / "empty.meter"
-        empty.write_text("")
-        empty_val = ur.read_meter(empty)
-        garbage = base / "garbage.meter"
-        garbage.write_text("not-a-number\n")
-        garbage_val = ur.read_meter(garbage)
-        ok = absent == 0.0 and five_val == 5.0 and empty_val == 0.0 and garbage_val is None
+        five_val = meter("5.0\n")
+        empty_val = meter("")
+        garbage_val = meter("not-a-number\n")
+        nonfinite = {t: meter(t) for t in ("nan", "inf", "-inf", "1e400")}
+        ok = (absent == 0.0 and five_val == 5.0 and empty_val == 0.0 and garbage_val is None
+              and all(v is None for v in nonfinite.values()))
     return show("read-meter-mech", ok,
-                f": absent={absent}, five={five_val}, empty={empty_val}, garbage={garbage_val}")
+                f": absent={absent}, five={five_val}, garbage={garbage_val}, "
+                f"nonfinite-all-None={all(v is None for v in nonfinite.values())}")
 
 
 def story_lock_case() -> bool:
@@ -400,7 +441,6 @@ def cli_refuses_case() -> bool:
     """The real main against a non-root gate file: the runner refuses and cannot be talked to clear."""
     if os.geteuid() == 0:
         return show("cli-refuses-on-this-host-2", False, ": fixture is running as root")
-    import subprocess
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         gate = base / "sequencer" / "gate.sh"
@@ -425,6 +465,133 @@ def cli_refuses_case() -> bool:
     return show("cli-refuses-on-this-host-2", ok, f": exit {got.returncode}")
 
 
+def budget_nonfinite_case() -> bool:
+    """A non-finite budget refuses at the run level too, so no non-main caller runs past a nan ceiling."""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td, budget=float("nan"))
+        seq = SeqSpy(0)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        code, said = run_capturing(seams, cfg)
+        ok = code == REFUSED and seq.calls == 0 and "budget-invalid" in said
+    return show("budget-nan-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
+
+
+def runcost_negative_case() -> bool:
+    """A negative run-cost refuses at the run level: it would let the recorded meter run backwards."""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td, budget=100.0, run_cost=-1.0)
+        seq = SeqSpy(0)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        code, said = run_capturing(seams, cfg)
+        ok = code == REFUSED and seq.calls == 0 and "budget-invalid" in said
+    return show("runcost-negative-run-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
+
+
+def meter_nonfinite_case() -> bool:
+    """A meter holding `nan` refuses rather than disabling the ceiling, the reviewer's seed vector."""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td, budget=5.0)
+        cfg.runner_dir.mkdir(parents=True, exist_ok=True)
+        cfg.meter_path.write_text("nan\n")
+        seq = SeqSpy(0)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq)
+        code, said = run_capturing(seams, cfg)
+        ok = code == REFUSED and seq.calls == 0 and "meter-unreadable" in said
+    return show("meter-nonfinite-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
+
+
+def writable_runner_dir_case() -> bool:
+    """A failed runner-directory preflight refuses before the lock or meter, no sequencer run."""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td)
+        seq = SeqSpy(0)
+        seams = mk_seams(ok_integrity(), gate_result(True, 0, "clear (stub)"), seq,
+                         preflight=bad_preflight("the runner directory is other-writable (mode 0o777)"))
+        code, said = run_capturing(seams, cfg)
+        ok = code == REFUSED and seq.calls == 0 and "runner-dir" in said
+    return show("writable-runner-dir-refuses-2", ok, f": exit {code}, sequencer-calls={seq.calls}")
+
+
+def runner_dir_ok_case() -> bool:
+    if OTHER_USER is None:
+        return show("runner-dir-ok-mech", False, ": no distinct account to stand in as the run-user")
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td)
+        cfg = ur.Config(**{**cfg.__dict__, "run_user": OTHER_USER})
+        res = ur.real_runner_dir(cfg)
+        ok = res.ok
+    return show("runner-dir-ok-mech", ok, f": ok={res.ok}")
+
+
+def runner_dir_runuser_owned_case() -> bool:
+    """A runner directory owned by the run-user is refused: a phase could reset the meter or lock."""
+    if os.geteuid() == 0:
+        return show("runner-dir-runuser-owned-mech", False, ": fixture is running as root")
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td)
+        cfg = ur.Config(**{**cfg.__dict__, "run_user": ME})
+        cfg.runner_dir.mkdir(parents=True)
+        res = ur.real_runner_dir(cfg)
+        ok = not res.ok and "owned by the run-user" in res.detail
+    return show("runner-dir-runuser-owned-mech", ok, f": ok={res.ok}")
+
+
+def runner_dir_writable_case() -> bool:
+    if OTHER_USER is None:
+        return show("runner-dir-writable-mech", False, ": no distinct account to stand in")
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td)
+        cfg = ur.Config(**{**cfg.__dict__, "run_user": OTHER_USER})
+        cfg.runner_dir.mkdir(parents=True)
+        os.chmod(cfg.runner_dir, 0o777)
+        res = ur.real_runner_dir(cfg)
+        ok = not res.ok and "writable" in res.detail
+    return show("runner-dir-writable-mech", ok, f": ok={res.ok}")
+
+
+def runner_dir_unresolved_case() -> bool:
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg(td)
+        cfg = ur.Config(**{**cfg.__dict__, "run_user": "no-such-account-xyzzy"})
+        res = ur.real_runner_dir(cfg)
+        ok = not res.ok and "does not resolve" in res.detail
+    return show("runner-dir-unresolved-mech", ok, f": ok={res.ok}")
+
+
+def run_cli(base: Path, *, budget: str, run_cost: str | None = None) -> subprocess.CompletedProcess:
+    gate = base / "sequencer" / "gate.sh"
+    gate.parent.mkdir(parents=True, exist_ok=True)
+    gate.write_text("#!/usr/bin/env bash\nexit 0\n")
+    gate.chmod(0o644)
+    argv = [sys.executable, str(RUNNER),
+            "--run-user", "someuser", "--gate", str(gate),
+            "--pinned-root", str(base / "pinned"), "--clone", str(base / "clone"),
+            "--expect-remotes", "none", "--story", STORY,
+            "--runner-dir", str(base / "runner"), "--budget", budget,
+            "--root", str(base / "kit"), "--commit-check", "scripts/check.sh"]
+    if run_cost is not None:
+        argv += ["--run-cost", run_cost]
+    return subprocess.run(argv, capture_output=True, text=True, env=clean_env())
+
+
+def cli_budget_nonfinite_case() -> bool:
+    """--budget nan parses through argparse but is rejected at config, before any spend."""
+    with tempfile.TemporaryDirectory() as td:
+        got = run_cli(Path(td), budget="nan")
+        said = got.stdout + got.stderr
+        ok = got.returncode == REFUSED and "budget-invalid" in said and "seq|" not in said
+    return show("cli-budget-nan-refuses-2", ok, f": exit {got.returncode}")
+
+
+def cli_runcost_negative_case() -> bool:
+    """--run-cost -1 is rejected at config: a negative cost cannot bound cumulative spend."""
+    with tempfile.TemporaryDirectory() as td:
+        got = run_cli(Path(td), budget="100", run_cost="-1")
+        said = got.stdout + got.stderr
+        ok = got.returncode == REFUSED and "budget-invalid" in said and "seq|" not in said
+    return show("cli-runcost-negative-refuses-2", ok, f": exit {got.returncode}")
+
+
 def main() -> int:
     if not RUNNER.is_file():
         print(f"unattended_run_test: runner not found at {RUNNER}", file=sys.stderr)
@@ -434,14 +601,22 @@ def main() -> int:
         gate_exit2_case(),
         gate_absent_case(),
         writable_gate_case(),
+        writable_runner_dir_case(),
         budget_ceiling_case(),
         budget_records_spend_case(),
         meter_unreadable_case(),
+        meter_nonfinite_case(),
+        budget_nonfinite_case(),
+        runcost_negative_case(),
         concurrent_case(),
 
         integrity_not_root_case(),
         integrity_writable_case(),
         integrity_absent_case(),
+        runner_dir_ok_case(),
+        runner_dir_runuser_owned_case(),
+        runner_dir_writable_case(),
+        runner_dir_unresolved_case(),
         gate_absent_real_case(),
         gate_nonexec_real_case(),
         gate_argv_case(),
@@ -450,6 +625,8 @@ def main() -> int:
         story_lock_case(),
 
         cli_refuses_case(),
+        cli_budget_nonfinite_case(),
+        cli_runcost_negative_case(),
     ]
     failed = results.count(False)
     print(f"unattended_run_test: {len(results) - failed}/{len(results)} cases pass")

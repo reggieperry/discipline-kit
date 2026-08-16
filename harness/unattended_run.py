@@ -74,7 +74,9 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import math
 import os
+import pwd
 import stat
 import subprocess
 import sys
@@ -164,10 +166,16 @@ class GateResult:
 
 @dataclass(frozen=True)
 class Seams:
-    """The integrity check, the gate invocation, and the sequencer call, each a zero-arg act."""
+    """The gate-integrity read, the gate invocation, the runner-directory read, the sequencer call.
+
+    `integrity` and `preflight` are both out-of-band trust reads a stubbed gate cannot perform for
+    itself, so both sit behind this seam; `real_seams` binds the real ones and is the only builder
+    `main` uses.
+    """
 
     integrity: Callable[[], IntegrityResult]
     gate: Callable[[], GateResult]
+    preflight: Callable[[], IntegrityResult]
     sequencer: Callable[[], int]
 
 
@@ -183,6 +191,9 @@ def gate_argv(cfg: Config, env: dict[str, str] | None = None) -> list[str]:
     argv = ["sudo", "-u", cfg.run_user, "env", "-i", f"PATH={cfg.gate_env_path}"]
     key = world.get("ANTHROPIC_API_KEY")
     if key:
+        # This is INSTALL-HARDENING Step 6's phase-spawn form verbatim. The key is visible in `ps`
+        # to the run-user for the gate's lifetime; it is the model key, not a publish or trunk
+        # credential, so it is a kit-wide disclosure rather than this runner's regression to close.
         argv.append(f"ANTHROPIC_API_KEY={key}")
     argv += [str(cfg.gate), "--run-user", cfg.run_user, "--pinned-root", str(cfg.pinned_root),
              "--clone", str(cfg.clone), "--expect-remotes", cfg.expect_remotes]
@@ -228,6 +239,45 @@ def real_integrity(cfg: Config) -> IntegrityResult:
         return IntegrityResult(False, "; ".join(problems))
     return IntegrityResult(
         True, f"{cfg.gate} and its directory are root-owned and not group- or other-writable")
+
+
+def real_runner_dir(cfg: Config) -> IntegrityResult:
+    """The runner-owned directory not writable by the run-user, checked before the lock or meter.
+
+    The gate's six conditions cover the pinned root, not this directory, so the lockfile, meter, and
+    outcome record it holds would otherwise be reachable by a phase: a run-user-writable runner
+    directory lets a phase delete the meter (an absent meter reads as a fresh zero and resets the
+    ceiling) or unlink and recreate the lockfile (defeating the per-story lock). It must therefore
+    be owned by the operator or root and not writable by the run-user. An absent directory is
+    created here so it is owned by the runner, closing the window in which a phase could plant it.
+    """
+    cond = "runner-dir"
+    try:
+        run_uid = pwd.getpwnam(cfg.run_user).pw_uid
+    except KeyError:
+        return IntegrityResult(
+            False, f"{cond}-unmeasurable: the run-user {cfg.run_user!r} does not resolve, so the "
+            "runner directory's ownership cannot be judged against it")
+    directory = cfg.runner_dir
+    try:
+        created = not directory.exists()
+        directory.mkdir(parents=True, exist_ok=True)
+        if created:
+            os.chmod(directory, 0o700)
+        st = os.lstat(directory)
+    except OSError as e:
+        return IntegrityResult(
+            False, f"{cond}-unmeasurable: {directory} could not be prepared or stat'd: {e}")
+    problems: list[str] = []
+    if st.st_uid == run_uid:
+        problems.append(f"{directory} is owned by the run-user (uid {run_uid}), so a phase could "
+                        "reset the meter or unlink the lock")
+    if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        problems.append(f"{directory} is group- or other-writable (mode {oct(st.st_mode & 0o777)})")
+    if problems:
+        return IntegrityResult(False, "; ".join(problems))
+    return IntegrityResult(
+        True, f"{directory} is not run-user-owned and not group- or other-writable")
 
 
 def real_gate(cfg: Config) -> GateResult:
@@ -284,6 +334,7 @@ def real_seams(cfg: Config) -> Seams:
     return Seams(
         integrity=lambda: real_integrity(cfg),
         gate=lambda: real_gate(cfg),
+        preflight=lambda: real_runner_dir(cfg),
         sequencer=lambda: real_sequencer(cfg),
     )
 
@@ -321,7 +372,10 @@ def read_meter(meter: Path) -> float | None:
 
     An absent meter is a fresh runner with no spend recorded. A present meter that cannot be read as
     a number is a corruption the runner must not read as zero, because reading zero would step past
-    the ceiling — so it returns None, which the caller reads fail-closed as a refusal.
+    the ceiling — so it returns None, which the caller reads fail-closed as a refusal. A non-finite
+    value is such a corruption: `float` parses `nan`, `inf`, `-inf`, and an overflowing literal
+    without raising, and `spent >= budget` is False for `nan` and `-inf`, so the ceiling would never
+    fire; a non-finite meter therefore returns None and refuses, self-perpetuating writes included.
     """
     if not meter.exists():
         return 0.0
@@ -332,9 +386,12 @@ def read_meter(meter: Path) -> float | None:
     if not text:
         return 0.0
     try:
-        return float(text)
+        value = float(text)
     except ValueError:
         return None
+    if not math.isfinite(value):
+        return None
+    return value
 
 
 def record_spend(meter: Path, amount: float) -> None:
@@ -359,11 +416,12 @@ def refuse(cfg: Config, marker: str, detail: str) -> int:
 
 
 def run(seams: Seams, cfg: Config) -> int:
-    """The gate first and fail-closed, then the lock, then the budget, then the run.
+    """The gate first and fail-closed, then the runner directory, then the lock, budget, and run.
 
-    Nothing that spends runs before the integrity-verified gate clears and the lock is held; the
-    budget is read under the lock and refuses to launch when the ceiling is already reached, so the
-    sequencer is never invoked past the ceiling.
+    Nothing that spends runs before the integrity-verified gate clears, the runner directory is
+    proven not run-user-writable, and the lock is held; the budget is read under the lock and
+    refuses to launch when the ceiling is already reached, so the sequencer is never invoked past
+    the ceiling.
     """
     integrity = seams.integrity()
     if not integrity.ok:
@@ -375,12 +433,20 @@ def run(seams: Seams, cfg: Config) -> int:
         return refuse(cfg, "gate-not-clear", gate.detail)
     say(f"unattended-run: gate clear (exit {gate.exit_code}): {gate.detail}")
 
+    preflight = seams.preflight()
+    if not preflight.ok:
+        return refuse(cfg, "runner-dir", preflight.detail)
+    say(f"unattended-run: runner directory verified: {preflight.detail}")
+
     with story_lock(cfg) as held:
         if not held:
             return refuse(cfg, "lock-held",
                           f"another invocation holds {cfg.lock_path}, so this one does not race it")
         say(f"unattended-run: acquired the per-story lock {cfg.lock_path}")
 
+        bad = invalid_budget(cfg)
+        if bad is not None:
+            return refuse(cfg, "budget-invalid", bad)
         spent = read_meter(cfg.meter_path)
         if spent is None:
             return refuse(cfg, "meter-unreadable",
@@ -408,6 +474,21 @@ def build_config(a: argparse.Namespace) -> Config:
         root=Path(a.root), commit_check=a.commit_check, plan=a.plan, harness=a.harness,
         timeout=a.timeout, fresh_attempt=a.fresh_attempt,
     )
+
+
+def invalid_budget(cfg: Config) -> str | None:
+    """The budget and run-cost must be finite and non-negative, or the ceiling cannot bound a run.
+
+    `argparse type=float` parses `nan`, `inf`, `-inf`, and an overflowing literal without complaint,
+    and `spent >= budget` is False for a `nan` or `-inf` ceiling, so such a value silently disables
+    the budget. It is rejected at config, before any spend, rather than read as a live ceiling.
+    """
+    for name, value in (("--budget", cfg.budget), ("--run-cost", cfg.run_cost)):
+        if not math.isfinite(value):
+            return f"{name} must be a finite number, got {value}"
+        if value < 0:
+            return f"{name} must be non-negative, got {value}"
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -440,6 +521,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="walk a fresh attempt, relayed to the sequencer")
     a = ap.parse_args(argv)
     cfg = build_config(a)
+    bad = invalid_budget(cfg)
+    if bad:
+        say(f"unattended-run: REFUSED: budget-invalid: {bad} (exit {REFUSED})", err=True)
+        return REFUSED
     try:
         return run(real_seams(cfg), cfg)
     except OSError as e:
