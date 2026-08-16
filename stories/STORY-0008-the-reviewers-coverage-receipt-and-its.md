@@ -98,3 +98,23 @@ Anti-weakening contract—the change does not weaken the suite versus the merge-
   `refuse_escaping_material` call sites share the latent RuntimeError class—`load`'s net is
   OSError-only—so a symlink loop in pinned postcondition material would escape the same way;
   the next loader story inherits it.
+- Reviewer fan-out settled (2026-08-16), the receipt's producer shape—recorded here because the
+  reviewer phase brief that builds it is still unbuilt and unstoried, so it inherits this the way
+  the loader follow-up above is inherited by the next loader story. The reviewer runs as **one
+  fenced session per lens**, not a workflow inside one phase: the pinned fence denies `Task`,
+  `Agent`, and `Workflow` to every phase (ADR-0005/D6), so a phase cannot fan itself out. Each lens
+  session commits its own receipt line to its own ref; the sequencer enumerates the expected lenses
+  from the same pinned-grade denominator this story derives, unions the per-lens refs, and runs this
+  story's completeness check against the assembled receipt. Chosen over a single session walking the
+  lenses in sequence because the coverage receipt is exactly a confidently-wrong-at-signature
+  surface—a lone session asked to certify N rule-dimensions is under pressure to emit `covered` for
+  all N whether or not it did the work (the design doc's "a phase that could do nothing reports
+  success" edge), and one fenced session per lens makes each coverage claim a separate act and each
+  could-not-inspect its own could-not-run rather than a silent missing line in a bulk receipt. The
+  cost is an honest one: a reviewer phase-line becomes N graded sessions plus a receipt-assembly
+  step, where the inline shape is one session and one receipt. This story's completeness check is
+  unaffected either way—it reads the assembled receipt against the enumerated denominator, and the
+  fan-out only decides who writes the lines. What is NOT settled here is whether the lens sessions
+  run concurrently: concurrency lives in the driver under the batch token throttle (ADR-0006), and
+  the sequential floor (N sessions one after another) needs nothing new from that ADR. This settles
+  the shape, not the schedule.

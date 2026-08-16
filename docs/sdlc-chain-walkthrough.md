@@ -315,9 +315,12 @@ absolute gate greener.
 **The sequencer drives the lenses; the phase spawns nothing.** The pinned settings deny `Task`,
 `Agent`, and `Workflow` (ADR-0005/D6), so a phase cannot fan itself out. Each lens commits its
 findings to its own ref, and the sequencer unions from refs, never from a session's return string.
-Whether the sequencer launches one fenced session per lens or a single reviewer session walks the
-computed lenses in sequence is a build-time choice — either way the phase spawns nothing and any
-concurrency lives in the driver (ADR-0006), never in the phase.
+The sequencer launches one fenced session per lens, not a single session walking them in sequence —
+each lens's coverage is then a separate fenced act, so a lone reviewer cannot rubber-stamp every
+rule-dimension at once, and a lens that could not be inspected surfaces as its own could-not-run
+rather than a silent missing line in a bulk receipt. STORY-0008 settles this and carries the
+reasoning. Either way the phase spawns nothing; whether those lens sessions run concurrently or one
+after another is the driver's under ADR-0006's throttle, never the phase's.
 
 **The lenses are computed rather than chosen, from the repo's own rules.** The lens list is the
 grade-partitioned rule set: one lens per `review and convention` rule, because nothing else will
