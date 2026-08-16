@@ -61,6 +61,13 @@ python3 harness/fixtures/profile_check_test.py
 # kit repositories where HEAD differs from the latest tag, and points the court at planted
 # trees carrying the pre-fix defect verbatim — the only way either is ever observed failing.
 python3 harness/fixtures/install_test.py
+# install-chain.sh's fixture. The TOOL itself is an operator action, not a commit-path check, so it
+# is deliberately not wired here; only its fixture is. The fixture builds a hermetic scratch kit
+# (the real runtime and rules committed on a branch) and drives the real install-chain.sh against
+# scratch targets, asserting the shared SHA-named tool snapshot materializes clean, the rules
+# vendor, the per-target profile is written, and — the end-to-end proof — the shared core.py
+# resolves the target's own profile and fails closed until the pinned root exists.
+python3 harness/fixtures/install_chain_test.py
 # The postcondition loader's fixture, on the commit path; the loader itself deliberately is not,
 # for the reason the chain graph's checker was held back until its triage closed. The loader
 # resolves examiner material from the profile's out-of-tree `pinned_root`, that directory is
