@@ -7,7 +7,7 @@ paths:
 
 # Python testing
 
-**Enforcement grade:** mechanically enforced for the anti-weakening section below — Check D counts pytest skip markers (must not increase) and assert keywords (must not decrease per file), so a deleted test, a new `@pytest.mark.skip`, or a dropped assertion fails the diff. Test *shape* — one behavior per test, a discriminating assertion — is review.
+**Enforcement grade:** partly mechanical — mechanically enforced for the anti-weakening section below: Check D counts pytest skip markers (must not increase) and assert keywords (must not decrease per file), so a deleted test, a new `@pytest.mark.skip`, or a dropped assertion fails the diff. Test *shape* — one behavior per test, a discriminating assertion — is review.
 
 How to write Python tests: pytest structure, fixtures, mocking, and property-based testing with Hypothesis. Sources: the pytest docs (fixtures, parametrize, monkeypatch, skipping, good practices), Brian Okken's *Python Testing with pytest*, the `unittest.mock` docs, `coverage.py`, and Hypothesis. The TDD cadence and design discipline are in `craft-tdd.md`.
 

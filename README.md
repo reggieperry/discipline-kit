@@ -15,11 +15,11 @@ The kit's operator is Claude Code; the interface is the prompt. Use the prompts 
 > **Upgrade:** "Run `install-harness.sh --upgrade`, show me the `VERSION` delta, and re-run `harness-verify`."
 >
 >
-> **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the authoring-layer entry in the operators-manual's Options section and the four skills — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files. Then point me at `docs/stories-with-the-kit.md` for the workflow."
+> **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the authoring-layer entry in the operators-manual's Options section and the four skills — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files."
 
-This installs the rules, the review skills, and a commit-path check. The full lifecycle is walked in [`docs/week-with-the-kit.md`](docs/week-with-the-kit.md); authoring stories and ADRs — written locally or pulled from your team's board over its API — is walked in [`docs/stories-with-the-kit.md`](docs/stories-with-the-kit.md); the trust model is `SECURITY.md`.
+This installs the rules, the review skills, and a commit-path check. Authoring stories and ADRs — written locally or pulled from your team's board over its API — is the optional authoring layer (a Tour choice, above); the opt-in build chain that runs them is documented below; the trust model is `SECURITY.md`.
 
-It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It deliberately does **not** include the autonomous build chain (see below).
+It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It also ships an **opt-in, attended-only build chain** (see below), off by default; the heavier autonomous robot the source system runs does not come along.
 
 ## Status, scope, and license
 
@@ -81,9 +81,21 @@ A security rule states its **enforcement grade** at the top — no rule reads st
 - **TypeScript** — roadmap: `eslint-plugin-security` or `semgrep`, with the TS toolchain.
 - **Scala** — deferred: no native `bandit`-equivalent; options are bytecode-side FindSecBugs or `semgrep`.
 
-## What this is NOT — the autonomous chain
+## The build chain (opt-in, attended-only)
 
-The source system also runs an autonomous worker → tester → reviewer → documenter → finalizer chain under a supervisor with a durable work-item store. None of that is here, by design: it needs a long-running supervisor daemon, a database-backed queue, per-machine native builds, and an unattended-execution posture that a managed corporate laptop will not host and corporate policy will not allow. This kit is the discipline a human-in-the-loop session applies — not the robot that runs it.
+The kit's default is the *interactive* discipline above — the rules, skills, and gate that make one human-in-the-loop session reason and review better. It now also ships an **opt-in build chain**: a pinned Python driver (`harness/chain/`) that runs a story through graded, fail-closed phases — each a headless `claude -p` session whose advance is *re-derived from git refs, never self-reported* — and stops short of the published trunk, leaving a candidate a human crosses.
+
+This is deliberately **not** the source system's full autonomous robot (a worker → tester → reviewer → documenter → finalizer chain under a supervisor daemon with a database-backed queue). That needs a long-running daemon, a DB, and an unattended-execution posture a managed corporate laptop will not host. The chain here is lighter and honest about its limits: its entire state is a **filesystem pinned root** (no daemon, no database), and it is **attended-only until the hardening lands** (`INSTALL-HARDENING.md`, ADR-0005) — it spends real API calls, and the human transplant to trunk is the trust boundary. `core.py` and the loader fail *closed* until the pinned root exists, which is the honest gate.
+
+**Install the chain into a repository on this machine:**
+
+```
+./install-chain.sh --dir <target-repo> --terminal open-pr|merge-local
+```
+
+This mints a SHA-named immutable tool snapshot outside every target, vendors the kit's rules into the target, and writes a per-target chain profile — the *capability* only. Authoring the target's postconditions, briefs, phase table, fence settings, and pinned examiner copy; minting the dedicated clone; and provisioning the pinned root stay operator work, and the script prints that checklist on exit.
+
+**Learn it.** The step-by-step tutorial with a worked example — install, author the pinned material, run a story, transplant the result — is [`docs/using-the-chain-in-another-repo.md`](docs/using-the-chain-in-another-repo.md). The design narrative, naming every phase, who runs it, and the predicate that decides it happened, is [`docs/sdlc-chain-walkthrough.md`](docs/sdlc-chain-walkthrough.md); the reasoning behind it lives as numbered decisions in [`docs/adrs/`](docs/adrs/) (start at the registry in [`docs/adrs/README.md`](docs/adrs/README.md)).
 
 ## Install (user-level)
 

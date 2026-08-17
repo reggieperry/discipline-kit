@@ -54,11 +54,30 @@ ls "$ROOT/.claude/rules/" "$ROOT/.claude/rules/project/" 2>/dev/null
 
 Load, in priority order, whatever exists:
 
-1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, `java-*.md`, and `ts-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` and `java-*` carry `*-concurrency` for their effect/virtual-thread boundary). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. Note there may be **no dedicated shell layer** (in some repos, shell is covered by the craft rules plus the embedded shell baseline below).
-2. **Craft-core rules** — `craft-*.md` (complexity / abstraction / tdd / refactoring / domain-modeling). These are language-neutral and glob across `**/*.go`, `**/*.sh`, and `**/*.py`, so they apply to every changed file regardless of language. If the repo ships none, the embedded craft lens below covers it.
+1. **Per-language rules matching each changed file's language**: `go-*.md` (`go-style`, `go-errors`, `go-types`, `go-concurrency`, `go-modules`, `go-testing`, `go-llm`); `python-*.md`, `scala-*.md`, `java-*.md`, `ts-*.md`, and `shell-*.md` follow the same shape (`ts-*` adds `ts-react`; `scala-*` and `java-*` carry `*-concurrency` for their effect/virtual-thread boundary; `shell-*` is four files — style, errors, security, testing — because shell has no type system, no model boundary, and no module system beyond `source`). These carry the authoritative language idioms and the language-specific anti-weakening list; use them over the embedded baseline below. A repo installed before the shell layer shipped may still have none — check, and fall back to the embedded shell baseline below when it is absent.
+2. **Craft-core rules** — `craft-*.md` (complexity / abstraction / tdd / refactoring / domain-modeling / documentation / measurement / logging / xunit). These are language-neutral and glob across every source extension, so they apply to every changed file regardless of language. Two are easy to skip and shouldn't be: `craft-measurement.md` governs any check, gauge, or wait loop in the diff, and `craft-logging.md` governs what a running program emits — neither has a mechanical enforcer, so a reader is the only instrument. If the repo ships none, the embedded craft lens below covers it.
 3. **Rig-specific rules** — the *reviewed project's own* domain, architecture, security, and review rules (`*-<project>.md`, `architecture.toml`, `review-*.md`, `security-*.md`, a slop rubric). When reviewing a cloned target repo, this layer is the **target's** rules, not the reviewer's; the reviewing repo may ship none. These bind hardest: a repo may *specialize* the general discipline but never *weaken* it.
 
 **Honor each rule's `paths:` glob** — apply a rule only to the changed files its glob covers. `go-llm.md` is scoped to LLM-call sites (globs like `*llm*`, `*schema*`), so it bites on an LLM-call file but not a plain helper. Rules auto-load by glob only when *editing*; during a review you are reading a diff, so load them explicitly here and match each to the files it governs. If the repo has no `.claude/rules/`, fall back to the embedded baselines at the end of this file and say so in the output.
+
+**Then read each rule's enforcement grade, and let it decide where your attention goes.** Every rule
+opens with `**Enforcement grade:**` and one of three tokens. The grade is not commentary — it says
+whether anything other than you will ever catch a violation:
+
+- **`review and convention`** — nothing mechanical checks this. If you do not catch it, nothing
+  does. This is where review earns its keep, and it deserves most of the reading time.
+- **`partly mechanical`** — the build refuses part of what the rule says, and the grade paragraph
+  names which part. Review the remainder, and **say which part you treated as already covered**. A
+  finding the compiler already rejects cannot reach main; reporting it spends the reader's
+  attention on something that has an owner.
+- **`mechanically enforced`** — the build catches this. Skip it, and record that you skipped it.
+
+The distribution is usually lopsided and worth knowing before you start: in one 26-rule repo it was
+13 review-and-convention, 11 partly mechanical, 2 mechanical. Half the discipline had no instrument
+but a reader.
+
+If a rule carries no grade, treat it as `review and convention` and say so — an ungraded rule is one
+whose enforcement nobody has established, which is not the same as one that is enforced.
 
 ## Step 5 — Apply the language-neutral review core (embedded below)
 
@@ -77,6 +96,11 @@ Structured, severity-tiered, evidence-cited:
 - Each finding: `file:line` · what · why it matters · a one-line suggested fix.
 - **Verify before asserting** — re-read the lines you cite; do not cite a line number from memory. Quote only what you read. Do not invent identifiers.
 - Separate "this is wrong" from "I'd prefer" — label preferences as such.
+- **Close with the denominator**, so a clean review cannot read as a thorough one: how many rules
+  applied to these files, how many you actually read the diff against, which you skipped as
+  mechanically enforced, and which matched no changed file. A rule whose glob caught nothing and a
+  rule you did not reach both produce no findings, and so does a rule that found none — those are
+  three different facts and the reader needs them separated.
 
 ---
 
@@ -109,6 +133,27 @@ Structured, severity-tiered, evidence-cited:
 - **Smells** (Fowler): duplication, long function, feature envy, primitive obsession, shotgun surgery — name the smell, propose the move.
 - Define errors out of existence where you can; most scattered `try/except` (or swallowed errors) is an abdication.
 
+**Simplification lens** (the elaboration read). The smells above hunt defects. This asks a different
+question — *is an idea expressed more elaborately than it needs to be?* — and a change can violate
+no smell on the list while still saying one thing three ways. Four questions:
+
+- **Is any idea computed or recorded twice?** Two functions that must agree, two records of one
+  fact, a value derived in parallel rather than projected from the thing that already decided it.
+  Where two computations must agree, ask what establishes it — if the answer is an argument across
+  several files rather than a shared line, that is the finding.
+- **Is an ordering encoded in more than one place?** A sequence whose order lives in indentation
+  while comments number the steps; a priority the specification fixes but the code leaves implicit.
+  An order that is data can be checked; an order that is layout cannot.
+- **Is anything stated N times that could be stated once?** A notation decoded per file instead of
+  per package, a convention restated per call site, a citation repeated where a pointer would do.
+- **Does anything force a re-read?** A sentence past roughly forty words, an `else` far enough from
+  its `if` that the reader must scroll to pair them, a nesting depth they have to count. These cost
+  a human and cost a machine reader nothing, which is why they survive review by anything that
+  reads the way a machine does.
+
+Each is a question, not a rule: the answer may well be that the elaboration is earned. Say so when
+it is, and name what earns it.
+
 ## Embedded Go baseline (used only if the repo ships no `go-*.md`)
 
 - Every goroutine has a clear, owned stop — no leak; a `context` is propagated and its cancellation honored.
@@ -128,7 +173,7 @@ Structured, severity-tiered, evidence-cited:
 - Translate library exceptions at your module boundary — don't let `openpyxl.KeyError` escape a public function.
 - `list.count(x)` inside a comprehension over the same list is O(n²) — use `Counter`/`set`.
 
-## Embedded Shell baseline (no dedicated shell rule layer — pair with the craft core)
+## Embedded Shell baseline (used only if the repo ships no `shell-*.md`)
 
 - `set -euo pipefail` at the top; a failed command, a broken pipe, or an unset variable must not pass silently.
 - Quote every expansion (`"$var"`, `"${arr[@]}"`) — unquoted word-splitting and globbing is the most common shell bug.

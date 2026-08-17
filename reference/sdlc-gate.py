@@ -912,6 +912,412 @@ def run_jacoco_coverage(root: Path) -> dict[str, float]:
         raise CoverageOperationalError(f"jacoco report unreadable: {e}") from e
 
 
+
+# --- TypeScript toolchain scanners --------------------------------------------
+# Every format below was captured from the installed tool before its parser was written:
+# `eslint -f json` (an array of {filePath, messages:[{ruleId, severity, line}]}, where ruleId is
+# NULL for directive-level findings), `tsc --noEmit -p tsconfig.json` (`file(line,col): error
+# TSxxxx: msg`, exit 2 on errors), and istanbul's coverage-final.json from a real vitest run.
+
+_TS_EXT = (".ts", ".tsx", ".mts", ".cts")
+# Directories that hold code nobody in this repo wrote or reviews. node_modules is the one that
+# matters: it dwarfs the source tree, and a single vendored @ts-ignore would otherwise enter the
+# suppression baseline and then "improve" whenever a dependency changed.
+_TS_SKIP_DIRS = {"node_modules", "dist", "build", "coverage", ".next", ".turbo", "out", ".git"}
+
+
+def _walk_ts(root: Path):
+    for path in root.rglob("*"):
+        if path.suffix not in _TS_EXT or not path.is_file():
+            continue
+        if _TS_SKIP_DIRS.intersection(path.relative_to(root).parts):
+            continue
+        yield path
+
+
+def _ts_rel(root: Path, name: str) -> str:
+    name = name.replace("\\", "/")
+    try:
+        return str(Path(name).resolve().relative_to(root.resolve()))
+    except ValueError:
+        return name.lstrip("/")
+
+
+def _parse_eslint_json(payload: str, root: Path) -> Counter:
+    """Counter[(relative_path, rule-id)]. A null ruleId is kept under `(core)` rather than
+    dropped: eslint reports 'Unused eslint-disable directive' that way, and that finding is
+    precisely a suppression going stale — the last thing a differential should discard."""
+    counter: Counter = Counter()
+    if not payload.strip():
+        return counter
+    try:
+        entries = json.loads(payload)
+    except (ValueError, TypeError):
+        return counter
+    if not isinstance(entries, list):
+        return counter
+    for entry in entries:
+        rel = _ts_rel(root, entry.get("filePath") or "")
+        for msg in entry.get("messages") or []:
+            counter[(rel, msg.get("ruleId") or "(core)")] += 1
+    return counter
+
+
+def run_eslint(root: Path) -> Counter:
+    exe = _ts_bin(root, "eslint")
+    if exe is None:
+        sys.stderr.write("sdlc-gate: eslint not invokable; skipping the ESLint scan\n")
+        return Counter()
+    try:
+        proc = subprocess.run([*exe, "-f", "json", "."],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=900)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: eslint not invokable; skipping the ESLint scan\n")
+        return Counter()
+    return _parse_eslint_json(proc.stdout, root)
+
+
+_TSC_ERROR = re.compile(r"^(?P<file>[^(\s][^(]*)\((?P<line>\d+),\d+\):\s*error\s+(?P<code>TS\d+):",
+                        re.MULTILINE)
+
+
+def _parse_tsc_output(text: str) -> Counter:
+    """Counter[(relative_path, TSxxxx)] from tsc's own diagnostic lines. tsc already reports the
+    path relative to the project root, so no resolution is needed — and must not be attempted,
+    because the compile runs in a scratch worktree whose absolute path is not the repo's."""
+    counter: Counter = Counter()
+    for m in _TSC_ERROR.finditer(text):
+        counter[(m.group("file").replace("\\", "/").strip(), m.group("code"))] += 1
+    return counter
+
+
+def _ts_bin(root: Path, name: str) -> list[str] | None:
+    """The repo's own pinned binary if it has one, else the one on PATH. A repo-local tool is
+    preferred because the differential compares two trees of THIS repo, and a globally-installed
+    eslint at a different major version would report a different rule set on each side."""
+    local = root / "node_modules" / ".bin" / name
+    if local.is_file():
+        return [str(local)]
+    if shutil.which(name):
+        return [name]
+    if shutil.which("npx"):
+        return ["npx", "--no-install", name]
+    return None
+
+
+def run_tsc(root: Path) -> Counter:
+    exe = _ts_bin(root, "tsc")
+    if exe is None or not (root / "tsconfig.json").is_file():
+        sys.stderr.write("sdlc-gate: tsc not invokable or no tsconfig.json; skipping the tsc scan\n")
+        return Counter()
+    try:
+        proc = subprocess.run([*exe, "--noEmit", "-p", "tsconfig.json"],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: tsc not invokable; skipping the tsc scan\n")
+        return Counter()
+    return _parse_tsc_output(proc.stdout + proc.stderr)
+
+
+# Suppression directives. eslint-disable-next-line and -line are matched before the bare form,
+# and the bare form carries a negative lookahead, so one `// eslint-disable-next-line` counts
+# once under its own key rather than twice under two.
+_TS_SUPPRESSION_PATTERNS = [
+    (re.compile(r"eslint-disable-next-line"), "eslint-disable-next-line"),
+    (re.compile(r"eslint-disable-line"), "eslint-disable-line"),
+    (re.compile(r"eslint-disable(?!-next-line|-line)"), "eslint-disable"),
+    (re.compile(r"@ts-ignore"), "ts-ignore"),
+    (re.compile(r"@ts-expect-error"), "ts-expect-error"),
+    (re.compile(r"@ts-nocheck"), "ts-nocheck"),
+]
+
+
+def scan_ts_suppressions(root: Path) -> Counter:
+    """Counter[(relative_path, directive_key)] over all TypeScript sources."""
+    counter: Counter = Counter()
+    for path in _walk_ts(root):
+        rel = str(path.relative_to(root))
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for pattern, key in _TS_SUPPRESSION_PATTERNS:
+            n = len(pattern.findall(text))
+            if n:
+                counter[(rel, key)] += n
+    return counter
+
+
+# `.only` sits with the skips deliberately. It does not disable the test it marks — it disables
+# every OTHER test in the file, which is a larger suppression wearing a smaller word, and a
+# committed `.only` is the classic way a suite silently stops covering anything.
+_TS_SKIP = re.compile(
+    r"\b(?:it|test|describe|suite|bench)\.(?:skip|only|todo|skipIf|failing)\b|\bx(?:it|describe|test)\b")
+_TS_ASSERT = re.compile(r"\bexpect\s*\(|\bassert\w*\s*\(")
+
+
+def _ts_is_test_file(rel: str) -> bool:
+    rel = "/" + rel.replace("\\", "/")
+    stem = rel.rsplit("/", 1)[-1]
+    return (".test." in stem or ".spec." in stem
+            or "/__tests__/" in rel or "/tests/" in rel or "/test/" in rel)
+
+
+def scan_ts_test_weakening(root: Path) -> dict:
+    """Per-test-file skip-marker and assertion-site counts. Check D handles them exactly as for
+    pytest/munit/JUnit: skips must not rise, assertion sites must not fall. No `params` sub-map —
+    fast-check's numRuns is the TypeScript analogue of ScalaCheck's minSuccessfulTests and is NOT
+    scanned here, so a lowered numRuns passes. Stated rather than left to be discovered."""
+    skips: dict[str, int] = {}
+    asserts: dict[str, int] = {}
+    for path in _walk_ts(root):
+        rel = str(path.relative_to(root))
+        if not _ts_is_test_file(rel):
+            continue
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        skips[rel] = len(_TS_SKIP.findall(text))
+        asserts[rel] = len(_TS_ASSERT.findall(text))
+    return {"skips": skips, "asserts": asserts, "params": {}}
+
+
+def ts_compile_status(root: Path) -> str:
+    """`tsc --noEmit` over the project → 'ok'/'fail'/'skip'. This is the fail-closed precondition:
+    a tree that does not type-check cannot produce a trustworthy eslint differential, because
+    eslint's type-aware rules degrade silently on a broken program."""
+    if not (root / "tsconfig.json").is_file():
+        return "skip"
+    exe = _ts_bin(root, "tsc")
+    if exe is None:
+        return "skip"
+    try:
+        proc = subprocess.run([*exe, "--noEmit", "-p", "tsconfig.json"],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: tsc could not run; skipping the compile precondition\n")
+        return "skip"
+    return "ok" if proc.returncode == 0 else "fail"
+
+
+def parse_istanbul(payload: str, root: Path) -> dict[str, float]:
+    """Per-directory statement coverage from istanbul's coverage-final.json, mirroring scoverage
+    and JaCoCo. A file with zero statements contributes nothing rather than being minted as 100%,
+    which is the same fail-open those two parsers close."""
+    data = json.loads(payload)
+    agg: dict[str, list[int]] = {}
+    for key, entry in (data or {}).items():
+        rel = _ts_rel(root, (entry or {}).get("path") or key)
+        directory = str(Path(rel).parent).replace("\\", "/")
+        counts = (entry or {}).get("s") or {}
+        if not counts:
+            continue
+        slot = agg.setdefault(directory, [0, 0])
+        slot[0] += sum(1 for v in counts.values() if v)
+        slot[1] += len(counts)
+    return {d: hit / total * 100.0 for d, (hit, total) in agg.items() if total > 0}
+
+
+def run_istanbul_coverage(root: Path) -> dict[str, float]:
+    report = root / "coverage" / "coverage-final.json"
+    if not report.is_file():
+        raise CoverageOperationalError(
+            "coverage/coverage-final.json not found — refusing to read coverage as empty "
+            "(fail-closed); run the suite with --coverage and the json reporter first")
+    try:
+        return parse_istanbul(report.read_text(), root)
+    except (OSError, ValueError) as e:
+        raise CoverageOperationalError(f"coverage-final.json unreadable: {e}") from e
+
+
+
+# --- Go toolchain scanners ----------------------------------------------------
+# Captured from golangci-lint 2.12.2 and go 1.26 before any parser here was written. Two captured
+# facts differ from the obvious guess and each has a test: golangci-lint appends a human summary
+# AFTER its JSON document, and a coverprofile names files by module path rather than by repo path.
+
+# vendor/ is dependency source nobody here reviews; testdata/ is excluded from the build by the
+# go tool itself and routinely holds deliberately-broken fixtures, so scanning it would report
+# findings against files that are supposed to be wrong.
+_GO_SKIP_DIRS = {"vendor", "testdata", ".git"}
+
+
+def _walk_go(root: Path):
+    for path in root.rglob("*.go"):
+        if not path.is_file():
+            continue
+        if _GO_SKIP_DIRS.intersection(path.relative_to(root).parts):
+            continue
+        yield path
+
+
+def _parse_golangci_json(payload: str, root: Path) -> Counter:
+    """Counter[(relative_path, linter)].
+
+    golangci-lint 2.x with `--output.json.path stdout` writes its JSON document and then appends
+    a human-readable summary ("3 issues:", "* errcheck: 1"). Feeding the whole stream to
+    json.loads raises `Extra data`, and a parser that swallowed that error would report zero
+    findings on every run — a differential that always passes. So the object is taken from the
+    stream by decoding the first document and ignoring whatever trails it."""
+    counter: Counter = Counter()
+    if not payload.strip():
+        return counter
+    try:
+        doc, _ = json.JSONDecoder().raw_decode(payload.lstrip())
+    except ValueError:
+        return counter
+    if not isinstance(doc, dict):
+        return counter
+    for issue in doc.get("Issues") or []:
+        pos = issue.get("Pos") or {}
+        rel = (pos.get("Filename") or "").replace("\\", "/")
+        if not rel:
+            continue
+        try:
+            rel = str(Path(rel).resolve().relative_to(root.resolve()))
+        except ValueError:
+            rel = rel.lstrip("/")
+        counter[(rel, issue.get("FromLinter") or "unknown")] += 1
+    return counter
+
+
+def run_golangci(root: Path) -> Counter:
+    if not shutil.which("golangci-lint"):
+        sys.stderr.write("sdlc-gate: golangci-lint not invokable; skipping the Go lint scan\n")
+        return Counter()
+    try:
+        proc = subprocess.run(["golangci-lint", "run", "--output.json.path", "stdout", "./..."],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: golangci-lint not invokable; skipping the Go lint scan\n")
+        return Counter()
+    return _parse_golangci_json(proc.stdout, root)
+
+
+# `//nolint` bare, and `//nolint:linter1,linter2`. Each named linter becomes its own key so that
+# widening `//nolint:errcheck` to `//nolint:errcheck,gosec` registers as a NEW suppression —
+# keyed as one string, a broadened directive would look identical to a moved one.
+_GO_NOLINT = re.compile(r"//\s*nolint(?::(?P<linters>[\w,\-]+))?")
+
+
+def scan_go_suppressions(root: Path) -> Counter:
+    """Counter[(relative_path, directive_key)] over all Go sources."""
+    counter: Counter = Counter()
+    for path in _walk_go(root):
+        rel = str(path.relative_to(root))
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for m in _GO_NOLINT.finditer(text):
+            linters = m.group("linters")
+            if linters:
+                for name in (x.strip() for x in linters.split(",")):
+                    if name:
+                        counter[(rel, f"nolint:{name}")] += 1
+            else:
+                counter[(rel, "nolint")] += 1
+    return counter
+
+
+# Skip family, and assertion sites across the stdlib idiom plus testify, which is near-universal.
+_GO_SKIP = re.compile(r"\bt\.Skip(?:f|Now)?\s*\(|\bb\.Skip(?:f|Now)?\s*\(")
+_GO_ASSERT = re.compile(
+    r"\bt\.(?:Error|Errorf|Fatal|Fatalf)\s*\(|\b(?:assert|require)\.[A-Z]\w*\s*\(")
+
+
+def _go_is_test_file(rel: str) -> bool:
+    return rel.endswith("_test.go")
+
+
+def scan_go_test_weakening(root: Path) -> dict:
+    """Per-test-file skip-marker and assertion-site counts. Check D handles them as for every
+    other toolchain: skips must not rise, assertion sites must not fall. No `params` sub-map —
+    Go's property libraries are not standardised, so there is no analogue of ScalaCheck's
+    minSuccessfulTests to police, and a fuzz corpus reduction would pass unseen."""
+    skips: dict[str, int] = {}
+    asserts: dict[str, int] = {}
+    for path in _walk_go(root):
+        rel = str(path.relative_to(root))
+        if not _go_is_test_file(rel):
+            continue
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        skips[rel] = len(_GO_SKIP.findall(text))
+        asserts[rel] = len(_GO_ASSERT.findall(text))
+    return {"skips": skips, "asserts": asserts, "params": {}}
+
+
+def go_compile_status(root: Path) -> str:
+    """'ok'/'fail'/'skip' via `go test -run=^$ ./...`, which compiles the package AND its test
+    files while running no test. `go build ./...` is the wrong precondition here: it never
+    compiles _test.go, so a broken test source would pass it and then truncate every scan that
+    reads test files — the same fail-open the Scala side closed by using Test/compile."""
+    if not (root / "go.mod").is_file() or not shutil.which("go"):
+        return "skip"
+    try:
+        proc = subprocess.run(["go", "test", "-run=^$", "-count=1", "./..."],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired):
+        sys.stderr.write("sdlc-gate: go compile could not run; skipping the compile precondition\n")
+        return "skip"
+    return "ok" if proc.returncode == 0 else "fail"
+
+
+_GO_COVER_LINE = re.compile(r"^(?P<file>\S+?):\d+\.\d+,\d+\.\d+\s+(?P<stmts>\d+)\s+(?P<count>\d+)\s*$")
+
+
+def parse_go_coverprofile(text: str, module_path: str) -> dict[str, float]:
+    """Per-directory statement coverage from a `go test -coverprofile` file.
+
+    The profile names each file by MODULE path — `example.com/m/internal/a/x.go` for a file at
+    `internal/a/x.go` — so the module prefix is stripped before keying. Left on, every key would
+    differ from nothing on the other side of the differential and each package would read as new.
+    A block with zero statements contributes nothing rather than being minted as 100%."""
+    agg: dict[str, list[int]] = {}
+    prefix = module_path.rstrip("/") + "/" if module_path else ""
+    for line in text.splitlines():
+        m = _GO_COVER_LINE.match(line.strip())
+        if not m:
+            continue
+        rel = m.group("file")
+        if prefix and rel.startswith(prefix):
+            rel = rel[len(prefix):]
+        stmts, count = int(m.group("stmts")), int(m.group("count"))
+        if stmts == 0:
+            continue
+        directory = str(Path(rel).parent).replace("\\", "/")
+        slot = agg.setdefault(directory, [0, 0])
+        slot[0] += stmts if count > 0 else 0
+        slot[1] += stmts
+    return {d: hit / total * 100.0 for d, (hit, total) in agg.items() if total > 0}
+
+
+def _go_module_path(root: Path) -> str:
+    try:
+        for line in (root / "go.mod").read_text().splitlines():
+            if line.startswith("module "):
+                return line.split(None, 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def run_go_coverage(root: Path) -> dict[str, float]:
+    profile = next((p for p in (root / "coverage.out", root / "cover.out") if p.is_file()), None)
+    if profile is None:
+        raise CoverageOperationalError(
+            "no Go coverprofile found (coverage.out / cover.out) — refusing to read coverage as "
+            "empty (fail-closed); run `go test -coverprofile=coverage.out ./...` first")
+    try:
+        return parse_go_coverprofile(profile.read_text(), _go_module_path(root))
+    except OSError as e:
+        raise CoverageOperationalError(f"coverprofile unreadable: {e}") from e
+
+
 # --- Toolchain plugins (one engine, per-toolchain scanners) --------------------
 
 
@@ -1036,7 +1442,61 @@ class JavaToolchain(Toolchain):
         return _java_is_test_file(rel)
 
 
-_TOOLCHAINS = {"python": PythonToolchain(), "scala": ScalaToolchain(), "java": JavaToolchain()}
+class TypeScriptToolchain(Toolchain):
+    name = "typescript"
+    static_labels = ["eslint", "tsc"]
+
+    def detect(self, root: Path) -> bool:
+        return (root / "package.json").exists() or (root / "tsconfig.json").exists()
+
+    def static_analysis(self, root: Path) -> dict[str, Counter]:
+        return {"eslint": run_eslint(root), "tsc": run_tsc(root)}
+
+    def suppressions(self, root: Path) -> Counter:
+        return scan_ts_suppressions(root)
+
+    def test_weakening(self, root: Path) -> dict:
+        return scan_ts_test_weakening(root)
+
+    def compile_check(self, root: Path) -> str:
+        return ts_compile_status(root)
+
+    def coverage(self, root: Path) -> dict[str, float]:
+        return run_istanbul_coverage(root)
+
+    def is_test_file(self, rel: str) -> bool:
+        return _ts_is_test_file(rel)
+
+
+class GoToolchain(Toolchain):
+    name = "go"
+    static_labels = ["golangci-lint"]
+
+    def detect(self, root: Path) -> bool:
+        return (root / "go.mod").exists()
+
+    def static_analysis(self, root: Path) -> dict[str, Counter]:
+        return {"golangci-lint": run_golangci(root)}
+
+    def suppressions(self, root: Path) -> Counter:
+        return scan_go_suppressions(root)
+
+    def test_weakening(self, root: Path) -> dict:
+        return scan_go_test_weakening(root)
+
+    def compile_check(self, root: Path) -> str:
+        return go_compile_status(root)
+
+    def coverage(self, root: Path) -> dict[str, float]:
+        return run_go_coverage(root)
+
+    def is_test_file(self, rel: str) -> bool:
+        return _go_is_test_file(rel)
+
+
+_TOOLCHAINS = {"python": PythonToolchain(), "scala": ScalaToolchain(),
+               "java": JavaToolchain(), "go": GoToolchain(),
+               "typescript": TypeScriptToolchain()}
 
 
 def select_toolchain(root: Path, override: str | None) -> Toolchain:
@@ -1045,11 +1505,13 @@ def select_toolchain(root: Path, override: str | None) -> Toolchain:
             sys.stderr.write(f"sdlc-gate: unknown --toolchain {override!r}\n")
             sys.exit(2)
         return _TOOLCHAINS[override]
-    for tc in (ScalaToolchain(), JavaToolchain(), PythonToolchain()):
+    for tc in (ScalaToolchain(), JavaToolchain(), PythonToolchain(), GoToolchain(),
+               TypeScriptToolchain()):
         if tc.detect(root):
             return tc
-    sys.stderr.write("sdlc-gate: no toolchain detected (no build.sbt, pom.xml/build.gradle, or "
-                     "pyproject.toml); pass --toolchain scala|java|python\n")
+    sys.stderr.write("sdlc-gate: no toolchain detected (no build.sbt, pom.xml/build.gradle, "
+                     "pyproject.toml, go.mod, or package.json/tsconfig.json); pass "
+                     "--toolchain scala|java|python|go|typescript\n")
     sys.exit(2)
 
 

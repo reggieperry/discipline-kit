@@ -8,7 +8,7 @@ paths:
 
 # Scala testing
 
-**Enforcement grade:** mechanically enforced for the anti-weakening section below — Check D counts munit skip markers (`.ignore`, `munitIgnore`, `assume(false)`), assertion sites (`assertEquals`/`assert`/`intercept`/`:|`), and ScalaCheck parameter weakening (a `minSuccessfulTests` fall, a `maxDiscardRatio` rise, `forAllNoShrink` appearing), with a scoverage coverage-drop scan opt-in behind `--coverage`. Law-first design and generator coverage are review.
+**Enforcement grade:** partly mechanical — mechanically enforced for the anti-weakening section below: Check D counts munit skip markers (`.ignore`, `munitIgnore`, `assume(false)`), assertion sites (`assertEquals`/`assert`/`intercept`/`:|`), and ScalaCheck parameter weakening (a `minSuccessfulTests` fall, a `maxDiscardRatio` rise, `forAllNoShrink` appearing), with a scoverage coverage-drop scan opt-in behind `--coverage`. Law-first design and generator coverage are review.
 
 How to write Scala tests: munit suite structure, fixtures without shared mutable state, deterministic property-based testing with ScalaCheck, type-class laws checked with `discipline`, and algebraic laws as the default test shape for any lawful instance. Sources: the munit docs (FunSuite, fixtures, the ScalaCheck integration), the ScalaCheck user guide (`forAll`, `Gen`, labeling, shrinking, seeds), the Typelevel `discipline` / `cats-laws` / `algebra-laws` docs (`checkAll` and the `*Tests` law bundles), and *The Science of Functional Programming* (Sergei Winitzki) for the semigroup associativity law, the monoid identity laws, and the structural-analysis stance that a type-class instance is correct only once its laws are verified. The TDD cadence and design discipline are in `craft-tdd.md`; this rule is the Scala mechanics. The engines are pinned in `build.sbt`: `munit`, `munit-scalacheck`, `scalacheck`, `cats-laws`, `algebra-laws`, `discipline-munit`, and `munit-cats-effect`, all `% Test`.
 
@@ -54,6 +54,14 @@ store.test("records an entry and counts it") { store =>
 
 - **The pure core is pure — test it directly, with no IO runtime.** The value types, the combiner, and the ADT operations return values; assert on the values. This is most of the suite and must stay the fast, hermetic majority.
 - **Where a unit returns `cats.effect.IO`, run it through munit-cats-effect, never `unsafeRunSync()` scattered in test bodies.** Return the `IO[Unit]` from the test and let the integration evaluate it. Do not bridge an `IO` to a `Future` or block on it to "make the assertion fit" — that mixing is the fragmentation `scala-concurrency.md` bans. Keep effectful suites few; push logic into the pure core so it can be example- and property-tested without a runtime.
+
+## Resources under test — the release path
+
+Trusting `Resource.make`'s contract is right — do not re-test the library. Trusting your own release lambda is not: a swapped argument or a wrong path in it passes every test that only exercises acquire and use. The rule was paid for by a scratch-worktree `Resource` whose suite proved the checked-out tree was correct *during* `use` and asserted nothing after it — so an acquire-path leak and a silently discarded release failure both survived every green run until a source-reading review found them (`scala-concurrency.md` carries the defect pair).
+
+- **For every `Resource` the repo authors, at least one test asserts the resource is gone after `use` completes** — the file deleted, the process reaped, the handle closed — not merely that it existed during `use`. Snapshot-compare against pre-existing state where the environment is shared (diff a temp dir's matching entries before and after, so stale leftovers from other runs cancel out of the assertion).
+- **A failed acquire gets its own test: nothing leaks.** Drive the acquire to fail (a nonexistent ref, an unreachable port) and assert the world is as it was before. This is the test that goes red against a multi-step acquire inside one `make` (`scala-concurrency.md`).
+- **A nontrivial release earns an erroring-release case** pinning where the failure surfaces, per the decision the release site wrote down — and, where interleavings matter, the leak-counter property: a counter incremented on acquire and decremented on release, asserted to read zero after generated nestings and early terminations (fs2's `BracketSuite` idiom).
 
 ## Property-based testing — the default for lawful code (ScalaCheck)
 
