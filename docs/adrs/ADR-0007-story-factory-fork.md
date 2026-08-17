@@ -1,8 +1,9 @@
 # ADR-0007: The story-factory fork—reuse an external orchestration substrate, not a hand-built scheduler
 
 **Status:** Accepted (2026-08-16), on the operator's direction to decline ADR-0006 and record the
-reuse fork; amended 2026-08-16 (operator-directed), D3 gains the pack/rig mapping and D4 gains the
-examiner-denominator guard—elaboration and a fail-closed strengthening, reversing no decision.
+reuse fork; amended 2026-08-16 (operator-directed), D3 gains the pack/rig mapping, D4 gains the
+examiner-denominator guard, and Consequences records the generation-time guidance-versus-enforcement
+boundary—all elaboration and fail-closed strengthening, reversing no decision.
 Acceptance gate: one deep-reason pass, recorded in
 [reviews/ADR-0007-deep-reason.md](reviews/ADR-0007-deep-reason.md), attacking reuse-over-build; and
 the operator's own read, given 2026-08-16, which no adversary pass substitutes for. The specific
@@ -146,6 +147,18 @@ Covered-by: none—owed to the reuse-pack build and its gate-seam test; the inva
   commit-path checks that keep the chain's internal copy-not-share honest. A drift court is owed with
   the pack—the vendored grading and merge-conjunct logic matches the chain's pinned SHA, checked on
   the pack's own commit path—or the copy silently rots against its source.
+- The discipline reaches the code-generation phase in two forms, and only one of them enforces. The
+  pack delivers the chain's coding rules into the generation agent's working context and the fence
+  into its harness settings, so the guidance that SHAPES the code travels with the pack alongside the
+  gates that VERIFY it; the substrate's harness discovers the rules in the agent's workspace and
+  applies the fence natively, and the pack may additionally wire an in-session harness check (a
+  format-on-edit, a pre-tool block) that runs while the agent works. But every one of those is the
+  GUIDANCE layer, not the enforcement: injected rules and in-session harness checks are advisory
+  inside the agent's own process and hold only while that process honors them—the substrate's default
+  even runs the harness with its permission prompts skipped. Treating in-session guidance or a harness
+  hook as the gate is the same friction-for-enforcement error D4 refuses; the authoritative verdict
+  stays the post-phase gate, re-derived from git refs outside the session. The generation-time layer
+  makes conforming code likelier; the gate is what refuses code that is not.
 - ADR-0006 is retired to Rejected. Its record, its decisions, and its two deep-reason passes stay in
   place as the graveyard: the next person to propose building the scheduler inherits why it was
   declined.
