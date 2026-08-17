@@ -1,7 +1,8 @@
 # ADR-0007: The story-factory fork—reuse an external orchestration substrate, not a hand-built scheduler
 
 **Status:** Accepted (2026-08-16), on the operator's direction to decline ADR-0006 and record the
-reuse fork.
+reuse fork; amended 2026-08-16 (operator-directed), D3 gains the pack/rig mapping and D4 gains the
+examiner-denominator guard—elaboration and a fail-closed strengthening, reversing no decision.
 Acceptance gate: one deep-reason pass, recorded in
 [reviews/ADR-0007-deep-reason.md](reviews/ADR-0007-deep-reason.md), attacking reuse-over-build; and
 the operator's own read, given 2026-08-16, which no adversary pass substitutes for. The specific
@@ -69,6 +70,25 @@ project, isolated by its own work namespace. The pack repository is private, bec
 co-locates the discipline's internals with the named substrate that the chain repository is scrubbed
 of.
 
+The substrate splits configuration on two axes—the config unit it imports (its "pack") and the
+target project it registers (its "rig")—and the chain's pieces map cleanly onto them, which is why
+this Decision needs only one new repository. The pack is the method; the rig is the target the chain
+was never part of:
+
+| Chain piece | Pack (the method) or Rig (the target) |
+|---|---|
+| Phase workers, their prompts, the fence settings | Pack |
+| The phase graph and the gate scripts (postcondition and merge-conjunct logic) | Pack, vendored version-pinned from the chain |
+| The worktree/clone setup that isolates a phase | Pack ships the mechanism; the rig supplies its repo path |
+| The target repository's own code | Rig |
+| The target's own rules (the reviewer's lens source) and its own check script | Rig, read from the registered checkout |
+| Per-target tuning (worker count, model, which reviewer) | Rig, by per-target override, never a pack copy |
+| A story, and its brief | A work item in the rig's namespace |
+
+So the chain does not fragment across the two axes: it IS the pack, the target repos are rigs it
+never owned, and a story is a work item in a rig. The one genuinely divided concern is gate INPUT,
+and it carries a guard stated in D4.
+
 Covered-by: none—owed to the reuse-pack build; the chain repository itself acquires no new code under this Decision.
 
 ### D4: On the substrate, the discipline's gates are the closure mechanism, never the substrate's own self-report; this is the acceptance condition on any reuse build
@@ -84,7 +104,14 @@ binary by default; a could-not-run that reads as either pass or retry is the sam
 place. The terminal act is inside this seam, not outside it: the branch push or PR-open that
 concludes a story is controller-run—a side effect of the merge gate's pass—never an agent's step
 body, so it cannot fire before the merge conjuncts have passed. That is ADR-0002/D5 carried onto the
-substrate: the terminal act is the driver's, never an agent's.
+substrate: the terminal act is the driver's, never an agent's. One gate INPUT divides in a way that
+must fail closed (D3's mapping): the reviewer's coverage denominator—the set of review-owed rules,
+read from the rules' declared grades—must be derived from a copy pinned OUTSIDE the target's judged
+tree (pack- or city-side), never from the target's live rules. The substrate's default is the
+opposite, a worker reading the registered checkout's own rules, so a phase that computed its
+denominator from the target's live rules would let a story flip a grade to shrink its own review
+scope—the exact hole the chain's pinned examiner copy closes (STORY-0008). The rule CONTENT the
+reviewer reads may be the target's; the grade-derived denominator may not.
 
 Covered-by: none—owed to the reuse-pack build and its gate-seam test; the invariant is ADR-0001 re-asserted for the substrate context.
 
@@ -161,9 +188,11 @@ future, and a judgment only a prototype or time settles is named as such.
   observation is the reuse-pack build's actual cost against ADR-0006's estimated cost, judged after
   the pack exists.
 - **D4**: a shipped reuse build in which any phase—or the terminal act—advances on the substrate's
-  self-report. Court: the standing gate-seam test above—a known-bad case, a phase (or a terminal
-  push) wired to fire on the worker's own done-signal, must be refused—re-run on every substrate
-  version bump, future, built with the pack.
+  self-report, or in which the reviewer computes its coverage denominator from the target's live
+  rules rather than a copy pinned outside the judged tree. Court: the standing gate-seam test
+  above—known-bad cases (a phase or a terminal push wired to fire on the worker's own done-signal;
+  a denominator read from the target's own rules) must be refused—re-run on every substrate version
+  bump, future, built with the pack.
 
 ## Cross-references
 
