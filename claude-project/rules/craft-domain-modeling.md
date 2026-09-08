@@ -5,7 +5,20 @@ paths:
   - "**/*.py"
   - "**/*.scala"
   - "**/*.sc"
+  - "**/adr/*.md"
+  - "**/*design*.md"
+  - "**/*PLAN*.md"
+  - "**/*plan*.md"
+  - "**/*stories*.md"
+  - "**/*intake*.md"
 ---
+
+> **Fires on DESIGN AND PLANNING documents, not only code.** A decision record, a plan or a
+> story set is where the design is actually made, and this rule used to reach none of them:
+> measured 2026-09-07 in a consumer repository, an ADR fired exactly one rule, the writing
+> register. A subsystem was designed with no design discipline in front of the author. The
+> globs are shapes rather than paths, so they travel: `adr/`, `*design*`, `*plan*`,
+> `*stories*`, `*intake*`.
 
 # Domain modeling
 

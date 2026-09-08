@@ -3,7 +3,19 @@ paths:
   - "tests/**"
   - "**/test_*.py"
   - "**/*_test.py"
+  - "**/*_test.*"
+  - "**/*Test.*"
+  - "**/*Suite.*"
+  - "**/*.test.*"
+  - "**/*.spec.*"
+  - "**/test/**"
 ---
+
+> **Re-globbed 2026-09-07 to language-neutral test shapes.** This rule is Meszaros vocabulary — the
+> Test Double taxonomy, Assertion Roulette, Eager Test — and it carried Python-test-convention
+> globs (`tests/**`, `test_*.py`, `*_test.py`), so it reached Python and shell and no other
+> language. A Go, Scala, Java or TypeScript author writing a test never met it. The Python globs
+> are KEPT, not replaced: they are live in a Python consumer, and this change is additive.
 
 > Full reasoning, taxonomy, and worked examples: `.claude/sdlc-discipline/guides/xunit-test-patterns-guide.md`.
 > See `tdd.md` for the TDD discipline these patterns live inside; `testing.md` for the structural rules; `goos-guide.md` for the Freeman/Pryce design lens.

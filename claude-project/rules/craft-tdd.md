@@ -5,7 +5,15 @@ paths:
   - "**/*.py"
   - "**/*.scala"
   - "**/*.sc"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.java"
 ---
+
+> **Fires for every language the kit ships a testing overlay for.** It globbed Go, shell, Python
+> and Scala only, so TypeScript and Java authors got their language overlay and no TDD discipline
+> at all — measured 2026-09-07 by `harness/rule_coverage.py`, which derives the language list from
+> the shipped `<lang>-testing.md` overlays rather than a hand-kept list.
 
 # Test-driven development and the design feedback it gives
 
