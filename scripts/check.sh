@@ -40,6 +40,11 @@ bash scripts/tag-consumption-check.sh
 # ADR landed, sequencer or not.
 bash scripts/chain-refspec-check.sh
 python3 harness/rule_grades.py
+# WHICH RULES CAN FIRE, AND FOR WHICH LANGUAGES. A rule injects on a matching path edit, so one
+# whose globs reach nothing has never fired and is indistinguishable from one that works — both
+# are silent. The per-language half derives its expectation from the shipped `<lang>-testing.md`
+# overlays rather than a hand-kept list, and found two gaps on its first run.
+python3 harness/rule_coverage.py
 python3 harness/fixtures/authoring_artifacts_test.py
 # The story graph's fixture and checker, both on the commit path since 2026-08-12, when the
 # coverage triage closed the graph. A new ADR without stories or waivers, a dangling dep, or
@@ -48,6 +53,7 @@ python3 harness/fixtures/chain_graph_test.py
 python3 harness/chain_graph.py
 python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
+python3 harness/fixtures/rule_coverage_test.py
 python3 harness/fixtures/scope_check_test.py
 # The scrub gate runs first in this file and had never been observed firing. Its fixture points
 # it at throwaway trees with planted tokens, so a tier that stops scanning is caught here rather
