@@ -7,8 +7,11 @@ One engine, per-toolchain scanners (a scanner-plugin layer). The engine — the
 baseline/diff worktree model, the (file, code) multiset identity, rename tracking,
 the relocation-advisory downgrade, the waiver system, and the verdict logic — is
 language-agnostic. Each `Toolchain` supplies the scanners: a set of static-analysis
-error-identity scanners (Check A), a suppression scan (Check B), and a test-weakening
-scan (Check D). Detection is by marker file (`build.sbt` → scala, `pom.xml`/`build.gradle` → java,
+error-identity scanners (Check A), a suppression scan (Check B), a test-weakening scan
+(Check D), and four agent-smell checks — unreferenced code (E), whole-tree duplication (F),
+per-function cognitive complexity delta (G), single-implementor abstractions (H) — each of
+which reports itself NOT WIRED for a toolchain that lacks it rather than reading as clean.
+Detection is by marker file (`build.sbt` → scala, `pom.xml`/`build.gradle` → java,
 `pyproject.toml` → python); `--toolchain` forces it.
 
   python  ruff / mypy / bandit; `#type:ignore`/`#noqa`/`#pyright:ignore`/`#nosec`;
