@@ -157,4 +157,5 @@ python3 harness/comment_shape.py --dir harness --exclude fixtures
 python3 reference/test_sdlc_gate.py
 python3 reference/test_sdlc_gate_contract.py
 python3 reference/test_sdlc_gate_python.py
+python3 reference/test_sdlc_gate_typescript.py
 python3 harness/algebra/validate_note.py

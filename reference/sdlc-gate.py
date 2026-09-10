@@ -1560,6 +1560,555 @@ def run_istanbul_coverage(root: Path) -> dict[str, float]:
 
 
 
+# --- TypeScript Checks E-H --------------------------------------------------------------------
+# Captured 2026-09-10 from a scratch clone of reasoning-society/frontend (75 .ts/.tsx files) with
+# eslint 9.39.4, typescript-eslint 8.63, eslint-plugin-sonarjs 4.2.0, jscpd 5.2.0 (the Rust engine),
+# knip 6.35.1, typescript 6.0.3 and node 24, every one resolved from the repo's OWN node_modules.
+# The gate installs nothing; a tool it cannot resolve is a ScanOperationalError, never a skip, so a
+# repo that lacks one fails closed until it is added. What was measured and shaped the code:
+#   - eslint exits 0 clean, 1 with findings, 2 when it could not run; a syntax error is exit 1 with
+#     a `fatal` message and a null ruleId, so exit 1 alone does not mean "ran".
+#   - sonarjs at threshold 0 reports every function whose complexity is > 0 (a 0 is silent), with
+#     a message that carries the number and NOT the function's name; its report location is the
+#     name token, the method key, the `function` keyword or the arrow's `=>`, and the walker below
+#     reproduces those anchors so a finding maps to a name. All 138 findings on the corpus matched.
+#   - jscpd exits 0 with clones found (exit is opt-in via --exit-code), 2 on a bad flag. Its
+#     `statistics.total.sources` counts only files that are at least min-tokens and min-lines
+#     long (75 handed, 66 counted at 75 tokens; every handed file counted at 1), so sources <
+#     handed is healthy and only sources > handed is a mis-scoped scan. A file with a syntax error IS counted as a source
+#     and NO clone inside it is found (a byte-identical 69-token function in a healthy sibling
+#     was reported, the one after a broken line was not), which is the silent fallback the walker's
+#     parse precondition turns into a refusal. Only the SARIF reporter carries the tool's own
+#     clone hash; the JSON reporter carries the statistics; both are asked for.
+#   - knip exits 0 clean, 1 with issues, 2 when it could not run (no package.json, bad config),
+#     and its JSON has no count of the files it analysed, so Check E's denominator is eslint's.
+#   - The TypeScript parser sets no parent pointers until the binder runs, so the walker threads
+#     its own ancestor chain rather than reading `node.parent`.
+
+# JavaScript run by node with the repo's own `typescript`; written to a temp directory UNDER the
+# repo's node_modules so bare `require("typescript")` resolves from the tree under scan. Embedded
+# as a string so the gate stays one file. Exits 2 with {"error"} whenever it did not examine every
+# file it was handed, including on the first syntactic diagnostic in any of them.
+_TS_WALKER = r"""
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const { createRequire } = require("module");
+
+function fail(msg) {
+  process.stdout.write(JSON.stringify({ error: msg }) + "\n");
+  process.exit(2);
+}
+
+const [mode, rootArg, listFile] = process.argv.slice(2);
+const root = rootArg ? path.resolve(rootArg) : "";
+if (!mode || !root || !listFile) fail("usage: walker <functions|abstractions> <root> <listfile>");
+let ts;
+try {
+  ts = createRequire(path.join(root, "package.json"))("typescript");
+} catch (e) {
+  try { ts = require("typescript"); } catch (e2) { fail("typescript not resolvable from " + root + ": " + e.message); }
+}
+const files = JSON.parse(fs.readFileSync(listFile, "utf8"));
+const rel = (f) => path.relative(root, f).split(path.sep).join("/");
+
+function compilerOptions() {
+  const cfg = path.join(root, "tsconfig.json");
+  let options = { target: ts.ScriptTarget.Latest, jsx: ts.JsxEmit.Preserve, allowJs: false };
+  if (mode === "abstractions" && fs.existsSync(cfg)) {
+    const read = ts.readConfigFile(cfg, ts.sys.readFile);
+    if (!read.error) options = { ...ts.parseJsonConfigFileContent(read.config, ts.sys, root).options };
+  }
+  for (const k of ["noEmit", "composite", "incremental", "tsBuildInfoFile", "declaration",
+                   "declarationMap", "sourceMap", "outDir"]) delete options[k];
+  if (mode === "functions") { options.noResolve = true; options.noLib = true; options.types = []; }
+  return options;
+}
+
+const program = ts.createProgram(files, compilerOptions());
+const handed = new Set(files.map((f) => path.resolve(f)));
+const roots = program.getSourceFiles().filter((sf) => handed.has(path.resolve(sf.fileName)));
+if (roots.length !== files.length) {
+  fail("program holds " + roots.length + " of the " + files.length + " files handed to it");
+}
+for (const sf of roots) {
+  const diags = program.getSyntacticDiagnostics(sf);
+  if (diags.length) {
+    const d = diags[0];
+    const { line } = sf.getLineAndCharacterOfPosition(d.start || 0);
+    fail(rel(sf.fileName) + ":" + (line + 1) + ": " + ts.flattenDiagnosticMessageText(d.messageText, " "));
+  }
+}
+
+function keyText(name, sf) {
+  if (!name) return "<computed>";
+  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name)
+      || ts.isNumericLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name)) return name.text;
+  return name.getText(sf);
+}
+
+function lineCol(sf, pos) {
+  const lc = sf.getLineAndCharacterOfPosition(pos);
+  return [lc.line + 1, lc.character + 1];
+}
+
+function tokenChild(node, kind, sf) {
+  for (const c of node.getChildren(sf)) if (c.kind === kind) return c;
+  return null;
+}
+
+// eslint-plugin-sonarjs 4.x helpers/location.js getMainFunctionTokenLocation, reproduced: a
+// declaration's name (its `function` keyword when anonymous), a method's or property's key, a
+// function expression's `function` keyword, an arrow's `=>`.
+function anchor(node, parent, sf) {
+  if (ts.isFunctionDeclaration(node)) {
+    if (node.name) return lineCol(sf, node.name.getStart(sf));
+    const kw = tokenChild(node, ts.SyntaxKind.FunctionKeyword, sf);
+    return lineCol(sf, kw ? kw.getStart(sf) : node.getStart(sf));
+  }
+  if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) {
+    return lineCol(sf, node.name.getStart(sf));
+  }
+  if (ts.isConstructorDeclaration(node)) {
+    const kw = tokenChild(node, ts.SyntaxKind.ConstructorKeyword, sf);
+    return lineCol(sf, kw ? kw.getStart(sf) : node.getStart(sf));
+  }
+  if (ts.isFunctionExpression(node)) {
+    if (parent && ts.isPropertyAssignment(parent)) return lineCol(sf, parent.name.getStart(sf));
+    const kw = tokenChild(node, ts.SyntaxKind.FunctionKeyword, sf);
+    return lineCol(sf, kw ? kw.getStart(sf) : node.getStart(sf));
+  }
+  if (ts.isArrowFunction(node)) return lineCol(sf, node.equalsGreaterThanToken.getStart(sf));
+  return lineCol(sf, node.getStart(sf));
+}
+
+function isFunctionLike(node) {
+  return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node) || ts.isConstructorDeclaration(node)
+    || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
+}
+
+function calleeName(expr) {
+  if (ts.isIdentifier(expr)) return expr.text;
+  if (ts.isPropertyAccessExpression(expr)) return expr.name.text;
+  if (ts.isCallExpression(expr)) return calleeName(expr.expression);
+  return "call";
+}
+
+// An anonymous function is named by where it sits: the variable or property it is assigned to,
+// `default` for a default export, the call it is passed to plus that call's first string argument
+// (which is what names a describe/it body) or an ordinal among that callee's callbacks in the
+// same parent, else an ordinal. Ordinals re-key when a sibling is inserted before them; a name
+// derived from a string or an assignment does not.
+function ownName(node, ancestors, sf, ordinal) {
+  if (ts.isFunctionDeclaration(node)) return node.name ? node.name.text : "default";
+  if (ts.isConstructorDeclaration(node)) return "constructor";
+  if (ts.isGetAccessorDeclaration(node)) return "get " + keyText(node.name, sf);
+  if (ts.isSetAccessorDeclaration(node)) return "set " + keyText(node.name, sf);
+  if (ts.isMethodDeclaration(node)) return keyText(node.name, sf);
+  let i = ancestors.length - 1;
+  let p = ancestors[i];
+  while (p && (ts.isParenthesizedExpression(p) || ts.isAsExpression(p) || ts.isSatisfiesExpression(p)
+               || ts.isTypeAssertionExpression(p) || ts.isNonNullExpression(p))) p = ancestors[--i];
+  if (!p) return "<anonymous#" + ordinal("<anonymous>") + ">";
+  if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) return p.name.text;
+  if (ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p)) return keyText(p.name, sf);
+  if (ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.EqualsToken) return p.left.getText(sf);
+  if (ts.isExportAssignment(p)) return "default";
+  if (ts.isCallExpression(p) || ts.isNewExpression(p)) {
+    const callee = ts.isNewExpression(p) ? "new " + calleeName(p.expression) : calleeName(p.expression);
+    const a0 = p.arguments && p.arguments[0];
+    if (a0 && (ts.isStringLiteral(a0) || ts.isNoSubstitutionTemplateLiteral(a0)) && a0 !== node) {
+      return callee + "(" + JSON.stringify(a0.text) + ")";
+    }
+    return callee + "#" + ordinal(callee);
+  }
+  return "<anonymous#" + ordinal("<anonymous>") + ">";
+}
+
+function scopeName(node, ancestors, sf) {
+  if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+    if (node.name) return node.name.text;
+    const p = ancestors[ancestors.length - 1];
+    if (p && ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) return p.name.text;
+    return "<class>";
+  }
+  if (ts.isModuleDeclaration(node)) return keyText(node.name, sf);
+  return null;
+}
+
+function collectFunctions(sf, out) {
+  const stack = [{ name: null, counters: new Map() }];
+  const ancestors = [];
+  const walk = (node) => {
+    const fn = isFunctionLike(node);
+    const scope = fn ? null : scopeName(node, ancestors, sf);
+    if (fn) {
+      const parent = stack[stack.length - 1];
+      const ordinal = (k) => { const n = (parent.counters.get(k) || 0) + 1; parent.counters.set(k, n); return n; };
+      const own = ownName(node, ancestors, sf, ordinal);
+      const name = parent.name ? parent.name + "." + own : own;
+      const [line, col] = anchor(node, ancestors[ancestors.length - 1], sf);
+      out.push([rel(sf.fileName), name, line, col]);
+      stack.push({ name, counters: new Map() });
+    } else if (scope !== null) {
+      const parent = stack[stack.length - 1];
+      stack.push({ name: parent.name ? parent.name + "." + scope : scope, counters: new Map() });
+    }
+    ancestors.push(node);
+    ts.forEachChild(node, walk);
+    ancestors.pop();
+    if (fn || scope !== null) stack.pop();
+  };
+  walk(sf);
+}
+
+// Every interface and class in the handed files, with the number of handed declarations whose
+// heritage clause resolves to it through the checker (so an import, alias or re-export counts and
+// a same-named type in another file does not). The kind travels so the gate decides which zero
+// counts are findings.
+function collectAbstractions(checker, out) {
+  const decls = new Map();
+  for (const sf of roots) {
+    const ns = [];
+    const walk = (node) => {
+      if ((ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) && node.name) {
+        const isAbstract = ts.isClassDeclaration(node)
+          && (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Abstract) !== 0;
+        const kind = ts.isInterfaceDeclaration(node) ? "interface" : (isAbstract ? "abstract" : "class");
+        decls.set(node, { file: rel(sf.fileName), name: [...ns, node.name.text].join("."), kind, count: 0 });
+      }
+      const isNs = ts.isModuleDeclaration(node);
+      if (isNs) ns.push(keyText(node.name, sf));
+      ts.forEachChild(node, walk);
+      if (isNs) ns.pop();
+    };
+    walk(sf);
+  }
+  for (const sf of roots) {
+    const walk = (node) => {
+      if ((ts.isClassDeclaration(node) || ts.isClassExpression(node) || ts.isInterfaceDeclaration(node)) && node.heritageClauses) {
+        for (const hc of node.heritageClauses) {
+          for (const t of hc.types) {
+            let sym = checker.getSymbolAtLocation(t.expression);
+            if (sym && (sym.flags & ts.SymbolFlags.Alias)) sym = checker.getAliasedSymbol(sym);
+            for (const d of (sym && sym.declarations) || []) {
+              const entry = decls.get(d);
+              if (entry && d !== node) entry.count += 1;
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, walk);
+    };
+    walk(sf);
+  }
+  for (const e of decls.values()) out.push([e.file, e.name, e.kind, e.count]);
+}
+
+const result = { files: roots.length };
+if (mode === "functions") {
+  result.functions = [];
+  for (const sf of roots) collectFunctions(sf, result.functions);
+} else if (mode === "abstractions") {
+  result.abstractions = [];
+  collectAbstractions(program.getTypeChecker(), result.abstractions);
+} else {
+  fail("unknown mode " + mode);
+}
+process.stdout.write(JSON.stringify(result) + "\n");
+"""
+
+# Flat configs written next to the walker, so `import "typescript-eslint"` resolves from the repo's
+# node_modules. `--no-config-lookup` keeps the repo's own eslint.config.js out of it: the check must
+# report the same rule set on both sides of the differential whatever the repo configures.
+#
+# Check E's rule set. `args: "all"` with the `^_` escape mirrors tsc's own noUnusedParameters, which
+# exempts an underscore-prefixed parameter; `(_event, value) =>` is a signature the caller dictates,
+# not dead code, and reporting it would have the builder rename parameters to satisfy the gate.
+# Rest siblings are the omit idiom (`const { a, ...rest } = o`). The core private-member rule costs
+# nothing extra and covers `#field`; a TS `private` member goes unreported here (tsc's TS6133 has it).
+_TS_UNREFERENCED_CONFIG = """import tseslint from "typescript-eslint";
+export default [{
+  files: ["**/*.{ts,tsx,mts,cts}"],
+  languageOptions: { parser: tseslint.parser },
+  plugins: { "@typescript-eslint": tseslint.plugin },
+  rules: {
+    "@typescript-eslint/no-unused-vars": ["error", {
+      vars: "all", args: "all", argsIgnorePattern: "^_", caughtErrors: "all",
+      caughtErrorsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_", ignoreRestSiblings: true }],
+    "no-unused-private-class-members": "error",
+  },
+}];
+"""
+_TS_UNREFERENCED_RULES = {"@typescript-eslint/no-unused-vars", "no-unused-private-class-members"}
+
+# Threshold 0 so the rule REPORTS every function's value; the gate applies COMPLEXITY_THRESHOLD.
+_TS_COMPLEXITY_CONFIG = """import tseslint from "typescript-eslint";
+import sonarjs from "eslint-plugin-sonarjs";
+export default [{
+  files: ["**/*.{ts,tsx,mts,cts}"],
+  languageOptions: { parser: tseslint.parser },
+  plugins: { sonarjs },
+  rules: { "sonarjs/cognitive-complexity": ["error", 0] },
+}];
+"""
+_TS_COMPLEXITY_RULE = "sonarjs/cognitive-complexity"
+_TS_COMPLEXITY_MSG = re.compile(r"Cognitive Complexity from (?P<n>\d+) to the \d+ allowed")
+
+# knip issue types that are declared-but-unreferenced code. The other direction (unlisted,
+# unresolved, binaries: referenced but not declared) is a correctness matter, not Check E's.
+_TS_KNIP_INCLUDE = ("files", "dependencies", "exports", "nsExports", "types", "nsTypes",
+                    "enumMembers", "namespaceMembers")
+_TS_KNIP_KEYS = _TS_KNIP_INCLUDE + ("devDependencies", "optionalPeerDependencies")
+
+
+def _ts_files(root: Path) -> list[str]:
+    """Repo-relative, sorted: the set every Check E-H tool is handed and measured against."""
+    return sorted(str(p.relative_to(root)).replace("\\", "/") for p in _walk_ts(root))
+
+
+def _ts_scratch_dir(root: Path) -> Path:
+    """A temp dir under the repo's node_modules, so a config or script placed there resolves the
+    repo's packages by bare specifier. No node_modules means no tool can run: refuse now."""
+    nm = root / "node_modules"
+    if not nm.is_dir():
+        raise ScanOperationalError(
+            f"{nm} does not exist; Checks E-H resolve eslint, jscpd, knip and typescript from the "
+            "repo's own node_modules (install them; the gate installs nothing)")
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix=".sdlc-gate-", dir=nm))
+
+
+def _ts_run_eslint_json(root: Path, config: str, files: list[str]) -> list[dict]:
+    """eslint with a gate-owned flat config over exactly `files`. One JSON entry per file linted;
+    the count is asserted against what was handed, a `fatal` message (a parse failure) refuses,
+    and only exit 0/1 with a JSON body is a scan."""
+    exe = _ts_bin(root, "eslint")
+    if exe is None:
+        raise ScanOperationalError("eslint not invokable (no node_modules/.bin/eslint, none on PATH)")
+    scratch = _ts_scratch_dir(root)
+    try:
+        cfg = scratch / "eslint.config.mjs"
+        cfg.write_text(config)
+        try:
+            proc = subprocess.run([*exe, "--no-config-lookup", "-c", str(cfg), "-f", "json", *files],
+                                  cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ScanOperationalError(f"eslint could not run: {e}") from e
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if proc.returncode not in (0, 1):
+        raise ScanOperationalError(
+            f"eslint exited {proc.returncode}: {proc.stderr.strip()[:300]!r}; an eslint that did not "
+            "run must not read as 'no findings'")
+    try:
+        entries = json.loads(proc.stdout)
+    except ValueError as e:
+        raise ScanOperationalError(f"eslint produced non-JSON output ({e}); refusing to read it as empty") from e
+    if not isinstance(entries, list):
+        raise ScanOperationalError("eslint JSON is not the per-file array its formatter documents")
+    for entry in entries:
+        for msg in entry.get("messages") or []:
+            if msg.get("fatal"):
+                raise ScanOperationalError(
+                    f"eslint could not parse {_ts_rel(root, entry.get('filePath') or '')}:"
+                    f"{msg.get('line')}: {msg.get('message')}; a file that did not parse was not scanned")
+    if len(entries) != len(files):
+        raise ScanOperationalError(
+            f"eslint reported on {len(entries)} files but was handed {len(files)}; the denominator "
+            "does not cover the tree")
+    return entries
+
+
+def _ts_run_walker(root: Path, mode: str, files: list[str]) -> dict:
+    """The embedded walker in one mode. The script exits 2 with {"error"} whenever it did not
+    examine every handed file, and its file count is asserted here as well."""
+    node = shutil.which("node")
+    if node is None:
+        raise ScanOperationalError("node not on PATH; the TypeScript walker cannot run")
+    scratch = _ts_scratch_dir(root)
+    try:
+        script = scratch / "walker.cjs"
+        script.write_text(_TS_WALKER)
+        listing = scratch / "files.json"
+        listing.write_text(json.dumps([str(root / f) for f in files]))
+        try:
+            proc = subprocess.run([node, str(script), mode, str(root), str(listing)],
+                                  cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ScanOperationalError(f"walker ({mode}) could not run: {e}") from e
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    try:
+        out = json.loads(proc.stdout)
+    except ValueError:
+        raise ScanOperationalError(
+            f"walker ({mode}) exited {proc.returncode} without JSON: {proc.stderr.strip()[:300]!r}")
+    if proc.returncode != 0 or not isinstance(out, dict) or "error" in out:
+        why = out.get("error") if isinstance(out, dict) else out
+        raise ScanOperationalError(f"walker ({mode}) refused: {why or proc.stderr.strip()[:300]!r}")
+    if out.get("files") != len(files):
+        raise ScanOperationalError(f"walker ({mode}) examined {out.get('files')} of {len(files)} files")
+    return out
+
+
+def _ts_run_knip(root: Path) -> Counter:
+    """Counter[(file, 'knip:<issue type>')]. knip's documented exit codes: 0 clean, 1 issues, 2 did
+    not run; the body must be its JSON reporter's {"issues": [...]} or the run is refused."""
+    exe = _ts_bin(root, "knip")
+    if exe is None:
+        raise ScanOperationalError("knip not invokable (no node_modules/.bin/knip, none on PATH)")
+    try:
+        proc = subprocess.run([*exe, "--no-progress", "--no-config-hints", "--reporter", "json",
+                               "--include", ",".join(_TS_KNIP_INCLUDE)],
+                              cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ScanOperationalError(f"knip could not run: {e}") from e
+    if proc.returncode not in (0, 1):
+        raise ScanOperationalError(f"knip exited {proc.returncode}: {proc.stderr.strip()[:300]!r}")
+    try:
+        report = json.loads(proc.stdout)
+    except ValueError as e:
+        raise ScanOperationalError(f"knip produced non-JSON output ({e}); refusing to read it as clean") from e
+    if not isinstance(report, dict) or not isinstance(report.get("issues"), list):
+        raise ScanOperationalError("knip JSON lacks the 'issues' array its reporter documents")
+    counter: Counter = Counter()
+    for issue in report["issues"]:
+        file = str(issue.get("file") or "").replace("\\", "/")
+        for key in _TS_KNIP_KEYS:
+            items = issue.get(key) or []
+            n = sum(len(v) for v in items.values()) if isinstance(items, dict) else len(items)
+            if n:
+                counter[(file, f"knip:{key}")] += n
+    return counter
+
+
+def run_ts_unreferenced(root: Path) -> Scan:
+    """Check E: eslint's unused-vars family per file plus knip's unused files/exports/types/members/
+    dependencies. The denominator is eslint's (knip publishes none)."""
+    files = _ts_files(root)
+    if not files:
+        return Scan("eslint+knip", 0, {})
+    entries = _ts_run_eslint_json(root, _TS_UNREFERENCED_CONFIG, files)
+    counter: Counter = Counter()
+    for entry in entries:
+        rel = _ts_rel(root, entry.get("filePath") or "")
+        for msg in entry.get("messages") or []:
+            if msg.get("ruleId") in _TS_UNREFERENCED_RULES:
+                counter[(rel, msg["ruleId"])] += 1
+    counter.update(_ts_run_knip(root))
+    return Scan("eslint+knip", len(entries), dict(counter))
+
+
+def run_ts_duplication(root: Path) -> Scan:
+    """Check F: jscpd over the whole tree, keyed by the tool's own clone hash. The walker's parse
+    pass runs first because a file jscpd cannot lex is counted and then silently not searched."""
+    files = _ts_files(root)
+    if not files:
+        return Scan("jscpd", 0, {})
+    _ts_run_walker(root, "functions", files)
+    exe = _ts_bin(root, "jscpd")
+    if exe is None:
+        raise ScanOperationalError("jscpd not invokable (no node_modules/.bin/jscpd, none on PATH)")
+    import tempfile
+    out_dir = Path(tempfile.mkdtemp(prefix="sdlc-gate-jscpd-"))
+    try:
+        try:
+            proc = subprocess.run(
+                [*exe, "--min-tokens", str(DUP_MIN_TOKENS), "--reporters", "json,sarif",
+                 "--output", str(out_dir), "--format", "typescript,tsx",
+                 "--ignore", ",".join(f"**/{d}/**" for d in sorted(_TS_SKIP_DIRS)),
+                 "--no-gitignore", "--max-size", "1gb", "--max-lines", "100000000", "--no-colors", "."],
+                cwd=root, capture_output=True, text=True, check=False, timeout=1800)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ScanOperationalError(f"jscpd could not run: {e}") from e
+        if proc.returncode != 0:
+            raise ScanOperationalError(
+                f"jscpd exited {proc.returncode}: {(proc.stderr or proc.stdout).strip()[:300]!r}")
+        try:
+            report = json.loads((out_dir / "jscpd-report.json").read_text())
+            sarif = json.loads((out_dir / "jscpd-report.sarif").read_text())
+        except (OSError, ValueError) as e:
+            raise ScanOperationalError(f"jscpd wrote no readable report: {e}") from e
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+    try:
+        sources = int(report["statistics"]["total"]["sources"])
+        duplicates = report["duplicates"]
+        results = sarif["runs"][0]["results"]
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        raise ScanOperationalError(f"jscpd report lacks the fields its reporters document: {e!r}") from e
+    if sources > len(files):
+        raise ScanOperationalError(
+            f"jscpd counted {sources} sources but was handed {len(files)} files; it scanned outside the tree")
+    if len(results) != len(duplicates):
+        raise ScanOperationalError(
+            f"jscpd's SARIF carries {len(results)} clones and its JSON {len(duplicates)}; same run, different reports")
+    findings: dict[str, list] = {}
+    for r in results:
+        fp = (r.get("properties") or {}).get("clone_hash") or (r.get("partialFingerprints") or {}).get("jscpdCloneHash/v1")
+        locs = [loc for loc in (r.get("locations") or [])] + [loc for loc in (r.get("relatedLocations") or [])]
+        occs = []
+        for loc in locs:
+            phys = loc.get("physicalLocation") or {}
+            uri = ((phys.get("artifactLocation") or {}).get("uri") or "").replace("\\", "/")
+            region = phys.get("region") or {}
+            if not fp or not uri or "startLine" not in region:
+                raise ScanOperationalError("jscpd SARIF result lacks a hash, a uri or a region")
+            occs.append([uri, int(region["startLine"]), int(region.get("endLine", region["startLine"]))])
+        merged = findings.setdefault(fp, [])
+        for o in occs:
+            if o not in merged:
+                merged.append(o)
+    for occs in findings.values():
+        occs.sort()
+    return Scan("jscpd", sources, findings)
+
+
+def run_ts_complexity(root: Path) -> Scan:
+    """Check G: sonarjs's number for every function, named by the walker's anchor table. An anchor
+    the table lacks is kept under `<line N>` rather than dropped, so the value still counts."""
+    files = _ts_files(root)
+    if not files:
+        return Scan("eslint-plugin-sonarjs", 0, {})
+    entries = _ts_run_eslint_json(root, _TS_COMPLEXITY_CONFIG, files)
+    table = {(f, line, col): name for f, name, line, col in _ts_run_walker(root, "functions", files)["functions"]}
+    findings: dict[tuple[str, str], int] = {}
+    for entry in entries:
+        rel = _ts_rel(root, entry.get("filePath") or "")
+        for msg in entry.get("messages") or []:
+            if msg.get("ruleId") != _TS_COMPLEXITY_RULE:
+                continue
+            m = _TS_COMPLEXITY_MSG.search(msg.get("message") or "")
+            if not m:
+                raise ScanOperationalError(
+                    f"sonarjs message carries no complexity value: {msg.get('message')!r}; the format "
+                    "this parser was written against has changed")
+            name = table.get((rel, msg.get("line"), msg.get("column"))) or f"<line {msg.get('line')}>"
+            key = (rel, name)
+            findings[key] = max(findings.get(key, 0), int(m.group("n")))
+    return Scan("eslint-plugin-sonarjs", len(entries), findings)
+
+
+def run_ts_abstractions(root: Path) -> Scan:
+    """Check H: implementor counts from the walker. An abstract class is always an abstraction. An
+    interface or concrete class is one only once something extends or implements it: TypeScript
+    is structural, so a `Props` interface with no `implements` anywhere is a type, not a contract
+    nobody honours, and reporting it at 0 would fire on nearly every new component. The refusal
+    the check exists for, a base class or interface extracted for ONE implementor, is the
+    count-1 case and is kept."""
+    files = _ts_files(root)
+    if not files:
+        return Scan("typescript-api", 0, {})
+    out = _ts_run_walker(root, "abstractions", files)
+    findings = {(f, name): int(count) for f, name, kind, count in out["abstractions"]
+                if kind == "abstract" or int(count) >= 1}
+    return Scan("typescript-api", out["files"], findings)
+
+
+
+
 # --- Go toolchain scanners ----------------------------------------------------
 # Captured from golangci-lint 2.12.2 and go 1.26 before any parser here was written. Two captured
 # facts differ from the obvious guess and each has a test: golangci-lint appends a human summary
@@ -2019,6 +2568,18 @@ class TypeScriptToolchain(Toolchain):
 
     def is_test_file(self, rel: str) -> bool:
         return _ts_is_test_file(rel)
+
+    def unreferenced(self, root: Path) -> Scan:
+        return run_ts_unreferenced(root)
+
+    def duplication(self, root: Path) -> Scan:
+        return run_ts_duplication(root)
+
+    def complexity(self, root: Path) -> Scan:
+        return run_ts_complexity(root)
+
+    def abstractions(self, root: Path) -> Scan:
+        return run_ts_abstractions(root)
 
 
 class GoToolchain(Toolchain):
