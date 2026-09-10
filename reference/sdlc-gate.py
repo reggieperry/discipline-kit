@@ -2696,6 +2696,640 @@ def run_go_coverage(root: Path) -> dict[str, float]:
         raise CoverageOperationalError(f"coverprofile unreadable: {e}") from e
 
 
+# --- Go: Checks E-H --------------------------------------------------------------------------
+# Captured from golangci-lint 2.12.2 (its source at pkg/exitcodes: 0 clean, 1 issues, 2 warning
+# under test, 3 failure, 4 timeout, 5 no Go files, 6 no config, 7 error logged) against
+# a 2,045-file Go corpus on 2026-09-10. Three facts shaped every runner here:
+#
+#  - One syntax error in ONE file leaves exit code 1 — the same as "issues found" — with a single
+#    `typecheck` issue and ZERO findings from every other linter for the WHOLE tree (9,349 gocognit
+#    rows vanished). So the exit code cannot tell did-not-run from clean, and a `typecheck` issue
+#    in the stream is the signal that the scan is not one.
+#  - `--max-issues-per-linter` (50), `--max-same-issues` (3) and `--uniq-by-line` are on by default
+#    and each silently truncates a count; a differential over truncated counts passes.
+#  - With `--config` outside the tree, `Pos.Filename` is relative to the CONFIG's directory
+#    (v2's `relative-path-mode: cfg`), so paths are asked for absolute and relativised here.
+#
+# The gate writes its own config for each check rather than reading the repo's, so the repo's
+# exclusions, linter set and path skips cannot shape the denominator or the findings. The lock
+# golangci-lint takes on /tmp by default is waived (`--allow-parallel-runners`): an IDE's lint in
+# flight would otherwise make the gate exit 3 for a reason unrelated to the tree.
+
+_GOLANGCI_ISSUE_LIMITS = """issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+"""
+
+# Check E. `unused` is default-on and skips EXPORTED identifiers (a blind spot to know about:
+# an exported helper nobody calls is not reported). revive's `unused-parameter` only — its
+# `unused-receiver` was measured on the corpus at 352 non-test hits, every one an
+# interface-satisfying method with a named receiver (`func (c *X) CanFix() bool { return false }`),
+# healthy Go that a new-count block would make the builder rename to `_`. unparam at its default:
+# `check-exported: true` reported 15 non-test results, all exported methods satisfying an interface
+# (`(*limitedWriter).Write` "result 1 (error) is always nil"), which is why the corpus's own CI is
+# green with unparam on. Unused locals and imports are compile errors in Go and need no linter.
+_GO_UNREFERENCED_CONFIG = """version: "2"
+linters:
+  default: none
+  enable:
+    - unused
+    - unparam
+    - revive
+  settings:
+    revive:
+      rules:
+        - name: unused-parameter
+""" + _GOLANGCI_ISSUE_LIMITS
+
+# Check G. gocognit reports a function only when its complexity is STRICTLY above
+# min-complexity, so 0 reports every function that has any (a 0 could never block anyway).
+_GO_COMPLEXITY_CONFIG = """version: "2"
+linters:
+  default: none
+  enable:
+    - gocognit
+  settings:
+    gocognit:
+      min-complexity: 0
+""" + _GOLANGCI_ISSUE_LIMITS
+
+# Check F. Tests are not loaded at all (`run.tests: false`) rather than filtered afterwards:
+# table-driven tests are a constant clone source, and filtering would still leave a clone
+# between a test and a non-test file reported against the non-test side.
+_GO_DUPLICATION_CONFIG = """version: "2"
+run:
+  tests: false
+linters:
+  default: none
+  enable:
+    - dupl
+  settings:
+    dupl:
+      threshold: {threshold}
+""" + _GOLANGCI_ISSUE_LIMITS
+
+_GO_LIST_FILE_FIELDS = ("GoFiles", "CgoFiles", "TestGoFiles", "XTestGoFiles")
+
+
+def _go_json_stream(payload: str) -> list:
+    """`go list -json` writes one object after another, not an array."""
+    dec = json.JSONDecoder()
+    out, i = [], 0
+    while True:
+        while i < len(payload) and payload[i].isspace():
+            i += 1
+        if i >= len(payload):
+            return out
+        obj, i = dec.raw_decode(payload, i)
+        out.append(obj)
+
+
+def _go_list(root: Path, args: list[str], what: str) -> list[dict]:
+    try:
+        proc = subprocess.run(["go", "list", *args, "./..."], cwd=root, capture_output=True,
+                              text=True, check=False, timeout=1800)
+    except OSError as e:
+        raise ScanOperationalError(f"{what}: `go list` could not start: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise ScanOperationalError(f"{what}: `go list` timed out") from e
+    if proc.returncode != 0:
+        raise ScanOperationalError(
+            f"{what}: `go list` exited {proc.returncode}: {proc.stderr.strip()[:300]!r}")
+    try:
+        return _go_json_stream(proc.stdout)
+    except ValueError as e:
+        raise ScanOperationalError(f"{what}: `go list` output was not JSON ({e})") from e
+
+
+def _go_files_examined(root: Path, tests: bool, what: str) -> int:
+    """The denominator: golangci-lint loads `./...` through go/packages, which is `go list` with
+    the same pattern, so the files it examines are the ones `go list` names — build-tag-excluded
+    files (IgnoredGoFiles), vendor/ and testdata/ are outside both."""
+    fields = _GO_LIST_FILE_FIELDS if tests else _GO_LIST_FILE_FIELDS[:2]
+    files: set[str] = set()
+    for pkg in _go_list(root, ["-e", "-json=Dir," + ",".join(fields)], what):
+        for field in fields:
+            for name in pkg.get(field) or []:
+                files.add(str(Path(pkg.get("Dir") or "") / name))
+    return len(files)
+
+
+def _golangci_issues(root: Path, check: str, config: str) -> list[dict]:
+    """Run golangci-lint under a gate-owned config; the issue list, or ScanOperationalError.
+    Exit 0 and 1 are the only scans. A `typecheck` issue, a Report.Error, or a Report.Warnings
+    (how a linter that could not run is surfaced) each mean the tree was not fully examined."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        cfg = Path(td) / f"sdlc-gate-{check}.yml"
+        cfg.write_text(config)
+        cmd = ["golangci-lint", "run", "--config", str(cfg), "--output.json.path", "stdout",
+               "--show-stats=false", "--path-mode", "abs", "--allow-parallel-runners", "./..."]
+        try:
+            proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False,
+                                  timeout=1800)
+        except OSError as e:
+            raise ScanOperationalError(f"check {check}: golangci-lint could not start: {e}") from e
+        except subprocess.TimeoutExpired as e:
+            raise ScanOperationalError(f"check {check}: golangci-lint timed out") from e
+    if proc.returncode not in (0, 1):
+        raise ScanOperationalError(
+            f"check {check}: golangci-lint exited {proc.returncode} (0 clean, 1 findings; anything "
+            f"else did not run): {proc.stderr.strip()[:300]!r}")
+    try:
+        doc, _ = json.JSONDecoder().raw_decode(proc.stdout.lstrip())
+    except ValueError as e:
+        raise ScanOperationalError(
+            f"check {check}: golangci-lint wrote non-JSON output ({e}); refusing to read it as "
+            "no findings") from e
+    if not isinstance(doc, dict):
+        raise ScanOperationalError(f"check {check}: golangci-lint output was not an object")
+    report = doc.get("Report") or {}
+    if report.get("Error") or report.get("Warnings"):
+        raise ScanOperationalError(
+            f"check {check}: golangci-lint reported a problem: "
+            f"{report.get('Error') or report.get('Warnings')!r}"[:400])
+    issues = doc.get("Issues") or []
+    typecheck = [i for i in issues if i.get("FromLinter") == "typecheck"]
+    if typecheck:
+        pos = typecheck[0].get("Pos") or {}
+        raise ScanOperationalError(
+            f"check {check}: the tree did not parse or type-check ({len(typecheck)} typecheck "
+            f"issue(s); first: {pos.get('Filename')}:{pos.get('Line')} {typecheck[0].get('Text')!r}); "
+            "every other linter's findings are truncated or absent on such a tree")
+    return issues
+
+
+def _go_issue_rel(issue: dict, root: Path) -> str:
+    name = ((issue.get("Pos") or {}).get("Filename") or "").replace("\\", "/")
+    try:
+        return str(Path(name).resolve().relative_to(root.resolve()))
+    except ValueError:
+        return name
+
+
+def _go_unreferenced_code(issue: dict) -> str:
+    """(linter, kind) as one key. Shapes captured on a planted module: revive
+    `unused-parameter: parameter 'b' seems to be unused, ...`; unused `func helperNeverCalled is
+    unused` / `type sinkA is unused` / `func sinkA.Write is unused`; unparam
+    `alwaysNil - result 1 (error) is always nil`."""
+    linter = issue.get("FromLinter") or "unknown"
+    text = issue.get("Text") or ""
+    if linter == "revive":
+        return "revive/" + text.split(":", 1)[0].strip()
+    if linter == "unused":
+        return "unused/" + (text.split(" ", 1)[0] or "other")
+    if linter == "unparam":
+        if "always receives" in text:
+            return "unparam/always-receives"
+        if " is unused" in text:
+            return "unparam/param"
+        if "result " in text:
+            return "unparam/result"
+        return "unparam/other"
+    return f"{linter}/other"
+
+
+def go_unreferenced(root: Path) -> Scan:
+    findings: dict = {}
+    for issue in _golangci_issues(root, "E", _GO_UNREFERENCED_CONFIG):
+        key = (_go_issue_rel(issue, root), _go_unreferenced_code(issue))
+        findings[key] = findings.get(key, 0) + 1
+    return Scan("golangci-lint unused/unparam/revive", _go_files_examined(root, True, "check E"),
+                findings)
+
+
+_GO_COGNIT = re.compile(r"^cognitive complexity (?P<cc>\d+) of func `(?P<fn>[^`]+)` is high")
+
+
+def go_complexity(root: Path) -> Scan:
+    """(file, func) -> cognitive complexity. Methods arrive as `(*T).Name`. The only key that can
+    repeat within a file is `init`, which Go allows more than once; the larger value is kept."""
+    findings: dict = {}
+    for issue in _golangci_issues(root, "G", _GO_COMPLEXITY_CONFIG):
+        m = _GO_COGNIT.match(issue.get("Text") or "")
+        if not m:
+            raise ScanOperationalError(
+                f"check G: unrecognised gocognit message {issue.get('Text')!r}; the parser is "
+                "out of date with the tool, not the tree with the rule")
+        key = (_go_issue_rel(issue, root), m.group("fn"))
+        findings[key] = max(findings.get(key, 0), int(m.group("cc")))
+    return Scan("golangci-lint gocognit", _go_files_examined(root, True, "check G"), findings)
+
+
+# dupl groups clones by a hash over syntax-node TYPES alone (its syntax/hashSeq), so members of a
+# group differ freely in identifiers, literals and operators, and it reports a group as a ring —
+# each member "is duplicate of" the next. Groups are rebuilt from the ring here.
+_GO_DUPL_TEXT = re.compile(r"^(\d+)-(\d+) lines are duplicate of `(?P<file>.+):(?P<s>\d+)-(?P<e>\d+)`$")
+
+_GO_KEYWORDS = frozenset("break default func interface select case defer go map struct chan else "
+                         "goto package switch const fallthrough if range type continue for import "
+                         "return var".split())
+_GO_TOKEN = re.compile(r"""
+    (?P<skip>\s+|//[^\n]*|/\*.*?\*/)
+  | (?P<lit>`[^`]*`|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])+'|\d[\w.]*(?:(?<=[eEpP])[-+][\w.]*)?|\.\d[\w.]*)
+  | (?P<ident>[^\W\d]\w*)
+  | (?P<op><<=|>>=|&\^=|\.\.\.|&&|\|\||<-|\+\+|--|==|!=|<=|>=|:=|[-+*/%&|^]=|<<|>>|&\^|.)
+""", re.S | re.X)
+
+
+def _go_normalized_tokens(src: str) -> str:
+    """Identifiers to `I`, literals to `L`, comments and whitespace gone, keywords and operators
+    kept: the fingerprint survives a rename, a re-indent or a changed constant in one copy, which
+    is what keeps a pre-existing clone from reading as new on every edit near it."""
+    out = []
+    for m in _GO_TOKEN.finditer(src):
+        if m.group("skip"):
+            continue
+        if m.group("lit"):
+            out.append("L")
+        elif m.group("ident"):
+            out.append(m.group("ident") if m.group("ident") in _GO_KEYWORDS else "I")
+        else:
+            out.append(m.group("op"))
+    return " ".join(out)
+
+
+def _go_clone_groups(issues: list[dict], root: Path) -> list[list[tuple[str, int, int]]]:
+    parent: dict = {}
+
+    def find(x):
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for issue in issues:
+        m = _GO_DUPL_TEXT.match(issue.get("Text") or "")
+        rng = issue.get("LineRange") or {}
+        if not m or "From" not in rng:
+            raise ScanOperationalError(
+                f"check F: unrecognised dupl message {issue.get('Text')!r}; the parser is out of "
+                "date with the tool, not the tree with the rule")
+        src = (_go_issue_rel(issue, root), int(rng["From"]), int(rng["To"]))
+        # The "duplicate of" path is the shortest path from the tool's cwd, the root.
+        dst = (m.group("file").replace("\\", "/"), int(m.group("s")), int(m.group("e")))
+        parent[find(src)] = find(dst)
+    groups: dict = {}
+    for member in parent:
+        groups.setdefault(find(member), []).append(member)
+    return [sorted(g) for g in groups.values() if len(g) > 1]
+
+
+def go_duplication(root: Path) -> Scan:
+    """fingerprint -> [[file, start, end], ...] over the non-test tree. The fingerprint is the
+    MULTISET of the members' normalized token streams, so a third copy of a clone the baseline
+    already had is a new fingerprint (the pair's was different) while the pair itself, moved down
+    the file by an edit above it, is not."""
+    import hashlib
+
+    config = _GO_DUPLICATION_CONFIG.format(threshold=DUP_MIN_TOKENS)
+    findings: dict = {}
+    for group in _go_clone_groups(_golangci_issues(root, "F", config), root):
+        hashes = []
+        for file, start, end in group:
+            try:
+                lines = (root / file).read_text().splitlines()
+            except OSError as e:
+                raise ScanOperationalError(f"check F: dupl named {file}, which cannot be read: {e}") from e
+            block = "\n".join(lines[start - 1:end])
+            hashes.append(hashlib.sha1(_go_normalized_tokens(block).encode()).hexdigest())
+        fp = hashlib.sha1("\n".join(sorted(hashes)).encode()).hexdigest()[:24]
+        occs = [[f, s, e] for f, s, e in group]
+        findings[fp] = sorted(findings.get(fp, []) + occs)
+    return Scan("golangci-lint dupl", _go_files_examined(root, False, "check F"), findings)
+
+
+# Check H is not off the shelf. golangci-lint's `iface` linter has an `opaque` check that reads
+# like it, but its source (uudashr/iface/opaque) reports a FUNCTION whose declared interface
+# return always carries one concrete type; it counts no implementors, so a new constructor for a
+# five-implementor interface would read as a single-implementor abstraction. Instead the count is
+# taken with go/types, whose `Implements` is the compiler's own answer, through a program the gate
+# writes out and runs with `go run` — the toolchain the module itself selects, so the export data
+# `go list -export` wrote is read by the importer that understands it.
+#
+# Main-module packages are type-checked FROM SOURCE: export data carries only the unexported
+# types reachable from the exported API (measured: 5 of 25 in one package), and a constructor's
+# unexported implementor is exactly what must be counted. Candidates are every named type in the
+# module, test files included (a test double is an implementor: the consumer-side interface with
+# one production type and one fake is idiomatic Go, not speculative generality), plus the exported
+# types of every package the module imports (`*http.Client` satisfying a local `Doer`). What is
+# counted is the DEFAULT build: a file behind a build tag is outside it, as it is for golangci-lint.
+# Generic interfaces and generic candidates are skipped (nothing to instantiate them with), as is
+# any interface with no methods.
+_GO_IMPLEMENTORS_SRC = r'''
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"go/ast"
+	"go/build"
+	"go/importer"
+	"go/parser"
+	"go/token"
+	"go/types"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type listPkg struct {
+	ImportPath string
+	Dir        string
+	GoFiles    []string
+	CgoFiles   []string
+	Export     string
+	ImportMap  map[string]string
+	Module     *struct{ Main bool }
+	Error      *struct{ Err string }
+}
+
+type loader struct {
+	fset    *token.FileSet
+	pkgs    map[string]*listPkg
+	checked map[string]*types.Package
+	gc      types.Importer
+	cur     *listPkg
+	files   map[string]bool
+	errs    []string
+}
+
+// Import resolves through the importing package's ImportMap first, so that an external test
+// (`pkg_test [pkg.test]`) sees `pkg [pkg.test]` and not the non-test build of the same package.
+func (l *loader) Import(path string) (*types.Package, error) {
+	if l.cur != nil {
+		if mapped, ok := l.cur.ImportMap[path]; ok {
+			path = mapped
+		}
+	}
+	if p, ok := l.checked[path]; ok {
+		return p, nil
+	}
+	if lp, ok := l.pkgs[path]; ok && lp.Module != nil && lp.Module.Main {
+		return l.check(lp)
+	}
+	return l.gc.Import(path)
+}
+
+func (l *loader) check(lp *listPkg) (*types.Package, error) {
+	if p, ok := l.checked[lp.ImportPath]; ok {
+		return p, nil
+	}
+	if lp.Error != nil {
+		return nil, fmt.Errorf("%s: %s", lp.ImportPath, lp.Error.Err)
+	}
+	var files []*ast.File
+	for _, name := range append(append([]string{}, lp.GoFiles...), lp.CgoFiles...) {
+		abs := filepath.Join(lp.Dir, name)
+		f, err := parser.ParseFile(l.fset, abs, nil, 0)
+		if err != nil {
+			return nil, err
+		}
+		l.files[abs] = true
+		files = append(files, f)
+	}
+	saved := l.cur
+	l.cur = lp
+	defer func() { l.cur = saved }()
+	conf := types.Config{
+		Importer:    l,
+		FakeImportC: true,
+		Sizes:       types.SizesFor("gc", build.Default.GOARCH),
+		Error:       func(err error) { l.errs = append(l.errs, err.Error()) },
+	}
+	pkg, _ := conf.Check(lp.ImportPath, l.fset, files, nil)
+	l.checked[lp.ImportPath] = pkg
+	return pkg, nil
+}
+
+type candidate struct {
+	key     string
+	typ     types.Type
+	methods map[string]bool
+}
+
+func fail(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(3)
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		fail("usage: implementors <root> < go-list.json")
+	}
+	root, err := filepath.Abs(os.Args[1])
+	if err != nil {
+		fail("root: %v", err)
+	}
+	dec := json.NewDecoder(os.Stdin)
+	var order []*listPkg
+	pkgs := map[string]*listPkg{}
+	for {
+		var p listPkg
+		if err := dec.Decode(&p); err == io.EOF {
+			break
+		} else if err != nil {
+			fail("go list stream: %v", err)
+		}
+		lp := p
+		pkgs[lp.ImportPath] = &lp
+		order = append(order, &lp)
+	}
+	if len(order) == 0 {
+		fail("go list stream was empty")
+	}
+	l := &loader{fset: token.NewFileSet(), pkgs: pkgs, checked: map[string]*types.Package{},
+		files: map[string]bool{}}
+	l.gc = importer.ForCompiler(l.fset, "gc", func(path string) (io.ReadCloser, error) {
+		lp, ok := pkgs[path]
+		if !ok || lp.Export == "" {
+			return nil, fmt.Errorf("no export data listed for %q", path)
+		}
+		return os.Open(lp.Export)
+	})
+	// `go list -deps` is a post-order walk, so a package's dependencies are checked before it.
+	for _, lp := range order {
+		// `pkg.test` is the synthesized test binary: one generated file at an absolute cache
+		// path, declaring nothing anyone wrote.
+		if lp.Module == nil || !lp.Module.Main || strings.HasSuffix(lp.ImportPath, ".test") ||
+			len(lp.GoFiles)+len(lp.CgoFiles) == 0 {
+			continue
+		}
+		if _, err := l.check(lp); err != nil {
+			fail("%v", err)
+		}
+	}
+	if len(l.errs) > 0 {
+		fail("%d type errors; first: %s", len(l.errs), l.errs[0])
+	}
+
+	rel := func(pos token.Pos) (string, bool) {
+		p := l.fset.Position(pos)
+		r, err := filepath.Rel(root, p.Filename)
+		if err != nil || strings.HasPrefix(r, "..") {
+			return "", false
+		}
+		return filepath.ToSlash(r), true
+	}
+
+	// A type declared in a non-test file is checked once per build variant (`pkg` and
+	// `pkg [pkg.test]`) and is a distinct object in each, so interfaces and candidates are keyed
+	// by declaration site with every variant's object kept: an interface from one variant is
+	// compared against candidates from all of them.
+	ifaces := map[string][]*types.Interface{}
+	ifaceMethods := map[string]map[string]bool{}
+	var cands []candidate
+	external := map[*types.Package]bool{}
+	addCandidate := func(key string, tn *types.TypeName) {
+		named, ok := tn.Type().(*types.Named)
+		if !ok || tn.IsAlias() || types.IsInterface(named) || named.TypeParams().Len() > 0 {
+			return
+		}
+		ms := types.NewMethodSet(types.NewPointer(named))
+		if ms.Len() == 0 {
+			return
+		}
+		names := map[string]bool{}
+		for i := 0; i < ms.Len(); i++ {
+			names[ms.At(i).Obj().Name()] = true
+		}
+		cands = append(cands, candidate{key: key, typ: named, methods: names})
+	}
+	for _, pkg := range l.checked {
+		if pkg == nil {
+			continue
+		}
+		for _, imp := range pkg.Imports() {
+			if _, main := l.checked[imp.Path()]; !main {
+				external[imp] = true
+			}
+		}
+		scope := pkg.Scope()
+		for _, name := range scope.Names() {
+			tn, ok := scope.Lookup(name).(*types.TypeName)
+			if !ok || tn.IsAlias() {
+				continue
+			}
+			file, ok := rel(tn.Pos())
+			if !ok {
+				continue
+			}
+			named, ok := tn.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+			if iface, ok := named.Underlying().(*types.Interface); ok {
+				if strings.HasSuffix(file, "_test.go") || iface.NumMethods() == 0 || named.TypeParams().Len() > 0 {
+					continue
+				}
+				key := file + "\x00" + name
+				ifaces[key] = append(ifaces[key], iface)
+				if ifaceMethods[key] == nil {
+					ifaceMethods[key] = map[string]bool{}
+					for i := 0; i < iface.NumMethods(); i++ {
+						ifaceMethods[key][iface.Method(i).Name()] = true
+					}
+				}
+				continue
+			}
+			addCandidate(fmt.Sprintf("%s:%d", file, l.fset.Position(tn.Pos()).Line), tn)
+		}
+	}
+	for imp := range external {
+		scope := imp.Scope()
+		for _, name := range scope.Names() {
+			tn, ok := scope.Lookup(name).(*types.TypeName)
+			if !ok || !tn.Exported() {
+				continue
+			}
+			addCandidate(imp.Path()+"."+name, tn)
+		}
+	}
+
+	type row struct {
+		File         string `json:"file"`
+		Name         string `json:"name"`
+		Implementors int    `json:"implementors"`
+	}
+	var rows []row
+	for key, objs := range ifaces {
+		need := ifaceMethods[key]
+		impl := map[string]bool{}
+		for _, c := range cands {
+			if impl[c.key] {
+				continue
+			}
+			subset := true
+			for m := range need {
+				if !c.methods[m] {
+					subset = false
+					break
+				}
+			}
+			if !subset {
+				continue
+			}
+			for _, iface := range objs {
+				if types.Implements(types.NewPointer(c.typ), iface) {
+					impl[c.key] = true
+					break
+				}
+			}
+		}
+		parts := strings.SplitN(key, "\x00", 2)
+		rows = append(rows, row{File: parts[0], Name: parts[1], Implementors: len(impl)})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].File != rows[j].File {
+			return rows[i].File < rows[j].File
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	out, _ := json.Marshal(map[string]any{"files": len(l.files), "interfaces": rows})
+	os.Stdout.Write(out)
+	os.Stdout.Write([]byte("\n"))
+}
+'''
+
+
+def go_abstractions(root: Path) -> Scan:
+    """(file, interface) -> implementor count, for every interface with methods declared in a
+    non-test file of the module. `go run` folds the program's exit status into its own 1, so any
+    non-zero is did-not-run; the program itself exits 3 on a parse or type error rather than
+    counting over a partial tree."""
+    import tempfile
+
+    listing = _go_list(root, ["-e", "-export", "-deps", "-test",
+                              "-json=ImportPath,Dir,GoFiles,CgoFiles,Export,ImportMap,Module,Error"],
+                       "check H")
+    payload = "\n".join(json.dumps(p) for p in listing)
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "sdlc_gate_implementors.go"
+        src.write_text(_GO_IMPLEMENTORS_SRC.lstrip())
+        try:
+            proc = subprocess.run(["go", "run", str(src), str(root)], cwd=root, input=payload,
+                                  capture_output=True, text=True, check=False, timeout=1800)
+        except OSError as e:
+            raise ScanOperationalError(f"check H: `go run` could not start: {e}") from e
+        except subprocess.TimeoutExpired as e:
+            raise ScanOperationalError("check H: the implementor count timed out") from e
+    if proc.returncode != 0:
+        raise ScanOperationalError(
+            f"check H: implementor count exited {proc.returncode}: {proc.stderr.strip()[:300]!r}")
+    try:
+        doc = json.loads(proc.stdout)
+        rows = doc["interfaces"]
+        files = int(doc["files"])
+    except (ValueError, KeyError, TypeError) as e:
+        raise ScanOperationalError(f"check H: implementor count wrote no readable result ({e})") from e
+    findings = {(r["file"], r["name"]): int(r["implementors"]) for r in rows or []}
+    return Scan("go/types implementors", files, findings)
+
+
 # --- Toolchain plugins (one engine, per-toolchain scanners) --------------------
 
 
@@ -3020,6 +3654,18 @@ class GoToolchain(Toolchain):
 
     def is_test_file(self, rel: str) -> bool:
         return _go_is_test_file(rel)
+
+    def unreferenced(self, root: Path) -> Scan:
+        return go_unreferenced(root)
+
+    def duplication(self, root: Path) -> Scan:
+        return go_duplication(root)
+
+    def complexity(self, root: Path) -> Scan:
+        return go_complexity(root)
+
+    def abstractions(self, root: Path) -> Scan:
+        return go_abstractions(root)
 
 
 _TOOLCHAINS = {"python": PythonToolchain(), "scala": ScalaToolchain(),
