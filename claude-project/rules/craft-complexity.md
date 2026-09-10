@@ -3,6 +3,8 @@ paths:
   - "**/*.go"
   - "**/*.sh"
   - "**/*.py"
+  - "**/*.ts"
+  - "**/*.tsx"
   - "**/*.scala"
   - "**/*.sc"
   - "**/adr/*.md"
@@ -22,7 +24,9 @@ paths:
 
 # Complexity and module design
 
-**Enforcement grade:** review and convention — no scanner measures module depth, information leakage, temporal decomposition, or a pass-through method, and a line-count or cyclomatic threshold would police roughly the opposite of what this file asks for.
+**Enforcement grade:** review and convention — nothing here is wired to a gate. Module depth, information leakage, temporal decomposition and pass-through methods have no scanner in any supported toolchain: surveyed 2026-09-10 across Python, TypeScript, Scala 3 and Go, Middle Man and Data Clumps returned *nonexistent* in all four. And a **line-count or cyclomatic threshold would police roughly the opposite of what this file asks for**, because it rewards splitting a coherent unit into shallow ones — measured in the same survey, where a first-cut nesting rule scored a flat `if / else if / else` chain at depth 4, since else-if nests in the syntax tree and not on the page.
+
+Two measures do serve this file and are buildable in all four toolchains: **nesting depth** and **cognitive complexity**. Both fall when a deep module is made obvious, and neither rewards decomposition for its own sake. They are not wired yet; when they are, this grade moves in the same diff.
 
 The discipline of keeping a system understandable and cheap to change. Source: John Ousterhout, *A Philosophy of Software Design* (2nd ed). Complexity is the one thing to fight; every rule below is a move against it.
 

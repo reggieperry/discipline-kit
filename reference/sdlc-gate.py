@@ -113,13 +113,20 @@ def run_ruff(root: Path) -> Counter:
         text=True,
         check=False,
     )
+    # ruff exits 0 clean, 1 with findings, 2 on error; anything else is uv or the shell. Only the
+    # first two are a scan. Until 2026-09-10 a non-JSON body was logged and treated as NO
+    # FINDINGS, so a missing ruff read as a clean Check A — the fail-open this file exists to stop.
+    if proc.returncode not in (0, 1):
+        raise ScanOperationalError(
+            f"ruff exited {proc.returncode}: {proc.stderr.strip()[:300]!r} — a ruff that did not "
+            "run must not read as 'no findings'")
     findings: list[dict] = []
     if proc.stdout.strip():
         try:
             findings = json.loads(proc.stdout)
-        except json.JSONDecodeError:
-            sys.stderr.write("sdlc-gate: ruff produced non-JSON output; treating as no findings\n")
-            findings = []
+        except json.JSONDecodeError as e:
+            raise ScanOperationalError(
+                f"ruff produced non-JSON output ({e}); refusing to read it as no findings") from e
     counter: Counter = Counter()
     for f in findings:
         path = _rel(f.get("filename", ""), root)
@@ -166,7 +173,7 @@ def run_mypy(root: Path) -> Counter:
     canonical key. See _MYPY_CODE_ALIASES for the conservative alias list.
     """
     proc = subprocess.run(
-        ["uv", "run", "mypy", ".", "--show-error-codes", "--no-error-summary"],
+        ["uv", "run", "mypy", ".", "--strict", "--show-error-codes", "--no-error-summary"],
         capture_output=True,
         text=True,
         check=False,
@@ -544,6 +551,10 @@ def sbt_compile_status(root: Path) -> str:
 # instrumented clean + full test run per tree), so it is opt-in behind --coverage.
 
 COVERAGE_EPSILON = 0.5  # percentage points; a per-directory drop beyond this is a hard block
+# Checks G and F (agent smells). Module-level so every toolchain reads the number the CLI set;
+# overridable with --complexity-threshold / --dup-min-tokens.
+COMPLEXITY_THRESHOLD = 15   # cognitive complexity per function; SonarQube's default
+DUP_MIN_TOKENS = 75         # clone length; PMD CPD's floor for anything but the noisiest languages
 
 
 class CoverageOperationalError(RuntimeError):
@@ -1321,6 +1332,72 @@ def run_go_coverage(root: Path) -> dict[str, float]:
 # --- Toolchain plugins (one engine, per-toolchain scanners) --------------------
 
 
+# --- Checks E-H: agent smells, and the contract they share --------------------------------
+#
+# Added 2026-09-10 for a chain in which every line is agent-written. Each targets a smell the
+# 2023-2026 literature measured as over-represented in agent output, and they share one rule the
+# earlier checks reached piecemeal: a scanner returns a `Scan` carrying its own DENOMINATOR, and a
+# scanner that could not run RAISES. "Ran and found nothing" and "did not run" are different facts
+# and must never share a reading. Measured on the way here: `python -m compileall` exits 0 on a
+# missing file; jscpd word-splits silently when its lexer gives up; pylint's duplicate-code reports
+# nothing under --jobs>1; and this file's own run_ruff read non-JSON as "no findings".
+
+
+class ScanOperationalError(RuntimeError):
+    """A scanner that could not run. Fail-closed like CoverageOperationalError: the gate exits 2
+    rather than reading the absence of findings as a clean result."""
+
+
+class NotWired(Exception):
+    """This check has no implementation for this toolchain. REPORTED, never skipped: `diff` lists
+    every not-wired check under `not_wired`, the coverage receipt a consumer reads to learn what
+    the gate did not look at for its language. A silent skip would make a toolchain implementing
+    one check byte-identical in output to one implementing all four."""
+
+
+class Scan:
+    """One scanner's result WITH its denominator.
+
+    `files` is how many files the tool actually examined. The engine refuses a branch scan that
+    examined zero files, so an empty `findings` from a tool that looked at nothing is a
+    did-not-run and not a clean. `findings` is keyed per check — see each Toolchain method.
+
+    A plain class, not a dataclass: the test suite loads this file by path without registering
+    it in sys.modules, and dataclass field resolution under `from __future__ import annotations`
+    looks the module up by name. Stdlib-minimal is the point of this file anyway.
+    """
+    __slots__ = ("tool", "files", "findings")
+
+    def __init__(self, tool: str, files: int, findings: dict) -> None:
+        self.tool = tool
+        self.files = files
+        self.findings = findings
+
+    def __repr__(self) -> str:
+        return f"Scan(tool={self.tool!r}, files={self.files}, findings={len(self.findings)})"
+
+
+def _diff_added_lines(baseline_sha: str) -> dict[str, set[int]]:
+    """Lines the diff ADDED, per repo-relative file, from `git diff -U0`. Check F uses it to
+    attribute a whole-tree clone to this change: only a fingerprint with at least one occurrence
+    on an added line is the branch's doing."""
+    proc = subprocess.run(["git", "diff", "-U0", baseline_sha, "--", "."],
+                          capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise ScanOperationalError(f"git diff against {baseline_sha} failed: {proc.stderr.strip()[:200]}")
+    out: dict[str, set[int]] = {}
+    cur: str | None = None
+    for line in proc.stdout.splitlines():
+        if line.startswith("+++ "):
+            cur = None if line == "+++ /dev/null" else line[4:].removeprefix("b/")
+        elif line.startswith("@@") and cur is not None:
+            m = re.search(r"\+(\d+)(?:,(\d+))?", line)
+            if m:
+                start, n = int(m.group(1)), int(m.group(2) or "1")
+                out.setdefault(cur, set()).update(range(start, start + max(n, 1)))
+    return out
+
+
 class Toolchain:
     """A per-language scanner set the engine drives uniformly. `static_labels` names
     the error-identity scanners (Check A); the rest map 1:1 to the Python originals."""
@@ -1354,6 +1431,51 @@ class Toolchain:
 
     def is_test_file(self, rel: str) -> bool:
         return rel.startswith("tests/")
+
+    # --- Checks E-H. Each raises NotWired unless the subclass implements it. ---------------
+
+    def unreferenced(self, root: Path) -> Scan:
+        """Check E — declared-but-unreferenced code: unused parameters, locals, imports, private
+        members, exports with no importer, config keys with no read site. Keyed (file, code) ->
+        count, diffed exactly like Check A: a per-file count increase blocks.
+
+        REACHABILITY, deliberately. "An abstraction with few subclasses" has no outcome evidence
+        and one study finds it reducing faults; unreferenced code is the largest smell class for
+        every model measured (14.7-42.7% of smells in Sonar's 2025 benchmark) and 9.9% of
+        agent-written methods are deleted by reviewers before merge."""
+        raise NotWired(f"unreferenced: not wired for {self.name}")
+
+    def duplication(self, root: Path) -> Scan:
+        """Check F — token-level clones over the WHOLE tree, not the diff. Keyed fingerprint ->
+        list of [file, start_line, end_line]. A fingerprint absent from the baseline with at least
+        one occurrence on an added line blocks.
+
+        Whole-tree because the agent-specific form is re-implementing an existing helper inline
+        (semantic redundancy at 1.87x human rates): the baseline holds one copy, the branch two,
+        and only a scan that sees both can notice. A size control, not a defect proxy — clones at
+        creation are not buggier; later inconsistent edits are."""
+        raise NotWired(f"duplication: not wired for {self.name}")
+
+    def complexity(self, root: Path) -> Scan:
+        """Check G — COGNITIVE complexity per function, keyed (file, function) -> int. A function
+        over COMPLEXITY_THRESHOLD that is new, or that rose above its baseline value, blocks.
+
+        Cognitive not cyclomatic, and delta-checked: the rule is "do not push an already-complex
+        function higher", never "split this". It targets the measured agent failure — iterative
+        patching into one function, +41.6% under Cursor, a main() growing 38 -> 240 lines over
+        eight checkpoints — without rewarding decomposition for its own sake, which is what
+        craft-complexity.md's Ousterhout argument forbids a bare length threshold for."""
+        raise NotWired(f"complexity: not wired for {self.name}")
+
+    def abstractions(self, root: Path) -> Scan:
+        """Check H — abstractions (interfaces, traits, abstract or base classes, protocols) keyed
+        (file, name) -> implementor count. An abstraction NEW on the branch with at most one
+        implementor blocks.
+
+        The inheritance-dedup refusal: gate-driven deduplication via Extract Superclass produced
+        Speculative Generality 68% of the time (Cedrim et al.), so a Check F block must not be
+        dischargeable by inventing a base class."""
+        raise NotWired(f"abstractions: not wired for {self.name}")
 
 
 class PythonToolchain(Toolchain):
@@ -1553,6 +1675,125 @@ def _deserialize(data: list) -> Counter:
     return Counter({(f, c): n for f, c, n in data})
 
 
+def _serialize_scan(findings: dict) -> list[list]:
+    """E-H keys are tuples (E, G, H) or strings (F); emit [key-as-list, value]."""
+    return [[list(k) if isinstance(k, tuple) else k, v]
+            for k, v in sorted(findings.items(), key=lambda kv: str(kv[0]))]
+
+
+def _deserialize_scan(data: list) -> dict:
+    return {(tuple(k) if isinstance(k, list) else k): v for k, v in data}
+
+
+def _load_agent_scans(base_dir: Path) -> dict:
+    f = base_dir / "agent-scans.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
+def _diff_unreferenced(branch: dict, base: dict, rename_map: dict[str, str], deleted: set[str],
+                       added: dict[str, set[int]]) -> list[dict]:
+    """Check E, shaped like Check A: per-(file, code) count increase against the translated baseline."""
+    translated = _translate(Counter(base), rename_map, deleted)
+    items = [{"file": f, "code": c, "new": n - translated.get((f, c), 0)}
+             for (f, c), n in branch.items() if n > translated.get((f, c), 0)]
+    items.sort(key=lambda d: (d["file"], d["code"]))
+    return [{"check": "E", "kind": "new_unreferenced", "items": items}] if items else []
+
+
+def _diff_duplication(branch: dict, base: dict, rename_map: dict[str, str], deleted: set[str],
+                      added: dict[str, set[int]]) -> list[dict]:
+    """Check F: a fingerprint new on the branch, with an occurrence on an added line, blocks."""
+    items = []
+    for fp, occs in branch.items():
+        if fp in base:
+            continue
+        if any(any(start <= ln <= end for ln in added.get(f, ())) for f, start, end in occs):
+            items.append({"fingerprint": fp, "occurrences": occs})
+    return [{"check": "F", "kind": "new_clone", "items": items}] if items else []
+
+
+def _diff_complexity(branch: dict, base: dict, rename_map: dict[str, str], deleted: set[str],
+                     added: dict[str, set[int]]) -> list[dict]:
+    """Check G: over threshold AND (new OR higher than its baseline value). Never fires on a
+    function that merely IS complex; only on one this change made worse or introduced."""
+    inverse = {v: k for k, v in rename_map.items()}
+    items = []
+    for (f, fn), cc in branch.items():
+        if cc <= COMPLEXITY_THRESHOLD:
+            continue
+        prev = base.get((inverse.get(f, f), fn))
+        if prev is None or cc > prev:
+            items.append({"file": f, "function": fn, "branch": cc, "baseline": prev,
+                          "threshold": COMPLEXITY_THRESHOLD})
+    return [{"check": "G", "kind": "complexity_rose", "items": items}] if items else []
+
+
+def _diff_abstractions(branch: dict, base: dict, rename_map: dict[str, str], deleted: set[str],
+                       added: dict[str, set[int]]) -> list[dict]:
+    """Check H: an abstraction new on the branch with <= 1 implementor blocks."""
+    inverse = {v: k for k, v in rename_map.items()}
+    items = [{"file": f, "name": n, "implementors": c}
+             for (f, n), c in branch.items() if (inverse.get(f, f), n) not in base and c <= 1]
+    return [{"check": "H", "kind": "single_implementor_abstraction", "items": items}] if items else []
+
+
+_AGENT_CHECKS = (("E", "unreferenced", _diff_unreferenced),
+                 ("F", "duplication", _diff_duplication),
+                 ("G", "complexity", _diff_complexity),
+                 ("H", "abstractions", _diff_abstractions))
+
+
+def _capture_agent_scans(tc: "Toolchain", root: Path) -> dict[str, dict]:
+    """Run E-H for a baseline. Not-wired is RECORDED; a scanner that cannot run stops the capture."""
+    out: dict[str, dict] = {}
+    for check, method_name, _ in _AGENT_CHECKS:
+        try:
+            s = getattr(tc, method_name)(root)
+            out[check] = {"tool": s.tool, "files": s.files, "findings": _serialize_scan(s.findings)}
+        except NotWired as e:
+            out[check] = {"not_wired": str(e)}
+        except ScanOperationalError as e:
+            sys.stderr.write(f"sdlc-gate: {e}\n")
+            sys.exit(2)
+    return out
+
+
+def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha: str,
+                      rename_map: dict[str, str], deleted: set[str]
+                      ) -> tuple[list[dict], list[str], dict[str, dict]]:
+    """Run E-H against the baseline's agent-scans.json. Returns (blocks, not_wired, scans)."""
+    base_all = _load_agent_scans(base_dir)
+    blocks: list[dict] = []
+    not_wired: list[str] = []
+    scans: dict[str, dict] = {}
+    added: dict[str, set[int]] | None = None
+    for check, method_name, differ in _AGENT_CHECKS:
+        base = base_all.get(check)
+        if base is None:
+            not_wired.append(f"{check}: no baseline scan (captured by an older gate?)")
+            continue
+        if "not_wired" in base:
+            not_wired.append(f"{check}: {base['not_wired']}")
+            continue
+        try:
+            branch = getattr(tc, method_name)(root)
+        except NotWired as e:
+            not_wired.append(f"{check}: {e}")
+            continue
+        except ScanOperationalError as e:
+            sys.stderr.write(f"sdlc-gate: {e}\n")
+            sys.exit(2)
+        if branch.files == 0:
+            sys.stderr.write(f"sdlc-gate: check {check} ({branch.tool}) examined 0 files on the "
+                             "branch; an empty scan is not a clean one\n")
+            sys.exit(2)
+        scans[check] = {"tool": branch.tool, "files_branch": branch.files, "files_baseline": base["files"]}
+        if added is None:
+            added = _diff_added_lines(baseline_sha)
+        blocks.extend(differ(branch.findings, _deserialize_scan(base["findings"]), rename_map, deleted, added))
+    return blocks, not_wired, scans
+
+
 # --- Subcommands --------------------------------------------------------------
 
 
@@ -1581,6 +1822,8 @@ def cmd_baseline(args: argparse.Namespace) -> None:
         (out_dir / f"static-{label}.json").write_text(json.dumps(_serialize(counter), indent=2))
     (out_dir / "suppressions.json").write_text(json.dumps(_serialize(suppressions), indent=2))
     (out_dir / "test-weakening.json").write_text(json.dumps(test_w, indent=2))
+    agent_scans = _capture_agent_scans(tc, root)
+    (out_dir / "agent-scans.json").write_text(json.dumps(agent_scans, indent=2))
     (out_dir / "sha.txt").write_text(args.sha + "\n")
     (out_dir / "toolchain.txt").write_text(tc.name + "\n")
     (out_dir / "build.txt").write_text(build_status + "\n")
@@ -1995,6 +2238,10 @@ def cmd_diff(args: argparse.Namespace) -> None:
         baseline_cov = json.loads(cov_path.read_text()) if cov_path.exists() else {}
         blocks.extend(_diff_coverage(branch_cov, baseline_cov, rename_map, COVERAGE_EPSILON))
 
+    agent_blocks, not_wired, agent_scans = _run_agent_checks(
+        tc, root, base_dir, baseline["sha"], rename_map, deleted)
+    blocks.extend(agent_blocks)
+
     if blocks:
         verdict = "fail"
     elif advisories:
@@ -2008,6 +2255,11 @@ def cmd_diff(args: argparse.Namespace) -> None:
         "baseline_sha": baseline["sha"],
         "blocks": blocks,
         "advisories": advisories,
+        # The coverage receipt: which of E-H did NOT run for this toolchain, and the file
+        # denominators of those that did. A consumer reads this to know what the gate did not
+        # look at; a report listing only findings reads identical whether it ran four checks or none.
+        "not_wired": not_wired,
+        "agent_scans": agent_scans,
         "summary": {
             "static_branch": {l: sum(branch_static.get(l, Counter()).values()) for l in tc.static_labels},
             "static_baseline": {l: sum(baseline["static"].get(l, Counter()).values()) for l in tc.static_labels},
@@ -2025,6 +2277,7 @@ def cmd_diff(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    global COMPLEXITY_THRESHOLD, DUP_MIN_TOKENS
     parser = argparse.ArgumentParser(prog="sdlc-gate")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -2073,7 +2326,14 @@ def main() -> None:
                              "capture. A failed coverage scan exits 2 (operational, fail-closed).")
     p_diff.set_defaults(func=cmd_diff)
 
+    for p in (p_baseline, p_diff):
+        p.add_argument("--complexity-threshold", type=int, default=COMPLEXITY_THRESHOLD,
+                       help="Check G: cognitive complexity a function may not be pushed past (default 15)")
+        p.add_argument("--dup-min-tokens", type=int, default=DUP_MIN_TOKENS,
+                       help="Check F: minimum clone length in tokens (default 75)")
     args = parser.parse_args()
+    COMPLEXITY_THRESHOLD = args.complexity_threshold
+    DUP_MIN_TOKENS = args.dup_min_tokens
     args.func(args)
 
 
