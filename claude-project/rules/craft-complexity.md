@@ -3,6 +3,8 @@ paths:
   - "**/*.go"
   - "**/*.sh"
   - "**/*.py"
+  - "**/*.ts"
+  - "**/*.tsx"
   - "**/*.scala"
   - "**/*.sc"
   - "**/adr/*.md"
@@ -22,7 +24,9 @@ paths:
 
 # Complexity and module design
 
-**Enforcement grade:** review and convention — no scanner measures module depth, information leakage, temporal decomposition, or a pass-through method, and a line-count or cyclomatic threshold would police roughly the opposite of what this file asks for.
+**Enforcement grade:** review and convention — nothing here is wired to a gate. Module depth, information leakage, temporal decomposition and pass-through methods have no scanner in any supported toolchain: surveyed 2026-09-10 across Python, TypeScript, Scala 3 and Go, Middle Man and Data Clumps returned *nonexistent* in all four. And a **line-count or cyclomatic threshold would police roughly the opposite of what this file asks for**, because it rewards splitting a coherent unit into shallow ones — measured in the same survey, where a first-cut nesting rule scored a flat `if / else if / else` chain at depth 4, since else-if nests in the syntax tree and not on the page.
+
+One measure serves this file and is **wired, in all four toolchains, as the differential gate's Check G**: cognitive complexity per function, delta-checked. A function over the threshold that this change introduced or pushed higher blocks the commit; a function that merely *is* complex never does. That is the Ousterhout-compatible form — it never says *split this*, only *do not keep piling into this* — and it targets the measured agent failure, iterative patching into one function. Wired 2026-09-10 (merges `6e47cff`, `4aeb8b8`, `78e9ec1`, `93694e9`); Python via complexipy, TypeScript via sonarjs, Go via gocognit, Scala 3 via a scalameta pass implementing Sonar's rules. Nesting depth is not gated separately: it is one contributor to the cognitive score.
 
 The discipline of keeping a system understandable and cheap to change. Source: John Ousterhout, *A Philosophy of Software Design* (2nd ed). Complexity is the one thing to fight; every rule below is a move against it.
 

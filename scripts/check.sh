@@ -151,5 +151,13 @@ python3 harness/sequencer_source_check.py
 # demonstration.
 python3 harness/fixtures/comment_shape_test.py
 python3 harness/comment_shape.py --dir harness --exclude fixtures
+# The gate's tests, one file per concern so four authors never edit one file. Listed explicitly
+# rather than globbed: profile-check enumerates the requirement set from these lines, and a glob
+# that silently picks a file up is a glob that silently drops one. A new toolchain adds its line.
 python3 reference/test_sdlc_gate.py
+python3 reference/test_sdlc_gate_contract.py
+python3 reference/test_sdlc_gate_python.py
+python3 reference/test_sdlc_gate_typescript.py
+python3 reference/test_sdlc_gate_scala3.py
+python3 reference/test_sdlc_gate_go.py
 python3 harness/algebra/validate_note.py

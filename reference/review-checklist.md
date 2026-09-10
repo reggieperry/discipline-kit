@@ -46,6 +46,42 @@ Per test file, compared across the rename map:
 - **Skip markers** (`@pytest.mark.skip`, `@pytest.mark.xfail`, `@pytest.mark.skipif`) — the count must not increase. Any increase → **block**.
 - **Assertion count** (`assert` keywords under `tests/`) — must not decrease. A drop → **block**, unless it is a declared, mechanically-verified migration: the lost assertions reappear verbatim in a named sibling test file (same predicate text, same or greater count). Absent that proof, a drop is a weakening.
 
+
+## Check E — no new unreferenced code
+
+Unused parameters, locals, imports, private members, exports with no importer, config keys with
+no read site. **Reachability, not abstractness.** Compare the branch's count per (file, code)
+against the baseline's; an increase blocks. Why this and not "premature abstraction": unreferenced
+code is the largest smell class for every model measured, and 9.9% of agent-written methods are
+deleted by reviewers before merge; "an abstraction with few subclasses" has no outcome evidence.
+
+## Check F — no new clone the change wrote
+
+Token-level duplication over the **whole tree**, not the diff — the agent-specific form is
+re-implementing an existing helper inline, and only a scan that sees both copies can notice. A
+clone fingerprint absent from the baseline, with at least one occurrence on a line this change
+added, blocks. Gated as a size control; clones at creation are not buggier, later inconsistent
+edits are.
+
+## Check G — no function pushed past the cognitive-complexity threshold
+
+Cognitive complexity per function (Sonar's rules, threshold 15). A function over the threshold
+that is **new, or rose above its baseline value**, blocks. A function that merely is complex never
+does. Never "split this"; only "do not keep piling into this."
+
+## Check H — no new single-implementor abstraction
+
+An interface, trait, abstract class or protocol **new on the branch** with at most one
+implementor blocks. This is the refusal that stops a Check F block being discharged by Extract
+Superclass — which produced Speculative Generality 68% of the time in the one study that measured
+gate-driven refactoring.
+
+## The coverage receipt
+
+The gate's `diff` output carries `not_wired`, listing every one of E–H that has no implementation
+for the toolchain, and `agent_scans`, the file counts each wired check actually examined. Read
+both before trusting a pass: a report that listed only findings would read identical whether it
+ran four checks or none.
 ## Verdict
 
 - Any block → **fail** (return for rework).
