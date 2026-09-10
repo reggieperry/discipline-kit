@@ -701,17 +701,25 @@ _SBT_UNUSED_SCAN_COMMAND = """set Global / commands += Command.command("gateUnus
 _SBT_UNUSED_HEADER = re.compile(
     r"^\[warn\] -- \[E\d+\] Unused Symbol Warning: (?P<path>.+?):(?P<line>\d+):(?P<col>\d+)\s*$")
 _SBT_UNUSED_MESSAGE = re.compile(r"^\[warn\]\s+\|\s+(?P<msg>unused [a-z][a-z ]*?)\s*$")
-_SBT_COMPILING = re.compile(r"^\[info\] compiling (?P<n>\d+) Scala sources? ")
+_SBT_COMPILING = re.compile(r"^\[info\] compiling (?P<n>\d+) Scala sources?\b.*? to (?P<dir>\S+)")
 
 
 def _parse_sbt_unused(out: str, root: Path) -> tuple[Counter, int]:
-    """Counter[(file, unused-<kind>)] and the number of Scala sources sbt compiled."""
+    """Counter[(file, unused-<kind>)] and the number of Scala sources sbt compiled. Scala 2 is
+    refused rather than parsed: its warnings come as `path:line:col: Unused import`, which the
+    Scala 3 header pattern would pass over, and a non-zero denominator with zero findings would
+    then read as a clean 2.13 tree. The target directory on the compiling line carries the
+    version (`target/scala-2.13/classes` against `target/scala-3.3.8/classes`)."""
     counter: Counter = Counter()
     files = 0
     pending: str | None = None
     for line in out.splitlines():
         m = _SBT_COMPILING.match(line)
         if m:
+            if "/scala-2." in m.group("dir"):
+                raise ScanOperationalError(
+                    "the build compiles Scala 2 (" + m.group("dir") + "); the unused-symbol scan "
+                    "reads Scala 3 diagnostics only and will not report a 2.x tree as clean")
             files += int(m.group("n"))
             continue
         m = _SBT_UNUSED_HEADER.match(line)

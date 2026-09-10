@@ -116,6 +116,23 @@ class UnreferencedTests(unittest.TestCase):
                 gate.ScalaToolchain().unreferenced(Path("/r"))
         self.assertIn("no Scala sources", str(cm.exception))
 
+    def test_did_not_run_a_scala_2_build_is_refused_not_read_as_clean(self):
+        """2.13 prints `path:line:col: Unused import`, which the Scala 3 header never matches; a
+        non-zero denominator with no findings would otherwise pass a 2.13 tree unexamined."""
+        out = ("[info] compiling 3 Scala sources to /r/target/scala-2.13/classes ...\n"
+               "[warn] /r/a/A.scala:3:8: Unused import\n[info] done compiling\n")
+        with mock.patch.object(gate.subprocess, "run", return_value=_proc(0, out)):
+            with self.assertRaises(gate.ScanOperationalError) as cm:
+                gate.ScalaToolchain().unreferenced(Path("/r"))
+        self.assertIn("Scala 2", str(cm.exception))
+
+    def test_a_scala_3_target_with_java_sources_alongside_still_counts_its_scala_files(self):
+        out = ("[info] compiling 2 Scala sources and 1 Java source to /r/target/scala-3.3.8/classes ...\n"
+               "[info] done compiling\n")
+        with mock.patch.object(gate.subprocess, "run", return_value=_proc(0, out)):
+            scan = gate.ScalaToolchain().unreferenced(Path("/r"))
+        self.assertEqual(scan.files, 2)
+
     def test_the_invocation_cleans_first_and_strips_werror_in_every_project(self):
         seen = {}
 
