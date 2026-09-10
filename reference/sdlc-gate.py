@@ -1076,6 +1076,407 @@ def _diff_coverage(branch_cov: dict[str, float], baseline_cov: dict[str, float],
     return []
 
 
+# --- Checks E-H for Scala 3 ----------------------------------------------------------------
+# Three tools, each captured before its parser was written (2026-09-10, sbt 1.12.11 + Scala 3.3.8,
+# PMD 7.27.0, scalameta 4.13.9 under scala-cli 1.10.1), and each read under the contract in the
+# E-H section below: a Scan carries the count of files the tool examined, and a tool that did not
+# run raises. What was measured on the way here, in order: a warm zinc cache compiles zero sources
+# and prints zero warnings, so an E scan without `clean` reads a planted unused parameter as clean;
+# `-Werror` turns every unused symbol into a compile error and stops the test sources from ever
+# being compiled, so it is stripped in every project scope rather than only at ThisBuild (where
+# `set every ... -=` cycles); CPD given a `.sc` file drops it silently and exits 0; and the prior
+# complexity script scored a flat else-if chain at depth 4 because else-if nests in the tree.
+
+
+def _scala_sources(root: Path) -> list[str]:
+    """The repo-relative `.scala` files F, G and H are handed, sorted so CPD lists occurrences in a
+    stable order. `.sc` scripts are left out: CPD's scala tokenizer ignores them without saying so
+    (measured: a two-file list with one `.sc` reports one file and exits 0), and scalameta's Source
+    parser refuses their top-level statements."""
+    return sorted(str(p.relative_to(root)) for p in _walk_scala(root) if p.suffix == ".scala")
+
+
+# Check E: the compiler's own `-Wunused:all`, forced on. Injected as a command rather than a
+# `set` per key because the options compile actually reads are `<project> / <config> / compile /
+# scalacOptions`, which delegate to wherever the build put `-Werror`; deriving that key in every
+# project scope is the only shape that strips a per-project `-Werror` as well as a ThisBuild one.
+# Existing `-Wunused` flags go too, or scalac warns "set to all redundantly".
+_SBT_UNUSED_SCAN_COMMAND = """set Global / commands += Command.command("gateUnusedScan") { state =>
+  val ex = Project.extract(state)
+  val drop = (o: String) => o == "-Werror" || o == "-Xfatal-warnings" || o.startsWith("-Wunused")
+  val ss = ex.structure.allProjectRefs.flatMap { p =>
+    Seq(Compile, Test).map { c =>
+      (p / c / compile / scalacOptions) := ((p / c / scalacOptions).value.filterNot(drop) :+ "-Wunused:all")
+    }
+  }
+  ex.appendWithSession(ss, state)
+}"""
+
+# Scala 3 renders a diagnostic as a header line naming the file, then the source line, a caret
+# line, and the message; only the header and the message line are read. `[warn] 3 |import ...`
+# carries the line number before the pipe and never matches the message pattern.
+_SBT_UNUSED_HEADER = re.compile(
+    r"^\[warn\] -- \[E\d+\] Unused Symbol Warning: (?P<path>.+?):(?P<line>\d+):(?P<col>\d+)\s*$")
+_SBT_UNUSED_MESSAGE = re.compile(r"^\[warn\]\s+\|\s+(?P<msg>unused [a-z][a-z ]*?)\s*$")
+_SBT_COMPILING = re.compile(r"^\[info\] compiling (?P<n>\d+) Scala sources?\b.*? to (?P<dir>\S+)")
+
+
+def _parse_sbt_unused(out: str, root: Path) -> tuple[Counter, int]:
+    """Counter[(file, unused-<kind>)] and the number of Scala sources sbt compiled. Scala 2 is
+    refused rather than parsed: its warnings come as `path:line:col: Unused import`, which the
+    Scala 3 header pattern would pass over, and a non-zero denominator with zero findings would
+    then read as a clean 2.13 tree. The target directory on the compiling line carries the
+    version (`target/scala-2.13/classes` against `target/scala-3.3.8/classes`)."""
+    counter: Counter = Counter()
+    files = 0
+    pending: str | None = None
+    for line in out.splitlines():
+        m = _SBT_COMPILING.match(line)
+        if m:
+            if "/scala-2." in m.group("dir"):
+                raise ScanOperationalError(
+                    "the build compiles Scala 2 (" + m.group("dir") + "); the unused-symbol scan "
+                    "reads Scala 3 diagnostics only and will not report a 2.x tree as clean")
+            files += int(m.group("n"))
+            continue
+        m = _SBT_UNUSED_HEADER.match(line)
+        if m:
+            pending = _rel(m.group("path"), root)
+            continue
+        if pending is not None:
+            m = _SBT_UNUSED_MESSAGE.match(line)
+            if m:
+                counter[(pending, m.group("msg").strip().replace(" ", "-"))] += 1
+                pending = None
+    return counter, files
+
+
+def run_sbt_unused(root: Path) -> Scan:
+    """`clean` then `Test/compile` with `-Wunused:all` on and `-Werror` off in every project. The
+    clean is not optional: zinc recompiles nothing for an unchanged file and re-reports nothing,
+    so without it the second run of a planted unused parameter reads clean (measured). Zero
+    sources compiled after a clean is therefore a scan that did not happen, not an empty tree."""
+    cmd = ["sbt", "-batch", "-Dsbt.color=false", _SBT_UNUSED_SCAN_COMMAND, "gateUnusedScan",
+           "clean", "Test/compile"]
+    try:
+        proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False,
+                              timeout=1800)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ScanOperationalError(f"sbt could not run for the unused-symbol scan: {e}") from e
+    out = proc.stdout + proc.stderr
+    if proc.returncode != 0:
+        errors = [l for l in out.splitlines() if l.startswith("[error]")][:5]
+        raise ScanOperationalError(
+            f"sbt exited {proc.returncode} during the unused-symbol scan (the tree does not compile "
+            f"with -Werror off, or the build did not load): {' / '.join(errors)[:400]}")
+    counter, files = _parse_sbt_unused(out, root)
+    if files == 0:
+        raise ScanOperationalError(
+            "sbt compiled no Scala sources after `clean`; the unused-symbol scan examined nothing "
+            "and an empty result is not a clean one")
+    return Scan(tool="sbt -Wunused:all", files=files, findings=dict(counter))
+
+
+# Check F: PMD CPD over the whole tree, `--language scala`. Exit contract read from the CLI help
+# and confirmed by probe: 0 nothing found, 4 duplications found, 5 a recoverable error such as a
+# listed file it could not read (the report is still written, one file short), 1 unexpected, 2 usage.
+def _pmd_binary() -> str | None:
+    """`pmd` on PATH, else `$PMD_HOME/bin/pmd`, else the newest `~/.local/opt/pmd-bin-*/bin/pmd`,
+    where a per-user unzip of the PMD distribution lands without a global install."""
+    import os
+    found = shutil.which("pmd")
+    if found:
+        return found
+    home = os.environ.get("PMD_HOME")
+    if home and (Path(home) / "bin" / "pmd").is_file():
+        return str(Path(home) / "bin" / "pmd")
+    candidates = sorted(Path.home().glob(".local/opt/pmd-bin-*/bin/pmd"))
+    return str(candidates[-1]) if candidates else None
+
+
+def _parse_cpd_xml(xml: str, root: Path) -> tuple[dict, int]:
+    """{fingerprint: [[file, start, end], ...]} and the count of files CPD tokenized (its top-level
+    `<file totalNumberOfTokens>` entries, which appear whether or not anything was duplicated). The
+    fingerprint is a hash of the clone's rendered fragment with whitespace collapsed, so the same
+    clone on both sides of the differential keys the same regardless of where its lines moved."""
+    import hashlib
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ScanOperationalError("cpd report carries a DOCTYPE; refusing to parse (XXE closed)")
+    try:
+        tree = ET.fromstring(xml)
+    except ET.ParseError as e:
+        raise ScanOperationalError(f"cpd produced unparseable XML ({e}); not read as no clones") from e
+
+    def local(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1]
+
+    files = 0
+    findings: dict = {}
+    for el in tree:
+        if local(el.tag) == "file" and el.get("totalNumberOfTokens") is not None:
+            files += 1
+            continue
+        if local(el.tag) != "duplication":
+            continue
+        occs = []
+        fragment = ""
+        for child in el:
+            if local(child.tag) == "file":
+                occs.append([_rel(child.get("path") or "", root), int(child.get("line") or 0),
+                             int(child.get("endline") or 0)])
+            elif local(child.tag) == "codefragment":
+                fragment = child.text or ""
+        fp = hashlib.sha256(" ".join(fragment.split()).encode("utf-8")).hexdigest()[:24]
+        findings.setdefault(fp, []).extend(occs)
+    return findings, files
+
+
+def run_cpd_scala(root: Path) -> Scan:
+    import tempfile
+    pmd = _pmd_binary()
+    if pmd is None:
+        raise ScanOperationalError(
+            "pmd not found (PATH, $PMD_HOME, or ~/.local/opt/pmd-bin-*); the clone scan did not run")
+    sources = _scala_sources(root)
+    if not sources:
+        raise ScanOperationalError("no .scala sources under the root; the clone scan examined nothing")
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(sources) + "\n")
+        listfile = tmp.name
+    try:
+        cmd = [pmd, "cpd", "--minimum-tokens", str(DUP_MIN_TOKENS), "--language", "scala",
+               "--file-list", listfile, "--format", "xml"]
+        try:
+            proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False,
+                                  timeout=900)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ScanOperationalError(f"pmd cpd could not run: {e}") from e
+    finally:
+        Path(listfile).unlink(missing_ok=True)
+    if proc.returncode not in (0, 4):
+        raise ScanOperationalError(
+            f"pmd cpd exited {proc.returncode} (5 = a file it could not tokenize or read; the report "
+            f"would be short): {proc.stderr.strip()[:300]!r}")
+    findings, files = _parse_cpd_xml(proc.stdout, root)
+    if files != len(sources):
+        raise ScanOperationalError(
+            f"pmd cpd tokenized {files} of the {len(sources)} files it was given; a silently "
+            "dropped file is not a clean one")
+    return Scan(tool="pmd-cpd scala", files=files, findings=findings)
+
+
+# Checks G and H: one scalameta program, written to a scratch directory and run by scala-cli with
+# no build server, over the same file list as F. Its complexity is Sonar's cognitive complexity
+# by the SLang rules, calibrated against hand-counted cases (a flat else-if chain of four arms is
+# 4; three nested ifs with elses are 9; `a && b && c || d || e && f` is 3) and against a corpus
+# function counted by hand. G keys a def by its enclosing-type path so two `apply`s in one file
+# stay distinct; an overload collision keeps the higher value. H counts every `extends`/`with`,
+# `new T {}` and `given T with` naming a trait or abstract class by simple name, so a
+# SAM-converted lambda or a `given T = expr` alias is not an implementor it can see.
+_SCALAMETA_SCRIPT = r'''//> using scala 3.3.8
+//> using dep org.scalameta::scalameta:4.13.9
+// Checks G and H for Scala, over scalameta trees. Written to a temp dir and run by sdlc-gate.py;
+// argv is <root> <file-list>. Output is TSV on stdout: one FILES line (the denominator), G lines
+// (file, qualified def name, cognitive complexity), H lines (file, abstraction, implementor count),
+// and ERR lines for files that did not parse. Exit 3 when any ERR was written, so the gate refuses
+// the scan rather than reading a short denominator as clean.
+import scala.meta.*
+import java.nio.file.{Files, Path, Paths}
+import scala.jdk.CollectionConverters.*
+
+object Gate:
+  // Sonar's cognitive complexity, the SLang rules: if/loop/match/catch get 1 + nesting, else-if and
+  // else get 1 with no nesting, each run of one boolean operator gets 1, and lambdas or nested defs
+  // raise the nesting of what they contain without scoring themselves. No recursion increment,
+  // matching sonar-scala. The parent operator travels only from a boolean infix to its operands.
+  def complexity(body: Tree): Int =
+    def visit(t: Tree, n: Int, op: String): Int = t match
+      case t: Term.If =>
+        1 + n + visit(t.cond, n, "") + visit(t.thenp, n + 1, "") + elseChain(t.elsep, n)
+      case t: Term.While => 1 + n + visit(t.expr, n, "") + visit(t.body, n + 1, "")
+      case t: Term.Do => 1 + n + visit(t.body, n + 1, "") + visit(t.expr, n, "")
+      case t: Term.For => 1 + n + t.enums.map(visit(_, n, "")).sum + visit(t.body, n + 1, "")
+      case t: Term.ForYield => 1 + n + t.enums.map(visit(_, n, "")).sum + visit(t.body, n + 1, "")
+      case t: Term.Match => 1 + n + visit(t.expr, n, "") + t.cases.map(visit(_, n + 1, "")).sum
+      case t: Term.Try =>
+        val handler = if t.catchp.isEmpty then 0 else 1 + n + t.catchp.map(visit(_, n + 1, "")).sum
+        visit(t.expr, n, "") + handler + t.finallyp.map(visit(_, n, "")).getOrElse(0)
+      case t: Term.TryWithHandler =>
+        visit(t.expr, n, "") + 1 + n + visit(t.catchp, n + 1, "") +
+          t.finallyp.map(visit(_, n, "")).getOrElse(0)
+      case t: Term.ApplyInfix if t.op.value == "&&" || t.op.value == "||" =>
+        val o = t.op.value
+        (if o == op then 0 else 1) + visit(t.lhs, n, o) + t.argClause.values.map(visit(_, n, o)).sum
+      case t @ (_: Term.Function | _: Term.PartialFunction | _: Term.AnonymousFunction |
+          _: Term.PolyFunction | _: Term.ContextFunction | _: Defn.Def) =>
+        t.children.map(visit(_, n + 1, "")).sum
+      case _ => t.children.map(visit(_, n, "")).sum
+    def elseChain(e: Term, n: Int): Int = e match
+      case t: Term.If => 1 + visit(t.cond, n, "") + visit(t.thenp, n + 1, "") + elseChain(t.elsep, n)
+      case _: Lit.Unit if e.tokens.isEmpty => 0 // no else written; scalameta fills a unit
+      case other => 1 + visit(other, n + 1, "")
+    visit(body, 0, "")
+
+  def simpleName(t: Type): Option[String] = t match
+    case t: Type.Name => Some(t.value)
+    case t: Type.Select => Some(t.name.value)
+    case t: Type.Project => Some(t.name.value)
+    case t: Type.Apply => simpleName(t.tpe)
+    case t: Type.Annotate => simpleName(t.tpe)
+    case t: Type.Refine => t.tpe.flatMap(simpleName)
+    case _ => None
+
+  def main(args: Array[String]): Unit =
+    val root = Paths.get(args(0)).toAbsolutePath.normalize
+    val files = Files.readAllLines(Paths.get(args(1))).asScala.map(_.trim).filter(_.nonEmpty).toList
+    val out = new StringBuilder
+    var parsed = 0
+    var failed = 0
+    val abstractions = scala.collection.mutable.ListBuffer.empty[(String, String)]
+    val implementors = scala.collection.mutable.Map.empty[String, Int].withDefaultValue(0)
+    for f <- files do
+      val p = root.resolve(f)
+      val rel = root.relativize(p.toAbsolutePath.normalize).toString
+      val input = Input.File(p)
+      def parseWith(d: Dialect): Either[String, Source] =
+        d(input).parse[Source] match
+          case Parsed.Success(t) => Right(t)
+          case e: Parsed.Error => Left(s"${e.pos.startLine + 1}:${e.pos.startColumn + 1}: ${e.message}")
+      // Scala 3 first; a 2.13 file that the Scala 3 dialect refuses gets one more try.
+      val tree = parseWith(dialects.Scala3).left.flatMap(msg => parseWith(dialects.Scala213).left.map(_ => msg))
+      tree match
+        case Left(msg) =>
+          failed += 1
+          out.append(s"ERR\t$rel\t${msg.replace('\t', ' ').replace('\n', ' ')}\n")
+        case Right(src) =>
+          parsed += 1
+          val defs = scala.collection.mutable.Map.empty[String, Int]
+          // Every def not inside another def is a G entry; a def inside a def scores into its
+          // owner through complexity() and is walked here only so the H counts see the
+          // `new Trait {}` instances a body creates.
+          def walk(t: Tree, owners: List[String], inDef: Boolean): Unit = t match
+            case d: Defn.Def =>
+              if !inDef then
+                val key = (d.name.value :: owners).reverse.mkString(".")
+                defs(key) = math.max(defs.getOrElse(key, 0), complexity(d.body))
+              d.children.foreach(walk(_, owners, true))
+            case d: Defn.Trait =>
+              abstractions += ((rel, d.name.value))
+              countInits(d.templ.inits)
+              d.children.foreach(walk(_, d.name.value :: owners, inDef))
+            case d: Defn.Class =>
+              if d.mods.exists(_.isInstanceOf[Mod.Abstract]) then abstractions += ((rel, d.name.value))
+              countInits(d.templ.inits)
+              d.children.foreach(walk(_, d.name.value :: owners, inDef))
+            case d: Defn.Object =>
+              countInits(d.templ.inits)
+              d.children.foreach(walk(_, d.name.value :: owners, inDef))
+            case d: Defn.Enum =>
+              countInits(d.templ.inits)
+              d.children.foreach(walk(_, d.name.value :: owners, inDef))
+            case d: Defn.EnumCase =>
+              countInits(d.inits)
+              d.children.foreach(walk(_, owners, inDef))
+            case d: Defn.Given =>
+              countInits(d.templ.inits)
+              val nm = d.name match
+                case n: Term.Name => n.value
+                case _ => "given"
+              d.children.foreach(walk(_, nm :: owners, inDef))
+            case d: Term.NewAnonymous =>
+              countInits(d.templ.inits)
+              d.children.foreach(walk(_, owners, inDef))
+            case other => other.children.foreach(walk(_, owners, inDef))
+          def countInits(inits: List[Init]): Unit =
+            for i <- inits; n <- simpleName(i.tpe) do implementors(n) += 1
+          walk(src, Nil, false)
+          for (k, v) <- defs.toList.sortBy(_._1) do out.append(s"G\t$rel\t$k\t$v\n")
+    for (file, name) <- abstractions.toList.sortBy(identity) do
+      out.append(s"H\t$file\t$name\t${implementors(name)}\n")
+    out.append(s"FILES\t$parsed\n")
+    print(out)
+    System.out.flush()
+    if failed > 0 then sys.exit(3)
+'''
+
+
+def _scala_cli_binary() -> str | None:
+    """scala-cli on PATH, else where `cs install scala-cli` puts it, which a hook's PATH may lack."""
+    found = shutil.which("scala-cli")
+    if found:
+        return found
+    local = Path.home() / ".local" / "share" / "coursier" / "bin" / "scala-cli"
+    return str(local) if local.is_file() else None
+
+
+def _parse_scalameta_tsv(out: str) -> tuple[dict, dict, int]:
+    """(complexity {(file, def): cc}, abstractions {(file, name): implementors}, files parsed).
+    A missing FILES line is the script not reaching its end, and is refused."""
+    g: dict = {}
+    h: dict = {}
+    files: int | None = None
+    for line in out.splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if parts[0] == "G" and len(parts) == 4:
+            g[(parts[1], parts[2])] = int(parts[3])
+        elif parts[0] == "H" and len(parts) == 4:
+            h[(parts[1], parts[2])] = int(parts[3])
+        elif parts[0] == "FILES" and len(parts) == 2:
+            files = int(parts[1])
+    if files is None:
+        raise ScanOperationalError(
+            "the scalameta scan produced no FILES line; its output is not read as a result")
+    return g, h, files
+
+
+def run_scalameta_scan(root: Path) -> tuple[dict, dict, int]:
+    """Write the script and the file list to a scratch directory and run it there, so scala-cli's
+    `.scala-build` never lands in the repo. Exit 3 is the script's own "a file did not parse";
+    anything else non-zero is scala-cli or the script's compile, and both are did-not-run."""
+    import tempfile
+    exe = _scala_cli_binary()
+    if exe is None:
+        raise ScanOperationalError(
+            "scala-cli not found (PATH or ~/.local/share/coursier/bin); the scalameta scan did not run")
+    sources = _scala_sources(root)
+    if not sources:
+        raise ScanOperationalError("no .scala sources under the root; the scalameta scan examined nothing")
+    with tempfile.TemporaryDirectory(prefix="sdlc-gate-scalameta-") as td:
+        (Path(td) / "Gate.scala").write_text(_SCALAMETA_SCRIPT)
+        (Path(td) / "files.txt").write_text("\n".join(sources) + "\n")
+        cmd = [exe, "run", "--server=false", "Gate.scala", "--", str(root), "files.txt"]
+        try:
+            proc = subprocess.run(cmd, cwd=td, capture_output=True, text=True, check=False,
+                                  timeout=1800)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise ScanOperationalError(f"scala-cli could not run the scalameta scan: {e}") from e
+    if proc.returncode == 3:
+        bad = [l for l in proc.stdout.splitlines() if l.startswith("ERR\t")][:5]
+        raise ScanOperationalError(
+            "the scalameta scan could not parse every file it was given; refusing a short "
+            f"denominator: {' / '.join(bad)[:400]}")
+    if proc.returncode != 0:
+        raise ScanOperationalError(
+            f"scala-cli exited {proc.returncode} running the scalameta scan: "
+            f"{proc.stderr.strip()[-400:]!r}")
+    g, h, files = _parse_scalameta_tsv(proc.stdout)
+    if files == 0:
+        raise ScanOperationalError("the scalameta scan parsed no files; an empty scan is not a clean one")
+    return g, h, files
+
+
+# G and H each run the script once. The same output serves both, and the second scala-cli start
+# (about 8 s over 120 files) costs less than a memo whose staleness would have to be argued.
+def run_scala_complexity(root: Path) -> Scan:
+    g, _, files = run_scalameta_scan(root)
+    return Scan(tool="scalameta cognitive-complexity", files=files, findings=g)
+
+
+def run_scala_abstractions(root: Path) -> Scan:
+    _, h, files = run_scalameta_scan(root)
+    return Scan(tool="scalameta abstractions", files=files, findings=h)
+
+
 # --- Java toolchain scanners (v1.3.0) -----------------------------------------
 # Java is a scanner-plugin: NO engine change. Source-based scanners (Checkstyle Check A,
 # suppression Check B, test-weakening Check D incl. jqwik parameter values) mirror the Scala
@@ -2514,6 +2915,19 @@ class ScalaToolchain(Toolchain):
 
     def is_test_file(self, rel: str) -> bool:
         return _scala_is_test_file(rel)
+
+    # Checks E-H (Scala 3): the compiler for E, PMD CPD for F, one scalameta program for G and H.
+    def unreferenced(self, root: Path) -> Scan:
+        return run_sbt_unused(root)
+
+    def duplication(self, root: Path) -> Scan:
+        return run_cpd_scala(root)
+
+    def complexity(self, root: Path) -> Scan:
+        return run_scala_complexity(root)
+
+    def abstractions(self, root: Path) -> Scan:
+        return run_scala_abstractions(root)
 
 
 class JavaToolchain(Toolchain):
