@@ -114,6 +114,8 @@ Structured, severity-tiered, evidence-cited:
 4. **Migrations are symmetric.** Up and down get equal rigor; destructive downgrades refuse when they'd drop human/analyst data; a new table is registered in the validation list; tested up→down→up on a real DB.
 5. **"Disabled" defaults need a visible re-enable hook.** Commented-out auth/CORS/guards rot silently — leave the production-correct value adjacent so re-enabling is a one-line diff that shows up in review.
 6. **Concurrency invariants belong in the docstring.** "Idempotent" / "thread-safe" / "no-op on retry" are claims; name the lock or predicate that makes the claim true, with its `file:line`.
+7. **Defensive impossibility.** A guard for a condition the type system already excludes — `if x is None` on a non-optional parameter, a `try` around a call that cannot raise, a bare `except` that hides the stack trace it claims to handle. Each one is either dead (delete it) or a sign the type is lying (fix the type). No scanner sees this; it is the second-largest source of agent-written verbosity after complexity concentration, and it only reads.
+8. **Cargo-cult mechanism.** A retry loop on an operation that cannot fail transiently, a lock on data no other thread touches, a cache of a value cheaper to recompute than to look up, a `Generic[T]` with one instantiation. Ask what failure the mechanism exists to handle, and require the answer to name a real one. Nothing mechanical distinguishes a retry that guards a network from one that guards an integer add.
 
 **Security subset** (language-neutral):
 
@@ -130,7 +132,7 @@ Structured, severity-tiered, evidence-cited:
 
 - **Depth** (Ousterhout): a module's interface should be much narrower than its implementation; a wrapper whose interface mirrors what it wraps is net-negative. Kill pass-through methods and pass-through variables.
 - **Substitutability** (Liskov): a subtype must keep the supertype's semantics, not just its signatures; a leaked representation (a getter handing out an internal collection) is the bug.
-- **Smells** (Fowler): duplication, long function, feature envy, primitive obsession, shotgun surgery — name the smell, propose the move.
+- **Smells** (Fowler) — the ones a reader can see and a scanner cannot: feature envy, primitive obsession, temporal coupling, a name that lies. Name the smell, propose the move. Do **not** re-read for duplication, unreferenced code, cognitive complexity, or single-implementor abstractions: those are the gate's Checks E–H, mechanical and differential, and its `diff` output lists which ran and which are `not_wired` for this toolchain. Read that receipt; re-review only the checks it says did not run.
 - Define errors out of existence where you can; most scattered `try/except` (or swallowed errors) is an abdication.
 
 **Simplification lens** (the elaboration read). The smells above hunt defects. This asks a different
