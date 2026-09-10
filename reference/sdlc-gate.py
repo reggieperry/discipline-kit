@@ -361,6 +361,423 @@ def scan_pytest_weakening(root: Path) -> dict:
     return {"skips": skips, "asserts": asserts}
 
 
+# --- Python agent-smell runners (Checks E-H) ----------------------------------
+# Measured 2026-09-10 against ruff 0.16.7, complexipy 8.0.1 and PMD 7.27.0 on a scratch clone of
+# story-factory-experiment (83 .py files, 46 classes, 958 functions). The two uvx tools are PINNED
+# in the invocation: every exit-code and output-shape rule below was read off that version, and a
+# floating "latest" would leave the test suite asserting a contract nobody measured.
+
+_PY_RUFF = "ruff@0.16.7"
+_PY_COMPLEXIPY = "complexipy@8.0.1"
+
+
+def _parsed_python(root: Path):
+    """Yield (rel_path, ast.Module) for every file `_walk_python` yields, sorted, and RAISE on the
+    first that does not parse. The precondition every E-H runner shares, because each tool's
+    silence on such a file reads as clean: ruff emits one `invalid-syntax` finding and computes
+    nothing else for the file; complexipy skips the file, exits 1 (the code it also uses for
+    over-threshold) and still writes its JSON for the rest; CPD is a lexer and tokenizes `def x(:`
+    without complaint. `python -m compileall` exits 0 on a missing file, so it is not the check.
+    Bytes, not text, so a coding cookie is honoured; a NUL byte is a SyntaxError under 3.12."""
+    for path in sorted(_walk_python(root)):
+        rel = str(path.relative_to(root))
+        try:
+            tree = ast.parse(path.read_bytes(), filename=rel)
+        except (SyntaxError, ValueError, OSError) as e:
+            raise ScanOperationalError(
+                f"{rel} does not parse under this interpreter ({e.__class__.__name__}: "
+                f"{str(e)[:120]}); a tool's silence on it would read as clean") from e
+        yield rel, tree
+
+
+def _python_files(root: Path) -> list[str]:
+    return [rel for rel, _ in _parsed_python(root)]
+
+
+def _py_rel(path: str, root: Path) -> str:
+    """Tool output paths back into the walk's path-space: ruff and CPD print absolute paths,
+    complexipy echoes what it was handed (relative to `root`, which is the cwd it ran under)."""
+    p = Path(path)
+    try:
+        return str((p if p.is_absolute() else root / p).resolve().relative_to(root))
+    except ValueError:
+        return path
+
+
+def _py_run(cmd: list[str], root: Path):
+    """`subprocess.run` under `root`, with an executable that cannot be spawned at all (no `uvx`
+    on PATH, a `pmd` script with no execute bit) turned into the operational error it is; the
+    raw OSError would surface as a traceback, which exits 1 rather than the 2 the gate's callers
+    read as did-not-run."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=str(root))
+    except OSError as e:
+        raise ScanOperationalError(f"cannot run {cmd[0]!r}: {e}") from e
+
+
+def _batched(items: list, size: int = 1000):
+    """Explicit file lists on the command line, in batches: the walk is the denominator (ruff
+    reports no count of its own, and complexipy lists only files that have functions), and a
+    20k-file tree would otherwise brush ARG_MAX."""
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+# --- The class table: one AST pass shared by Check H and Check E's override filter -------------
+
+_PY_ABSTRACT_DECORATORS = {"abstractmethod", "abstractproperty", "abstractclassmethod",
+                           "abstractstaticmethod"}
+
+
+def _py_base_name(node) -> str | None:
+    """`Base`, `mod.Base`, `Base[T]` -> "Base"; a call or anything else -> None. Name-based, with
+    no import resolution: two classes of one simple name in different files share implementors,
+    which over-counts and so blocks LESS, never more."""
+    if isinstance(node, ast.Subscript):
+        node = node.value
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _py_is_abstract(cls: ast.ClassDef) -> bool:
+    """Declared abstract: `ABC` among the bases, `metaclass=ABCMeta`, or any method under an
+    `abstract*` decorator. `Protocol` is deliberately NOT here: its implementors are structural,
+    and counting explicit subclasses of a Protocol would read every healthy one as
+    single-implementor. Plain base classes are not here either — a class is a base because
+    something subclasses it, so the count is >= 1 by construction and a new one-subclass helper
+    (an exception type, a TestCase mixin) would block; the corpus's one such case was test
+    scaffolding."""
+    bases = [_py_base_name(b) for b in cls.bases]
+    if "ABC" in bases:
+        return True
+    if any(kw.arg == "metaclass" and _py_base_name(kw.value) == "ABCMeta" for kw in cls.keywords):
+        return True
+    return any(_py_base_name(d) in _PY_ABSTRACT_DECORATORS
+               for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+               for d in n.decorator_list)
+
+
+def _python_class_table(root: Path) -> tuple[list[str], list[dict]]:
+    """(files, classes): every file the walk yields (the denominator) and one record per class —
+    file, name, base names, whether it is declared abstract, and its methods' line spans."""
+    files: list[str] = []
+    classes: list[dict] = []
+    for rel, tree in _parsed_python(root):
+        files.append(rel)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            methods = {n.name: (n.lineno, n.end_lineno or n.lineno) for n in node.body
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            classes.append({"file": rel, "name": node.name,
+                            "bases": [b for b in map(_py_base_name, node.bases) if b],
+                            "abstract": _py_is_abstract(node), "methods": methods})
+    return files, classes
+
+
+def _py_overrides_in_tree(classes: list[dict], file: str, row: int) -> bool:
+    """True when `row` sits in a method whose name an in-tree ancestor also defines. The innermost
+    span wins (a nested class inside a method). A base not in the tree cannot vouch for anything,
+    so a finding there stands."""
+    hit = None
+    for c in classes:
+        if c["file"] != file:
+            continue
+        for name, (a, b) in c["methods"].items():
+            if a <= row <= b and (hit is None or b - a < hit[2] - hit[1]):
+                hit = (c, a, b, name)
+    if hit is None:
+        return False
+    by_name: dict[str, list[dict]] = {}
+    for c in classes:
+        by_name.setdefault(c["name"], []).append(c)
+    cls, _, _, method = hit
+    seen: set[str] = set()
+    stack = list(cls["bases"])
+    while stack:
+        base = stack.pop()
+        if base in seen:
+            continue
+        seen.add(base)
+        for anc in by_name.get(base, ()):
+            if method in anc["methods"]:
+                return True
+            stack.extend(anc["bases"])
+    return False
+
+
+# --- Check E: ruff, isolated, minus what the corpus showed to be signature-dictated -------------
+
+_PY_E_RULES = "ARG001,ARG002,ARG003,ARG004,F401,F811,F841"
+_PY_E_TEST_GLOBS = ("**/tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py")
+_PY_E_OVERRIDE_CODES = {"ARG002", "ARG003", "ARG004"}
+
+
+def run_ruff_unreferenced(root: Path) -> "Scan":
+    """Check E. `--isolated`, because the repo's own `ignore`, `exclude` and per-file lists would
+    each make E blind somewhere without a trace, and the file list passed explicitly, because ruff
+    reports no count of its own: the walk is the denominator. Explicit paths are linted whatever
+    the repo excludes (measured). A path ruff was handed and could not read is exit 0, `[]` and a
+    stderr warning — the fail-open shape — and the pinned version has no other signal for it, so
+    the warning text is trapped.
+
+    Three carve-outs, each read off the corpus rather than guessed: ARG005 is not selected, since
+    a lambda's parameters are its caller's (93 of 93 lambda findings were interface stand-ins);
+    ARG is ignored in test files, since a fake carries the signature of what it fakes and a
+    fixture is requested for its side effect (every ARG001/ARG002 there was one of those); and an
+    ARG finding on a method overriding an in-tree ancestor's method is dropped, since ruff cannot
+    see the override without `@override` and the signature is the ancestor's. Unused `*args` /
+    `**kwargs` are ignored for the same reason. `__init__.py` re-exports are the idiom, not
+    unused imports. Left after the carve-outs on the corpus: 23 F401 and 1 F841, all real."""
+    files, classes = _python_class_table(root)
+    if not files:
+        return Scan("ruff", 0, {})
+    cmd = ["uvx", _PY_RUFF, "check", "--isolated", "--select", _PY_E_RULES,
+           "--per-file-ignores", "__init__.py:F401",
+           "--config", "lint.flake8-unused-arguments.ignore-variadic-names=true",
+           "--output-format=json"]
+    for glob in _PY_E_TEST_GLOBS:
+        cmd += ["--per-file-ignores", f"{glob}:ARG"]
+    counter: Counter = Counter()
+    for batch in _batched(files):
+        proc = _py_run(cmd + batch, root)
+        # ruff: 0 clean, 1 findings, 2 error. uvx failing to resolve the tool is ALSO exit 1, with
+        # an empty stdout — which is why the body must parse as a list in every case: a clean run
+        # prints `[]`, never nothing.
+        if proc.returncode not in (0, 1) or "Failed to lint" in proc.stderr:
+            raise ScanOperationalError(
+                f"ruff exited {proc.returncode}: {proc.stderr.strip()[:300]!r} — a ruff that did "
+                "not run must not read as 'no unreferenced code'")
+        try:
+            findings = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            raise ScanOperationalError(
+                f"ruff (exit {proc.returncode}) produced no JSON ({e}; stderr "
+                f"{proc.stderr.strip()[-200:]!r}); refusing to read it as no findings") from e
+        if not isinstance(findings, list):
+            raise ScanOperationalError(f"ruff JSON is not a list ({type(findings).__name__})")
+        for f in findings:
+            code = f.get("code")
+            if not code or code == "invalid-syntax" or code == "E999":
+                # Not a finding: the file did not parse for ruff, so nothing else was computed
+                # for it. The precondition should have caught it; a stricter ruff parser is the
+                # gap this closes.
+                raise ScanOperationalError(
+                    f"ruff could not parse {f.get('filename')!r}: {f.get('message', '')[:120]}")
+            rel = _py_rel(f.get("filename", ""), root)
+            row = int(f.get("location", {}).get("row", 0))
+            if code in _PY_E_OVERRIDE_CODES and _py_overrides_in_tree(classes, rel, row):
+                continue
+            counter[(rel, code)] += 1
+    return Scan("ruff", len(files), dict(counter))
+
+
+# --- Check F: PMD CPD over the whole tree, fingerprinted from the clone's own text --------------
+
+_CPD_TOKEN = re.compile(
+    r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|#[^\n]*|\w+|[^\s\w]')
+
+
+def _pmd_bin() -> str:
+    """`pmd` on PATH, else `$PMD_HOME/bin/pmd`, else the newest `~/.local/opt/pmd-bin-*/bin/pmd`
+    (the install rule's home for JVM tools). Absent everywhere is operational, not clean."""
+    import os
+
+    found = shutil.which("pmd")
+    if found:
+        return found
+    home = os.environ.get("PMD_HOME")
+    if home and (Path(home) / "bin" / "pmd").is_file():
+        return str(Path(home) / "bin" / "pmd")
+    candidates = sorted(Path.home().glob(".local/opt/pmd-bin-*/bin/pmd"),
+                        key=lambda p: [int(x) if x.isdigit() else x
+                                       for x in re.split(r"(\d+)", p.parts[-3])])
+    if candidates:
+        return str(candidates[-1])
+    raise ScanOperationalError(
+        "pmd not found (PATH, $PMD_HOME/bin/pmd, ~/.local/opt/pmd-bin-*/bin/pmd); Check F "
+        "cannot run without it")
+
+
+def _cpd_fingerprint(text: str) -> str:
+    """Comments and whitespace out, strings kept whole, then hashed. CPD's Python lexer drops
+    comments too, so two occurrences that differ only there are one clone to both. Not the
+    `tokenize` module: a fragment sliced from mid-block dedents below its first line and
+    tokenize raises on that."""
+    import hashlib
+
+    toks = [t for t in _CPD_TOKEN.findall(text) if not t.startswith("#")]
+    return hashlib.sha256(" ".join(toks).encode("utf-8")).hexdigest()[:16]
+
+
+def _cpd_occurrence_text(root: Path, rel: str, line: int, endline: int, col: int, endcol: int) -> str:
+    """The clone's own text, sliced by CPD's 1-based `column` and exclusive `endcolumn` (measured).
+    NOT the report's `<codefragment>`: that is rendered from the first occurrence's line start,
+    so it carries a prefix outside the clone (`def compute` before `(items, factor):`) and would
+    change fingerprint whenever a rename reorders which occurrence comes first."""
+    lines = (root / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+    seg = lines[line - 1:endline]
+    if not seg:
+        return ""
+    seg[-1] = seg[-1][:max(endcol - 1, 0)]
+    seg[0] = seg[0][max(col - 1, 0):]
+    return "\n".join(seg)
+
+
+def _xml_local(tag: str) -> str:
+    """The CPD report is namespaced (`{https://pmd-code.org/schema/cpd-report}file`)."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def parse_cpd(xml: str, root: Path) -> tuple[int, dict]:
+    """(files examined, fingerprint -> [[file, start, end], ...]). Since 7.3.0 the report lists
+    every analysed file as `<file path= totalNumberOfTokens=>`, empty files included (measured),
+    which is the denominator. An `<error>` element is a file the lexer gave up on — the report
+    still comes out and the exit code is 5 — and reads as operational here, since the file it
+    skipped is exactly the one that would read clean. A DOCTYPE is rejected (XXE closed)."""
+    if re.search(r"<!DOCTYPE", xml, re.IGNORECASE):
+        raise ScanOperationalError("cpd report carries a DOCTYPE; refusing to parse (XXE closed)")
+    try:
+        top = ET.fromstring(xml)
+    except ET.ParseError as e:
+        raise ScanOperationalError(f"cpd report is not XML ({e}); not a clean scan") from e
+    examined = 0
+    findings: dict[str, list] = {}
+    for el in top:
+        kind = _xml_local(el.tag)
+        if kind == "error":
+            raise ScanOperationalError(
+                f"cpd skipped {el.get('filename')!r}: {(el.get('msg') or '')[:160]}")
+        if kind == "file":
+            examined += 1
+            continue
+        if kind != "duplication":
+            continue
+        occs = [f for f in el if _xml_local(f.tag) == "file"]
+        if not occs:
+            continue
+        spans = [[_py_rel(f.get("path", ""), root), int(f.get("line", 0)), int(f.get("endline", 0))]
+                 for f in occs]
+        first = occs[0]
+        text = _cpd_occurrence_text(root, spans[0][0], spans[0][1], spans[0][2],
+                                    int(first.get("column", 1)), int(first.get("endcolumn", 0)))
+        findings.setdefault(_cpd_fingerprint(text), []).extend(spans)
+    return examined, findings
+
+
+def run_cpd(root: Path) -> "Scan":
+    """Check F. PMD CPD 7 on the walk's file list, at DUP_MIN_TOKENS. Exit contract (measured):
+    0 no clones, 4 clones, 5 a recoverable error such as a file it could not lex or find (the
+    report is still written and may hold clones — FAIL CLOSED), 1 an exception, 2 usage; anything
+    else is the shell. Never `--no-fail-on-error` or `--no-fail-on-violation`, which would fold 4
+    and 5 into 0. A report naming fewer files than were handed over is a silent skip and refuses
+    too. 1.4 s wall on the 83-file corpus."""
+    import tempfile
+
+    files = _python_files(root)
+    if not files:
+        return Scan("pmd-cpd", 0, {})
+    pmd = _pmd_bin()
+    with tempfile.TemporaryDirectory() as td:
+        listing = Path(td) / "files.txt"
+        listing.write_text("\n".join(files) + "\n")
+        report = Path(td) / "cpd.xml"
+        proc = _py_run([pmd, "cpd", "--file-list", str(listing), "--language", "python",
+                        "--minimum-tokens", str(DUP_MIN_TOKENS), "--format", "xml",
+                        "--report-file", str(report)], root)
+        if proc.returncode not in (0, 4):
+            raise ScanOperationalError(
+                f"pmd cpd exited {proc.returncode}: {proc.stderr.strip()[-300:]!r} — a CPD that "
+                "did not finish must not read as 'no clones'")
+        try:
+            xml = report.read_text(encoding="utf-8")
+        except OSError as e:
+            raise ScanOperationalError(f"pmd cpd wrote no report ({e})") from e
+    examined, findings = parse_cpd(xml, root)
+    if examined != len(files):
+        raise ScanOperationalError(
+            f"pmd cpd reports {examined} files analysed but was handed {len(files)}; a file it "
+            "silently skipped is one that reads clean")
+    return Scan("pmd-cpd", examined, findings)
+
+
+# --- Check G: complexipy, cognitive complexity per function -----------------------------------
+
+
+def run_complexipy(root: Path) -> "Scan":
+    """Check G. complexipy (cognitive, not radon's cyclomatic) over the walk's file list, keyed
+    (file, function) with methods as `Class::method` and nested functions folded into their
+    parent, as the tool names them. Whole-tree and never its `--diff` mode: the engine does the
+    delta. `--max-complexity-allowed` is set unreachably high so that under it exit 1 has ONE
+    meaning: a file it failed to process (its `--ignore-complexity` does not suppress the exit,
+    measured on 8.0.1). Without `--output` it writes `complexipy-results.json` into the cwd, and
+    without `--cache-dir` a `.complexipy_cache/` — both into the tree under test, so both are
+    pointed at a temp dir. Two functions of one name in one file collide on the key; the higher
+    value is kept."""
+    import tempfile
+
+    files = _python_files(root)
+    if not files:
+        return Scan("complexipy", 0, {})
+    findings: dict[tuple[str, str], int] = {}
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "complexipy.json"
+        base = ["uvx", _PY_COMPLEXIPY, "--quiet", "--output-format", "json", "--output", str(out),
+                "--cache-dir", str(Path(td) / "cache"), "--max-complexity-allowed", "1000000"]
+        for batch in _batched(files):
+            out.unlink(missing_ok=True)
+            proc = _py_run(base + batch, root)
+            if proc.returncode != 0:
+                # Its "Failed to process <file>" goes to STDOUT, quiet or not.
+                raise ScanOperationalError(
+                    f"complexipy exited {proc.returncode}: "
+                    f"{(proc.stdout + proc.stderr).strip()[-300:]!r} — a complexipy that did not "
+                    "finish must not read as 'nothing complex'")
+            try:
+                rows = json.loads(out.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                raise ScanOperationalError(f"complexipy wrote no readable JSON ({e})") from e
+            if not isinstance(rows, list):
+                raise ScanOperationalError(f"complexipy JSON is not a list ({type(rows).__name__})")
+            for r in rows:
+                key = (_py_rel(str(r.get("path", "")), root), str(r.get("function_name", "")))
+                findings[key] = max(findings.get(key, 0), int(r.get("complexity", 0)))
+    return Scan("complexipy", len(files), findings)
+
+
+# --- Check H: declared abstractions and their in-tree implementors ------------------------------
+
+
+def scan_python_abstractions(root: Path) -> "Scan":
+    """Check H. Every class `_py_is_abstract` accepts, keyed (file, name) -> number of in-tree
+    descendants (transitively, by simple name) that are not themselves declared abstract, so a
+    two-layer hierarchy over one concrete class counts one implementor for each layer. The
+    corpus had 46 classes and none declared abstract, so this scan's precision is by construction
+    rather than by measurement there; the planted controls are in the test file."""
+    files, classes = _python_class_table(root)
+    children: dict[str, set[str]] = {}
+    for c in classes:
+        for b in c["bases"]:
+            children.setdefault(b, set()).add(c["name"])
+    abstract = {c["name"] for c in classes if c["abstract"]}
+    findings: dict[tuple[str, str], int] = {}
+    for c in classes:
+        if not c["abstract"]:
+            continue
+        seen: set[str] = set()
+        stack = [c["name"]]
+        while stack:
+            for kid in children.get(stack.pop(), ()):
+                if kid not in seen:
+                    seen.add(kid)
+                    stack.append(kid)
+        findings[(c["file"], c["name"])] = len(seen - abstract - {c["name"]})
+    return Scan("ast", len(files), findings)
+
+
 # --- Scala scanners (port: same engine, sbt/regex scanners in place of uv) -----
 # Spec source: the kit's own scala-security.md (suppressions + lint/security tools)
 # and scala-testing.md §"Anti-weakening" (the test-weakening vectors). The port
@@ -1506,6 +1923,20 @@ class PythonToolchain(Toolchain):
 
     def is_test_file(self, rel: str) -> bool:
         return rel.startswith("tests/")
+
+    # Checks E-H: the runners live with the other Python run_* functions above.
+
+    def unreferenced(self, root: Path) -> Scan:
+        return run_ruff_unreferenced(root)
+
+    def duplication(self, root: Path) -> Scan:
+        return run_cpd(root)
+
+    def complexity(self, root: Path) -> Scan:
+        return run_complexipy(root)
+
+    def abstractions(self, root: Path) -> Scan:
+        return scan_python_abstractions(root)
 
 
 class ScalaToolchain(Toolchain):
