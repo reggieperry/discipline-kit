@@ -156,4 +156,5 @@ python3 harness/comment_shape.py --dir harness --exclude fixtures
 # that silently picks a file up is a glob that silently drops one. A new toolchain adds its line.
 python3 reference/test_sdlc_gate.py
 python3 reference/test_sdlc_gate_contract.py
+python3 reference/test_sdlc_gate_go.py
 python3 harness/algebra/validate_note.py
