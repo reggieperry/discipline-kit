@@ -117,8 +117,12 @@ import types
 import unittest.mock as mock
 
 
-def _write_baseline(d: Path, *, build: str = "ok", coverage: dict | None = None) -> None:
-    """A minimal scala baseline dir that _load_baseline_snapshots can read."""
+def _write_baseline(d: Path, *, build: str = "ok", coverage: dict | None = None,
+                    no_static: bool | None = None, agent_scans: dict | None = None,
+                    static_not_wired: dict | None = None) -> None:
+    """A minimal scala baseline dir that _load_baseline_snapshots can read. `no_static=None`
+    writes no no-static.txt, the shape of a baseline captured before that file existed, and
+    `static_not_wired=None` writes no static-not-wired.json, likewise."""
     (d / "sha.txt").write_text("deadbeef\n")
     (d / "toolchain.txt").write_text("scala\n")
     (d / "static-scalafix.json").write_text("[]")
@@ -128,18 +132,30 @@ def _write_baseline(d: Path, *, build: str = "ok", coverage: dict | None = None)
     (d / "build.txt").write_text(build + "\n")
     if coverage is not None:
         (d / "coverage.json").write_text(json.dumps(coverage))
+    if no_static is not None:
+        (d / "no-static.txt").write_text(("true" if no_static else "false") + "\n")
+    if agent_scans is not None:
+        (d / "agent-scans.json").write_text(json.dumps(agent_scans))
+    if static_not_wired is not None:
+        (d / "static-not-wired.json").write_text(json.dumps(static_not_wired))
 
 
 def _run_cmd_diff(base_dir: Path, **argkw) -> tuple[int, dict]:
-    """Invoke cmd_diff with git and the sbt toolchain stubbed; return (exit_code, report)."""
+    """Invoke cmd_diff with git and the sbt toolchain stubbed; return (exit_code, report).
+    Pass stderr=io.StringIO() to capture what the gate wrote there, and forbid_git=True to fail
+    the test if the gate reaches its first git command."""
     args = types.SimpleNamespace(
         baseline_dir=str(base_dir), no_static=argkw.get("no_static", False),
         coverage=argkw.get("coverage", False), assertion_loss_waiver=None,
     )
     out = io.StringIO()
+    err = argkw.get("stderr")
+    git = ({"side_effect": AssertionError("_git_rename_map was called")} if argkw.get("forbid_git")
+           else {"return_value": ({}, set())})
     code = 0
-    with mock.patch.object(gate, "_git_rename_map", return_value=({}, set())), \
-            contextlib.redirect_stdout(out):
+    with mock.patch.object(gate, "_git_rename_map", **git), \
+            contextlib.redirect_stdout(out), \
+            (contextlib.redirect_stderr(err) if err is not None else contextlib.nullcontext()):
         try:
             gate.cmd_diff(args)
         except SystemExit as e:
@@ -160,6 +176,7 @@ class CmdDiffCompilePreconditionTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "fail")
         self.assertEqual(report["blocks"][0]["kind"], "compile_error")
         self.assertEqual(report["blocks"][0]["items"][0]["which"], "branch")
+        self.assertIs(report.get("no_static"), False, "the early report carries the mode as well")
 
     def test_non_compiling_baseline_also_blocks(self):
         with tempfile.TemporaryDirectory() as td:
@@ -178,6 +195,483 @@ class CmdDiffCompilePreconditionTests(unittest.TestCase):
             code, report = _run_cmd_diff(base, no_static=True)
         self.assertEqual(code, 0)
         self.assertEqual(report["verdict"], "pass")
+
+
+_SCANNERS = ("compile_check", "static_analysis", "suppressions", "test_weakening",
+             "unreferenced", "duplication", "complexity", "abstractions")
+_EMPTY_TW = {"skips": {}, "asserts": {}, "params": {}}
+_SKIPPED_EH = {c: {"skipped": "--no-static"} for c in "EFGH"}
+_CLEAN_EH = {c: {"tool": "stub", "files": 1, "findings": []} for c in "EFGH"}
+_REGEX_ONLY = {"suppressions": gate.Counter(), "test_weakening": _EMPTY_TW}
+
+
+@contextlib.contextmanager
+def _scala_scanners(**allowed):
+    """Patch every ScalaToolchain scanner and _diff_added_lines. A name in `allowed` returns that
+    value; every other one fails the test the moment it is called, so a run that would have
+    reached sbt, PMD or scala-cli cannot pass by returning something plausible."""
+    with contextlib.ExitStack() as stack:
+        mocks = {}
+        targets = [(gate.ScalaToolchain, n) for n in _SCANNERS] + [(gate, "_diff_added_lines")]
+        for owner, name in targets:
+            kw = ({"return_value": allowed[name]} if name in allowed
+                  else {"side_effect": AssertionError(f"{name} was called")})
+            mocks[name] = stack.enter_context(mock.patch.object(owner, name, **kw))
+        yield mocks
+
+
+class CmdDiffNoStaticTests(unittest.TestCase):
+    """--no-static skips Checks E-H as well as Check A, and the report says so."""
+
+    def test_no_static_diff_calls_no_agent_scanner_and_lists_each_skip(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="skip", no_static=True, agent_scans=_SKIPPED_EH)
+            with _scala_scanners(**_REGEX_ONLY) as m:
+                code, report = _run_cmd_diff(base, no_static=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["not_wired"], [f"{c}: skipped by --no-static" for c in "EFGH"])
+        self.assertEqual(report["agent_scans"], {})
+        self.assertIs(report.get("no_static"), True,
+                      "without it a skipped Check A reads the same as a clean one")
+        self.assertEqual([n for n, mk in m.items() if mk.called], list(_REGEX_ONLY))
+
+    def test_no_static_baseline_refuses_a_full_diff(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="skip", no_static=True, agent_scans=_SKIPPED_EH)
+            err = io.StringIO()
+            with _scala_scanners() as m:
+                code, report = _run_cmd_diff(base, no_static=False, stderr=err, forbid_git=True)
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertEqual([n for n, mk in m.items() if mk.called], [])
+        lines = err.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        for token in ("no-static=true", "no-static=false", "baseline and diff"):
+            self.assertIn(token, lines[0])
+
+    def test_full_baseline_refuses_a_no_static_diff(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="ok", no_static=False, agent_scans=_CLEAN_EH)
+            err = io.StringIO()
+            with _scala_scanners() as m:
+                code, report = _run_cmd_diff(base, no_static=True, stderr=err, forbid_git=True)
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertEqual([n for n, mk in m.items() if mk.called], [])
+        lines = err.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        for token in ("no-static=true", "no-static=false", "baseline and diff"):
+            self.assertIn(token, lines[0])
+
+    def test_full_baseline_is_not_refused_in_full_mode(self):
+        # The default run: every new baseline writes no-static.txt=false, and a plain diff follows.
+        # Without this case a mode check that refused every default run passed all six files.
+        clean = gate.Scan(tool="stub", files=1, findings={})
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="ok", no_static=False, agent_scans=_CLEAN_EH)
+            with _scala_scanners(compile_check="ok", static_analysis={}, unreferenced=clean,
+                                 duplication=clean, complexity=clean, abstractions=clean,
+                                 _diff_added_lines={}, **_REGEX_ONLY):
+                code, report = _run_cmd_diff(base, no_static=False)
+        self.assertEqual(code, 0)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["not_wired"], [])
+        self.assertEqual(sorted(report["agent_scans"]), ["E", "F", "G", "H"])
+        self.assertIs(report.get("no_static"), False)
+
+    def test_unrecognized_mode_file_is_refused_with_its_own_message(self):
+        for flag in (False, True):
+            with self.subTest(no_static=flag), tempfile.TemporaryDirectory() as td:
+                base = Path(td)
+                _write_baseline(base, build="skip", agent_scans=_SKIPPED_EH)
+                (base / "no-static.txt").write_text("True\n")
+                err = io.StringIO()
+                with _scala_scanners() as m:
+                    code, report = _run_cmd_diff(base, no_static=flag, stderr=err, forbid_git=True)
+                self.assertEqual(code, 2)
+                self.assertEqual(report, {})
+                self.assertEqual([n for n, mk in m.items() if mk.called], [])
+                self.assertIn("recapture the baseline", err.getvalue())
+                self.assertNotIn("pass the same", err.getvalue())
+
+    def test_baseline_without_mode_file_is_not_refused_under_no_static(self):
+        # The shape the merged 82c8727 gate wrote: agent-scans.json with real scans, no mode file.
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="skip", agent_scans=_CLEAN_EH)
+            with _scala_scanners(**_REGEX_ONLY) as m:
+                code, report = _run_cmd_diff(base, no_static=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(report["not_wired"], [f"{c}: skipped by --no-static" for c in "EFGH"])
+        self.assertEqual([n for n, mk in m.items() if mk.called], list(_REGEX_ONLY))
+
+    def test_baseline_without_mode_file_is_not_refused_in_full_mode(self):
+        clean = gate.Scan(tool="stub", files=1, findings={})
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            _write_baseline(base, build="ok", agent_scans=_CLEAN_EH)
+            with _scala_scanners(compile_check="ok", static_analysis={}, unreferenced=clean,
+                                 duplication=clean, complexity=clean, abstractions=clean,
+                                 _diff_added_lines={}, **_REGEX_ONLY):
+                code, report = _run_cmd_diff(base, no_static=False)
+        self.assertEqual(code, 0)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["not_wired"], [])
+        self.assertEqual(sorted(report["agent_scans"]), ["E", "F", "G", "H"])
+        self.assertIs(report.get("no_static"), False)
+
+
+# --- Check A: a plugin that is not set up is reported, and a scalafix that fails exits 2 --------
+# Trimmed from sbt 1.12.11 runs of 2026-09-10 (sbt-scalafix 0.14.7, sbt-wartremover 3.6.1), machine
+# paths replaced by <root>; test_sdlc_gate_scala3.py holds the longer captures. Until that day corpus
+# P, with neither plugin, and a lab copy with a broken .scalafix.conf both read as Check A clean.
+
+_P_SCALAFIX = "\n".join([
+    "[info] set current project to planted (in build file:<root>/)",
+    "[error] Not a valid command: scalafix",
+    "[error] Not a valid key: scalafix (similar: scalaHome, scalaVersion, scalacOptions)",
+    "[error] scalafix --check",
+    "[error]         ^",
+]) + "\n"
+_P_WART = "\n".join([
+    "[info] set current project to planted (in build file:<root>/)",
+    "[error] Not a valid project ID: wartremoverWarnings",
+    "[error] Expected ':'",
+    "[error] Not a valid key: wartremoverWarnings (similar: printWarnings)",
+    "[error] show wartremoverWarnings",
+    "[error]                         ^",
+]) + "\n"
+_LAB_SCALAFIX_CLEAN = "\n".join([
+    "[info] set current project to claim-algebra-lab (in build file:<root>/)",
+    "[success] Total time: 29 s, completed Sep 10, 2026, 11:20:14 PM",
+]) + "\n"
+_LAB_SCALAFIX_UNKNOWN_RULE = "\n".join([
+    "[info] set current project to claim-algebra-lab (in build file:<root>/)",
+    "[error] (credit / Compile / scalafix) scalafix.sbt.InvalidArgument: Unknown rule 'NoSuchRuleAnywhere'",
+    "[error] (Compile / scalafix) scalafix.sbt.InvalidArgument: Unknown rule 'NoSuchRuleAnywhere'",
+    "[error] Total time: 9 s, completed Sep 10, 2026, 11:20:46 PM",
+]) + "\n"
+_W_SCALAFIX_LINT = "\n".join([
+    "[info] Running scalafix on 4 Scala sources",
+    "[error] <root>/src/main/scala/planted/Text.scala:8:5: error: [DisableSyntax.var] "
+    "mutable state should be avoided",
+    "[error]     var lastWasSpace = false",
+    "[error]     ^^^",
+    "[error] <root>/src/main/scala/planted/Text.scala:9:5: error: [DisableSyntax.var] "
+    "mutable state should be avoided",
+    "[error]     var i = 0",
+    "[error]     ^^^",
+    "[error] (Compile / scalafix) scalafix.sbt.ScalafixFailed: LinterError",
+    "[error] Total time: 8 s, completed Sep 10, 2026, 11:18:34 PM",
+]) + "\n"
+_W_WART = "\n".join([
+    "[info] * org.wartremover.warts.Any",
+    "[info] * org.wartremover.warts.Var",
+    "[info] Defining Global / concurrentRestrictions",
+    "[info] compiling 4 Scala sources to <root>/target/scala-3.3.8/classes ...",
+    "[warn] -- Warning: <root>/src/main/scala/planted/Text.scala:8:8 ",
+    "[warn] 8 |    var lastWasSpace = false",
+    "[warn]   |    ^^^^^^^^^^^^^^^^^^^^^^^^",
+    "[warn]   |    [wartremover:Var] var is disabled",
+    "[warn] -- Warning: <root>/src/main/scala/planted/Text.scala:9:8 ",
+    "[warn] 9 |    var i = 0",
+    "[warn]   |    ^^^^^^^^^",
+    "[warn]   |    [wartremover:Var] var is disabled",
+    "[success] Total time: 5 s, completed Sep 10, 2026, 11:22:59 PM",
+]) + "\n"
+_W_WART_FOUND = [["src/main/scala/planted/Text.scala", "Var", 2]]
+_NOT_SET_UP = {"scalafix": "sbt-scalafix is not set up",
+               "wartremover": "sbt-wartremover is not set up"}
+# Captured 2026-09-11 on corpus W plus `ThisBuild / scalacOptions += "-Werror"`, where `sbt Test/compile`
+# exits 0 and the wart scan's compile fails on the warts it turns on.
+_W_WART_WERROR = "\n".join([
+    "[info] * org.wartremover.warts.Any",
+    "[info] * org.wartremover.warts.Var",
+    "[info] Defining Global / concurrentRestrictions",
+    "[success] Total time: 0 s, completed Sep 11, 2026, 3:17:01 AM",
+    "[info] compiling 4 Scala sources to <root>/target/scala-3.3.8/classes ...",
+    "[error] -- Error: <root>/src/main/scala/planted/Text.scala:8:8 ",
+    "[error] 8 |    var lastWasSpace = false",
+    "[error]   |    ^^^^^^^^^^^^^^^^^^^^^^^^",
+    "[error]   |    [wartremover:Var] var is disabled",
+    "[error] -- Error: <root>/src/main/scala/planted/Text.scala:9:8 ",
+    "[error] 9 |    var i = 0",
+    "[error]   |    ^^^^^^^^^",
+    "[error]   |    [wartremover:Var] var is disabled",
+    "[error] two errors found",
+    "[error] (Compile / compileIncremental) Compilation failed",
+    "[error] Total time: 4 s, completed Sep 11, 2026, 3:17:05 AM",
+]) + "\n"
+# Corpus W with a syntax error in Text.scala (2026-09-10), as scalafix's run reports it.
+_W_SCALAFIX_COMPILE_FAILED = "\n".join([
+    "[error] -- [E040] Syntax Error: <root>/src/main/scala/planted/Text.scala:34:13 ",
+    "[error] 34 |  def broken(: Int = 1",
+    "[error]    |             ^",
+    "[error]    |             an identifier expected, but ':' found",
+    "[error] one error found",
+    "[error] (Compile / compileIncremental) Compilation failed",
+    "[error] Total time: 5 s, completed Sep 10, 2026, 11:19:29 PM",
+]) + "\n"
+
+
+@contextlib.contextmanager
+def _sbt_check_a(scalafix: tuple[int, str], wartremover: tuple[int, str], build: str = "ok"):
+    """Check A for real, with sbt answered from the captures above: `scalafix` and `wartremover`
+    are (exit code, stdout) for each runner's command, and `build` is what the compile precondition
+    returns. Every other Scala scanner is stubbed clean, so no test here reaches sbt, PMD or
+    scala-cli. <root> becomes the directory cmd_diff scans. Yields the order of the calls:
+    "compile_check", then each runner's token as its sbt command runs."""
+    clean = gate.Scan(tool="stub", files=1, findings={})
+    stubs = {"suppressions": gate.Counter(), "test_weakening": _EMPTY_TW,
+             "unreferenced": clean, "duplication": clean, "complexity": clean, "abstractions": clean}
+    calls: list[str] = []
+
+    def sbt(cmd, **kw):
+        root = str(Path(kw.get("cwd") or ".").resolve())
+        for token, (code, out) in (("scalafix --check", scalafix), ("-Dgate.wartScan=true", wartremover)):
+            if token in cmd:
+                calls.append(token)
+                return types.SimpleNamespace(returncode=code, stdout=out.replace("<root>", root), stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    def compile_check(root):
+        calls.append("compile_check")
+        return build
+
+    with contextlib.ExitStack() as stack:
+        for name, value in stubs.items():
+            stack.enter_context(mock.patch.object(gate.ScalaToolchain, name, return_value=value))
+        stack.enter_context(mock.patch.object(gate.ScalaToolchain, "compile_check", side_effect=compile_check))
+        stack.enter_context(mock.patch.object(gate, "_diff_added_lines", return_value={}))
+        stack.enter_context(mock.patch.object(gate.subprocess, "run", side_effect=sbt))
+        yield calls
+
+
+def _diff_check_a(scalafix: tuple[int, str], wartremover: tuple[int, str], *,
+                  static_not_wired: dict | None, wartremover_baseline: list | None = None,
+                  agent_scans: dict | None = None, build: str = "ok") -> tuple[int, dict, str]:
+    """cmd_diff in full mode against a Scala baseline that compiled, with Check A answered by
+    _sbt_check_a; returns (exit code, report, stderr)."""
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _write_baseline(base, build="ok", no_static=False, agent_scans=agent_scans or _CLEAN_EH,
+                        static_not_wired=static_not_wired)
+        if wartremover_baseline is not None:
+            (base / "static-wartremover.json").write_text(json.dumps(wartremover_baseline))
+        err = io.StringIO()
+        with _sbt_check_a(scalafix, wartremover, build):
+            code, report = _run_cmd_diff(base, stderr=err)
+    return code, report, err.getvalue()
+
+
+def _baseline_check_a(scalafix: tuple[int, str], wartremover: tuple[int, str], build: str = "ok",
+                      calls: list | None = None) -> tuple[int, dict, str, dict[str, str]]:
+    """cmd_baseline in full mode with Check A answered by _sbt_check_a; returns (exit code, stdout
+    JSON, stderr, {file name: text} written), and extends `calls` with the order _sbt_check_a saw.
+    The root is a plain temporary directory, so the clean-checkout check is patched to accept it."""
+    with tempfile.TemporaryDirectory() as td, \
+            mock.patch.object(gate, "_resolve_baseline_sha", side_effect=lambda root, sha: sha):
+        out = Path(td) / "out"
+        args = types.SimpleNamespace(sha="deadbeef", out=str(out), root=td, toolchain="scala",
+                                     no_static=False, coverage=False)
+        stdout, err = io.StringIO(), io.StringIO()
+        code = 0
+        with _sbt_check_a(scalafix, wartremover, build) as seen, contextlib.redirect_stdout(stdout), \
+                contextlib.redirect_stderr(err):
+            try:
+                gate.cmd_baseline(args)
+            except SystemExit as e:
+                code = e.code or 0
+        if calls is not None:
+            calls.extend(seen)
+        written = {p.name: p.read_text() for p in out.iterdir()} if out.exists() else {}
+    body = stdout.getvalue().strip()
+    return code, (json.loads(body) if body else {}), err.getvalue(), written
+
+
+class CheckANotSetUpTests(unittest.TestCase):
+    def test_baseline_records_each_label_that_is_not_set_up_with_no_findings(self):
+        code, report, err, written = _baseline_check_a((1, _P_SCALAFIX), (1, _P_WART))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(written["static-not-wired.json"]), _NOT_SET_UP)
+        self.assertEqual(json.loads(written["static-scalafix.json"]), [])
+        self.assertEqual(json.loads(written["static-wartremover.json"]), [])
+        self.assertEqual(report.get("static_not_wired"), _NOT_SET_UP)
+
+    def test_negative_control_baseline_with_both_set_up_records_none(self):
+        code, _, err, written = _baseline_check_a((0, _LAB_SCALAFIX_CLEAN), (0, _W_WART))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(written["static-not-wired.json"]), {})
+        self.assertEqual(json.loads(written["static-wartremover.json"]), _W_WART_FOUND)
+
+    def test_a_scalafix_that_fails_exits_2_at_baseline_on_one_line(self):
+        code, report, err, written = _baseline_check_a((1, _LAB_SCALAFIX_UNKNOWN_RULE), (0, _W_WART))
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 2, err)  # the capture banner, then the refusal
+        self.assertIn("Unknown rule 'NoSuchRuleAnywhere'", err.splitlines()[-1])
+        self.assertEqual([n for n in written if n.startswith("static")], [])
+
+    def test_neither_plugin_set_up_is_listed_after_eh_and_blocks_nothing(self):
+        eh = {**_CLEAN_EH, "H": {"not_wired": "abstractions: not wired for scala"}}
+        code, report, err = _diff_check_a((1, _P_SCALAFIX), (1, _P_WART),
+                                          static_not_wired=_NOT_SET_UP, agent_scans=eh)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["blocks"], [])
+        self.assertEqual(report["not_wired"], ["H: abstractions: not wired for scala",
+                                               "A.scalafix: sbt-scalafix is not set up",
+                                               "A.wartremover: sbt-wartremover is not set up"])
+
+    def test_a_scalafix_that_fails_exits_2_at_diff_on_one_line(self):
+        code, report, err = _diff_check_a((1, _LAB_SCALAFIX_UNKNOWN_RULE), (0, _W_WART),
+                                          static_not_wired={}, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertIn("Unknown rule 'NoSuchRuleAnywhere'", err)
+
+    def test_a_label_set_up_at_the_baseline_but_not_on_the_branch_exits_2(self):
+        code, report, err = _diff_check_a((1, _P_SCALAFIX), (0, _W_WART),
+                                          static_not_wired={}, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 1, err)
+        for token in ("A.scalafix (sbt-scalafix is not set up)", "cannot be judged by it"):
+            self.assertIn(token, err)
+        self.assertNotIn("older gate", err)
+
+    def test_a_baseline_without_static_not_wired_json_is_not_refused(self):
+        code, report, err = _diff_check_a((0, _LAB_SCALAFIX_CLEAN), (0, _W_WART),
+                                          static_not_wired=None, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["not_wired"], [])
+
+    def test_a_baseline_without_static_not_wired_json_counts_every_label_as_set_up(self):
+        code, report, err = _diff_check_a((1, _P_SCALAFIX), (0, _W_WART),
+                                          static_not_wired=None, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2)
+        self.assertEqual(report, {})
+        self.assertIn("A.scalafix", err)
+        self.assertIn("older gate", err)
+
+    def test_a_label_not_set_up_at_the_baseline_but_set_up_on_the_branch_compares_against_none(self):
+        code, report, err = _diff_check_a((1, _W_SCALAFIX_LINT), (0, _W_WART),
+                                          static_not_wired={"scalafix": _NOT_SET_UP["scalafix"]},
+                                          wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 1, err)
+        self.assertEqual(report["blocks"], [{
+            "check": "A.scalafix", "kind": "new_errors",
+            "items": [{"file": "src/main/scala/planted/Text.scala", "code": "DisableSyntax.var",
+                       "new": 2, "global_net": 2}]}])
+        self.assertEqual(report["not_wired"], [])
+
+
+class CheckACompileFailureTests(unittest.TestCase):
+    """The compile precondition compiles without -Dgate.wartScan=true and the wart scan with it, so a
+    build that keeps -Werror under the property fails only inside the scan. Until 2026-09-11 both
+    runners read any compile failure as an empty scan: Check A read zero on both sides and a new
+    wart passed. The empty scan is now kept only when the precondition itself failed."""
+
+    def test_diff_exits_2_when_only_the_wart_scan_does_not_compile(self):
+        code, report, err = _diff_check_a((0, _LAB_SCALAFIX_CLEAN), (1, _W_WART_WERROR),
+                                          static_not_wired={}, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2, err)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 1, err)
+        for token in ("A.wartremover", "Compilation failed", "-Werror", "compile precondition passed"):
+            self.assertIn(token, err)
+
+    def test_diff_exits_2_when_only_scalafix_does_not_compile(self):
+        code, report, err = _diff_check_a((1, _W_SCALAFIX_COMPILE_FAILED), (0, _W_WART),
+                                          static_not_wired={}, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2, err)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 1, err)
+        for token in ("A.scalafix", "Compilation failed", "compile precondition passed"):
+            self.assertIn(token, err)
+        self.assertNotIn("A.wartremover", err)
+
+    def test_diff_whose_precondition_could_not_run_exits_2_without_saying_it_passed(self):
+        code, report, err = _diff_check_a((0, _LAB_SCALAFIX_CLEAN), (1, _W_WART_WERROR), build="skip",
+                                          static_not_wired={}, wartremover_baseline=_W_WART_FOUND)
+        self.assertEqual(code, 2, err)
+        self.assertEqual(report, {})
+        self.assertIn("the compile precondition returned skip, not fail", err)
+        self.assertNotIn("passed", err)
+
+    def test_baseline_runs_the_compile_precondition_first_and_exits_2_the_same_way(self):
+        calls: list[str] = []
+        code, report, err, written = _baseline_check_a((0, _LAB_SCALAFIX_CLEAN), (1, _W_WART_WERROR),
+                                                       calls=calls)
+        self.assertEqual(calls, ["compile_check", "scalafix --check", "-Dgate.wartScan=true"])
+        self.assertEqual(code, 2, err)
+        self.assertEqual(report, {})
+        self.assertEqual(len(err.splitlines()), 2, err)  # the capture banner, then the refusal
+        for token in ("A.wartremover", "-Werror", "compile precondition passed"):
+            self.assertIn(token, err.splitlines()[-1])
+        self.assertEqual([n for n in written if n.startswith("static") or n == "build.txt"], [])
+
+    def test_negative_control_a_baseline_that_does_not_compile_keeps_the_empty_scans(self):
+        """Diff blocks such a baseline as Build, so nothing reads these scans as clean."""
+        code, _, err, written = _baseline_check_a((1, _W_SCALAFIX_COMPILE_FAILED), (1, _W_WART_WERROR),
+                                                  build="fail")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(written["build.txt"], "fail\n")
+        self.assertEqual(json.loads(written["static-scalafix.json"]), [])
+        self.assertEqual(json.loads(written["static-wartremover.json"]), [])
+        self.assertEqual(json.loads(written["static-not-wired.json"]), {})
+
+    def test_the_empty_scan_is_kept_only_for_a_precondition_that_failed(self):
+        found = gate.Counter({("a/A.scala", "DisableSyntax.var"): 1})
+        why = gate.ScanCompileFailed("the wart scan's compile failed (sbt exited 1: Compilation failed)")
+        tc = types.SimpleNamespace(static_analysis=lambda root: {"scalafix": found, "wartremover": why})
+        self.assertEqual(gate._static_scans(tc, Path("/r"), "fail"),
+                         ({"scalafix": found, "wartremover": gate.Counter()}, {}))
+        for build in ("ok", "skip"):
+            with self.subTest(build=build):
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+                    gate._static_scans(tc, Path("/r"), build)
+                self.assertEqual(cm.exception.code, 2)
+                self.assertEqual(len(err.getvalue().splitlines()), 1, err.getvalue())
+                self.assertIn("A.wartremover: the wart scan's compile failed", err.getvalue())
+                self.assertNotIn("A.scalafix", err.getvalue())
+
+
+class BaselineToolchainChoicesTests(unittest.TestCase):
+    """The baseline parser offered python|scala|java while _TOOLCHAINS also held go and
+    typescript, and select_toolchain's own error told the caller to pass --toolchain go."""
+
+    def _main(self, *extra: str) -> mock.MagicMock:
+        argv = ["sdlc-gate", "baseline", "--sha", "deadbeef", "--out", "unused", *extra]
+        with mock.patch.object(gate, "cmd_baseline") as cmd, \
+                mock.patch.object(gate.sys, "argv", argv):
+            gate.main()
+        return cmd
+
+    def test_every_registered_toolchain_is_accepted(self):
+        self.assertTrue({"go", "typescript"} <= set(gate._TOOLCHAINS))
+        for name in gate._TOOLCHAINS:
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    cmd = self._main("--toolchain", name)
+                except SystemExit as e:
+                    self.fail(f"--toolchain {name} rejected by the parser (exit {e.code})")
+            self.assertEqual(cmd.call_args.args[0].toolchain, name)
+
+    def test_negative_control_unknown_toolchain_is_rejected(self):
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+            self._main("--toolchain", "cobol")
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("invalid choice", err.getvalue())
 
 
 class CmdDiffCoverageTests(unittest.TestCase):

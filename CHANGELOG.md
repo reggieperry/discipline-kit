@@ -2,7 +2,29 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
-## Unreleased — the dev-ledger removed
+## v2.0.0 — 2026-09-11
+
+A breaking release. The differential gate now refuses a baseline that is not the tree it names, several tool failures exit 2 where they used to read as clean, and `--no-static` skips Checks E-H, so a caller written against v1.5.1's documented flow has to change. The dev-ledger and its installer are gone. Everything below landed since v1.5.1.
+
+### Changed, breaking
+
+- **`baseline` refuses a tree that is not the commit it is filing under.** It exits 2 unless `--root` is a checkout of `--sha` with no tracked changes, skip-worktree and assume-unchanged edits included, and it records the full commit id. This closes the defect that made the published flow meaningless: run in the branch checkout with `--sha` at the merge-base, as v1.5.1's README and installer printed, the gate compared the branch with itself and passed branches carrying Check A, E, F, G and H regressions on TypeScript, Scala and Python. The README's flow block now captures the baseline in a worktree at the merge-base, works from a project in a subdirectory, and works as a pre-commit hook.
+- **`diff` reads git from the project root and the working tree.** Both git reads are keyed from the project directory rather than the repository top, so a project in a subdirectory blocks on clones and its renames are followed; and they read the working tree through a temporary copy of the index, so staged, unstaged and untracked changes all count. Uncommitted work is now judged. The repository's own index is never written.
+- **A tool that did not run no longer reads as clean.** A Scala linter that is not set up is listed under `not_wired` as `A.<label>`; a scalafix or wart scan that fails, a branch that removes a linter the baseline ran, a compile failure caused by the scan's own settings, a ruff that cannot run, and a missing `uv` or `uvx` all exit 2.
+- **`--no-static` skips Checks E-H** as well as Check A and the compile precondition, and lists each skipped check under `not_wired`. Every baseline records its mode, and a diff run in the other mode exits 2.
+- **Scala compiles one module at a time** in the unused-symbol and wartremover scans, and refuses output whose warnings it cannot pair. Check E's counts were random on multi-module builds. A full phase on a 368-file, 9-module build went from about 142 s to about 190 s.
+- **Scala 3 wartremover findings are read at last** (0 of 135 before), and `baseline --toolchain` accepts every registered toolchain.
+
+### Removed
+
+- **The dev-ledger, with `install-harness.sh`, `harness-verify.sh` and `install.md`.** The user-level installer is `install.sh`, and a per-repo install is still the copy lines it prints. The README's Quick start now says so.
+
+### Added
+
+- **Checks E-H, the agent-smell checks, wired for Python, TypeScript, Scala 3 and Go** (#31): unreferenced code, whole-tree duplication, a cognitive-complexity delta, and single-implementor abstractions, under one contract where a scanner carries its own denominator and a scanner that cannot run raises. `diff` reports what did not run under `not_wired`.
+- **The four fixes a real-tool audit ranked highest** (#32). Running Checks E-H against real TypeScript and Scala 3 tools found 26 defects, each reproduced by a second agent; three independent judges ranked them, and the top seven are fixed here. The install doc gained a per-toolchain list of what the gate needs.
+
+### The dev-ledger removed
 
 - **A check for rules that cannot fire, and two gaps it found on its first run.** `harness/rule_coverage.py` asks whether each shipped rule can fire at all, and — per language — whether test files reach a language-neutral testing rule. A rule that never fires is indistinguishable from one that is working, because both are silent, and nothing in the kit asked. The per-language half DERIVES its expectation rather than listing it: the kit declares which languages it supports by shipping `<lang>-testing.md`, and the probe path is synthesized from that overlay's own globs, so the check cannot go stale against a set it no longer describes. It found two gaps immediately. `craft-tdd` globbed Go, shell, Python and Scala only, so **TypeScript and Java authors got their language overlay and no TDD discipline at all** — fixed by adding `.ts`, `.tsx` and `.java`. And `craft-xunit`, which is language-neutral Meszaros vocabulary (the Test Double taxonomy, Assertion Roulette, Eager Test), carried Python-test-convention globs, so it reached Python and shell and no other language — fixed by adding neutral test shapes (`*_test.*`, `*Test.*`, `*Suite.*`, `*.test.*`, `*.spec.*`, `test/**`) and KEEPING the Python ones, which are live in a Python consumer. All six declared languages now reach a craft testing rule. Six controls in `harness/fixtures/rule_coverage_test.py`, each asserting the printed string and not merely the exit code, with could-not-run held at exit 2. What the check deliberately does NOT do is ask whether a glob matches anything in a CONSUMER's tree: the kit is a pack of rules rather than a codebase, so that question is real but belongs downstream, and the docstring says so rather than implying coverage it lacks.
 
@@ -146,7 +168,7 @@ repo, the mechanisms that caught real defects were the compiler, the review disc
 adversarial verification; the ledger's entire contribution was blocking one malformed ledger entry,
 which existed only because the ledger did.
 
-## Unreleased
+### The sequencer and the chain
 
 - **STORY-0009 built: the sequencer's definition pinned through the profile — the D4 path set on the D3.2
   court, and the one-source check case closed audit-first.** The pinned home is decided and documented, not

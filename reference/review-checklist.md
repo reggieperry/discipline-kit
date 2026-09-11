@@ -1,6 +1,6 @@
 # Differential review checklist (anti-weakening gate)
 
-The manual form of `sdlc-gate.py`. Run the script when `uv` is available — it is exact and mechanical. Use this checklist when you cannot run the script, or as the human pass over its verdict.
+The manual form of `sdlc-gate.py`. Run the script when the tools its toolchain needs are installed (listed under "What the gate needs" in the kit's `README.md`) — it is exact and mechanical. Use this checklist when you cannot run the script, or as the human pass over its verdict.
 
 The principle: **a branch may add capability but must not weaken the static-analysis floor it inherited.** Every check is differential — measured against the merge-base, not against zero. A pre-existing error is not this branch's problem; a *new* one is.
 
@@ -12,15 +12,15 @@ Establish the comparison point before reading the diff:
 BASE=$(git merge-base HEAD origin/main)     # the target branch's tip the work forked from
 ```
 
-All four checks compare the branch tip against `BASE`. Identity is the **(file, error-code) pair** — message text is ignored (type names and contextual detail legitimately change across edits). Renames are followed (`git diff --name-status -M`), so moving a file is not counted as deleting its asserts.
+Every check compares the branch's working tree, uncommitted changes included, against `BASE`. Identity is the **(file, error-code) pair** — message text is ignored (type names and contextual detail legitimately change across edits). Renames are followed (`git diff --name-status -M`), so moving a file is not counted as deleting its asserts, but only when git pairs the two paths, by default when they are at least 50 percent similar; a move with heavy edits reads as a deletion plus an addition.
 
 ## Check A — no new ruff / mypy / bandit errors
 
-Run each tool at `BASE` (in a scratch worktree) and at the branch tip; compare per (file, code):
+Run each tool at `BASE` (in a scratch worktree) and in the branch's working tree; compare per (file, code):
 
 ```
 uv run ruff check . --output-format=json
-uv run mypy . --show-error-codes --no-error-summary
+uv run mypy . --strict --show-error-codes --no-error-summary
 uvx bandit -c pyproject.toml -r . -f json
 ```
 
@@ -78,10 +78,17 @@ gate-driven refactoring.
 
 ## The coverage receipt
 
-The gate's `diff` output carries `not_wired`, listing every one of E–H that has no implementation
-for the toolchain, and `agent_scans`, the file counts each wired check actually examined. Read
-both before trusting a pass: a report that listed only findings would read identical whether it
-ran four checks or none.
+The gate's `diff` output carries `not_wired`, listing each of E–H that did not run (no
+implementation for the toolchain, no baseline scan, or skipped by `--no-static`) and, on Scala,
+each Check A linter the tree has not set up, as `A.<label>: <reason>`. It also carries
+`agent_scans`, the file counts each check that ran actually examined, and `no_static`, which is
+true when the run used `--no-static`. A false `no_static` does not show that Check A's tools ran on
+Python, TypeScript, Go or Java: several of their scanners read a missing tool, or a config that
+fails to load, as no findings, and at most a stderr line says so. On Scala a Check A tool that is
+not set up is listed under `not_wired`, which leaves the exit code unchanged, and one that fails
+for another reason exits 2. Read all three before trusting a pass: a report that listed only
+findings would read identical whether it ran four checks or none.
+
 ## Verdict
 
 - Any block → **fail** (return for rework).
@@ -92,4 +99,4 @@ ran four checks or none.
 
 - The gate is differential, so it never punishes inherited debt — only regressions the branch introduces.
 - Known v1 gap: within-(file, code) swaps (one error of a code replaced by a different error of the same code on another line in the same file) are not caught — that would need AST-anchored identity.
-- The script lives at `sdlc-gate.py` (this directory). `baseline --sha <BASE> --out <dir>` captures; `diff --baseline-dir <dir>` compares and exits non-zero on fail.
+- The script lives at `sdlc-gate.py` (this directory). `baseline --sha <BASE> --out <dir>` captures, and exits 2 unless its `--root`, by default the directory it runs in, is a checkout of `BASE` with no tracked changes under it and no file there marked skip-worktree or assume-unchanged, such as a worktree at the merge-base (from a sparse checkout, run `git sparse-checkout disable` in that worktree first). `diff --baseline-dir <dir>`, run in the branch's working tree, compares and exits non-zero on fail; uncommitted changes count.

@@ -26,7 +26,7 @@ After invocation: state the agent's verdict in 2-3 sentences and name what chang
 
 ## Code review
 
-When asked to review a PR, branch, or diff, use the `pr-review` skill (under `~/.claude/skills/`). It runs the gate first, loads the reviewed repo's own `.claude/rules/`, then applies the language-neutral review core. The differential gate it leans on is `~/.claude/discipline/sdlc-gate.py` (or transcribe the checklist at `~/.claude/discipline/review-checklist.md` when `uv` is unavailable).
+When asked to review a PR, branch, or diff, use the `pr-review` skill (under `~/.claude/skills/`). It runs the gate first, loads the reviewed repo's own `.claude/rules/`, then applies the language-neutral review core. The differential gate it leans on is `~/.claude/discipline/sdlc-gate.py` (or transcribe the checklist at `~/.claude/discipline/review-checklist.md` when the tools the gate needs for the repo's toolchain are not installed).
 
 ## Other persistent instructions
 
