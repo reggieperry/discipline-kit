@@ -32,7 +32,21 @@ The repo signals its primary language (`go.mod` → Go; `pyproject.toml` / `setu
 
 ## Step 3 — Run the gate first
 
-Before reading the diff for taste, run the language-appropriate gate and read its **full output, causal-first** (compiler/type errors before test logs — do not summarize them). A red gate is finding #1; do not launder it.
+Before reading the diff for taste, run the gate and read its **full output, causal-first** (compiler/type errors before test logs — do not summarize them). A red gate is finding #1; do not launder it.
+
+**Find the repo's OWN gate first, and run that.** The build tool's `check` task is almost never the whole gate — a repo that cares enough to have rules usually wraps its build in a script that also runs the checks the build tool knows nothing about. Look, in this order:
+
+```bash
+git config core.hooksPath                       # where the hooks actually live
+cat "$(git rev-parse --git-path hooks)/pre-commit"   # resolves under a worktree and hooksPath
+ls scripts/check.sh Makefile justfile noxfile.py    # the usual entry points, errors and all
+```
+
+Whatever the pre-commit hook invokes **is** the repo's definition of green; run exactly that. Where no hook is installed, run the script those entry points name, and say which one it was. Running the build tool's task instead is a narrower check wearing the same word, and the difference is silent — it exits 0 having examined less. Measured on a Scala repo: its `sbt check` alias covers formatting, lint, three project checks and the suites, while the `scripts/check.sh` its hook runs wraps that alias and adds seven more, among them a byte-identity pin on the documents the repo adopts, a citation check against them, and a lint of its own gate scripts. The hook puts a secret scan in front of both. A review that ran the alias alone would have reported a green gate and missed all eight.
+
+**Say which one you ran, in the review.** "Gate green (`sbt check`)" and "gate green (`scripts/check.sh`, 12 checks)" are different claims, and a reader cannot tell them apart from the word green.
+
+Only when the repo ships no gate of its own, fall back to the language-appropriate commands:
 
 - **Go:** `go build ./...` → `go vet ./...` → `golangci-lint run` → `go test ./...` (add `-race` for concurrent code).
 - **Python:** `uv run ruff check .` → `uv run mypy .` → `uv run pytest`.
@@ -41,7 +55,7 @@ Before reading the diff for taste, run the language-appropriate gate and read it
 - **Java:** `mvn -B -q verify` (Maven) or `./gradlew --no-daemon --console=plain check` (Gradle wrapper) — the repo's own `check.sh` or pinned command wins.
 - **TypeScript:** `npm run check`, or where there is no `check` script, `tsc --noEmit` → `vitest run`.
 
-If the repo ships a gate script (e.g. the pack's `sdlc-gate.py`, or a Go gate), prefer it — it encodes the anti-weakening baseline (no new suppressions, no skipped tests, no assertion-count loss versus merge-base).
+The differential gate is a second, separate run, and it answers a question no build task asks: what did this branch weaken against the merge-base? It carries the anti-weakening baseline (no new static-analysis errors, no new suppressions, no new skipped tests, no assertion-count loss) and the agent-smell checks E–H. `install.sh` places it at `~/.claude/discipline/sdlc-gate.py` and prints the block that runs it; the kit checkout's README lists what each toolchain needs. Read its `not_wired` list before trusting a pass: that is where it says which checks did not run.
 
 ## Step 4 — Load the reviewed repo's own rules (the language + project specifics)
 
@@ -91,7 +105,7 @@ Apply the per-language rules loaded in Step 4 (preferred), or the embedded per-l
 
 Structured, severity-tiered, evidence-cited:
 
-- Lead with the **gate result** (green, or the exact failures).
+- Lead with the **gate result** (green, the exact failures, or exit 2, which means a check could not run and is not a pass).
 - Group findings: **blocking** (correctness, security, gate regression) → **should-fix** (design, missing test, leaky abstraction) → **nit** (style, naming).
 - Each finding: `file:line` · what · why it matters · a one-line suggested fix.
 - **Verify before asserting** — re-read the lines you cite; do not cite a line number from memory. Quote only what you read. Do not invent identifiers.
@@ -127,6 +141,17 @@ Structured, severity-tiered, evidence-cited:
 - Parameterize every SQL statement — no string interpolation into queries.
 
 **Claims need tests.** "No-op" / "idempotent" / "handles X" in prose, untested, is aspirational. A test must *discriminate* — fail under the claim-false branch. Watch for assertions satisfied by every execution path (a returncode-only check that both branches pass).
+
+**Did the instruments get weaker?** A diff that touches gate code, CI, test infrastructure, a fixture directory, an exemption list or a coverage floor is changing what the project can SEE, and that class of regression is invisible to the gate by construction — a check that stopped looking and a check that found nothing exit the same way. Ask specifically:
+
+- **A check dropped from the commit path**, or moved behind a flag that nothing sets. Diff the gate driver, not just the checks.
+- **An exemption or baseline list that grew** — an ignore file, a lint suppression list, a known-failures baseline, a skip list. Every added line is a thing the project can no longer see. Each needs its own reason, in the diff.
+- **A floor lowered** — a coverage threshold, a minimum test count, a `minSuccessfulTests`, an asserted denominator.
+- **A negative control deleted or neutralized.** A gate's kept fixtures are the only evidence it can fail; a fixture that no longer fails is worse than a deleted one, because the suite stays green. If the diff touches a fixture, ask what it was proving and whether it still proves it.
+- **An assertion loosened rather than removed** — `assertEquals` to `assert(nonEmpty)`, an exact count to a `>` bound, a specific exit code to `!= 0`. These read as tidying.
+- **A denominator that stopped printing.** "0 findings" and "0 findings across 41 files" have the same exit code and are different facts.
+
+If the diff adds a check, ask the mirror question: has it ever been observed failing? A gate landed green-only has demonstrated nothing. Look for its negative control in the same diff.
 
 **Craft lens** (the modularity/design read):
 
