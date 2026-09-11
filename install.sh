@@ -132,6 +132,8 @@ else
   echo "  settings.json installed (conservative: local git only, no auto-bypass)"
 fi
 
+GATE_PATH="$(printf %q "$DEST/discipline/sdlc-gate.py")"
+
 cat <<EOF
 
 User-level install done.
@@ -153,8 +155,25 @@ so they load each session, keeping one-line-per-memory in MEMORY.md:
 
   cp $KIT/memories/*.md  <your-project-memory-dir>/
 
-Run the differential gate on a branch:
+Run the differential gate on a branch in its checkout, from the project directory (the top of
+the repository, or the subdirectory that holds the project); the work does not have to be
+committed. The baseline is captured in a worktree checked out at the merge-base:
 
-  python3 ~/.claude/discipline/sdlc-gate.py baseline --sha \$(git merge-base HEAD origin/main) --out /tmp/base
-  python3 ~/.claude/discipline/sdlc-gate.py diff --baseline-dir /tmp/base
+  unset \$(git rev-parse --local-env-vars)
+  BASE=\$(git merge-base HEAD origin/main)
+  P=\$(git rev-parse --show-prefix)
+  WT=\$(mktemp -d); OUT=\$(mktemp -d); GC1=\$(mktemp -d); GC2=\$(mktemp -d)
+  git worktree add --quiet --detach "\$WT" "\$BASE"
+  if [ -d node_modules ]; then ln -s "\$PWD/node_modules" "\$WT/\${P}node_modules"; fi
+  (cd "\$WT/\$P" || exit 2; GOLANGCI_LINT_CACHE="\$GC1" python3 $GATE_PATH baseline --sha "\$BASE" --out "\$OUT" >&2) &&
+    GOLANGCI_LINT_CACHE="\$GC2" python3 $GATE_PATH diff --baseline-dir "\$OUT"
+  rc=\$?
+  git worktree remove --force "\$WT"; rm -rf "\$OUT" "\$GC1" "\$GC2"
+  (exit "\$rc")
+
+Replace origin/main with the branch the work merges into. The block ends with the gate's exit
+code: 0 pass or advisory, 1 blocked, 2 could not run. For what else exits 1, and for running
+the block as a pre-commit hook, see "Using it" in $KIT/README.md.
+
+What each toolchain needs installed: see "What the gate needs" in $KIT/README.md.
 EOF

@@ -11,14 +11,19 @@ error-identity scanners (Check A), a suppression scan (Check B), a test-weakenin
 (Check D), and four agent-smell checks — unreferenced code (E), whole-tree duplication (F),
 per-function cognitive complexity delta (G), single-implementor abstractions (H) — each of
 which reports itself NOT WIRED for a toolchain that lacks it rather than reading as clean.
-Detection is by marker file (`build.sbt` → scala, `pom.xml`/`build.gradle` → java,
-`pyproject.toml` → python); `--toolchain` forces it.
+Detection is by marker file, checked in this order: `build.sbt` → scala,
+`pom.xml`/`build.gradle`/`build.gradle.kts` → java, `pyproject.toml`/`setup.py` → python, `go.mod` → go,
+`package.json`/`tsconfig.json` → typescript. `--toolchain` forces it.
 
   python  ruff / mypy / bandit; `#type:ignore`/`#noqa`/`#pyright:ignore`/`#nosec`;
           pytest skip markers + assert-keyword counts.
-  scala   scalafix / wartremover (sbt; skipped by --no-static); `@nowarn`/
-          `@SuppressWarnings`/`// scalafix:off`; munit `.ignore`/`munitIgnore`/
-          `assume(false)` + assertion-site counts (assertEquals/assert/intercept/`:|`)
+  scala   scalafix / wartremover (sbt; skipped by --no-static, as are the compile
+          precondition and Checks E-H; a plugin the build has not set up is listed under
+          not_wired, and a run that fails for a reason other than findings or a tree that
+          does not compile exits 2);
+          `@nowarn`/`@SuppressWarnings`/`// scalafix:off`;
+          munit `.ignore`/`munitIgnore`/`assume(false)` + assertion-site counts
+          (assertEquals/assert/intercept/`:|`)
           + ScalaCheck-parameter weakening (minSuccessfulTests fall, maxDiscardRatio
           rise, forAllNoShrink). Plus a fail-closed compile precondition (Check Build:
           a non-compiling tree blocks rather than reading as clean, since a red build
@@ -35,15 +40,22 @@ Detection is by marker file (`build.sbt` → scala, `pom.xml`/`build.gradle` →
 
 Subcommands
 -----------
-baseline   Run the detected toolchain's scanners against the current working tree.
-           Caller has typically checked out the merge-base SHA in a scratch worktree
-           before invoking. Output is a directory of JSON files for diff to consume
-           (static-<label>.json, suppressions.json, test-weakening.json, sha.txt,
-           toolchain.txt). `--no-static` skips the sbt/uv static scanners (fast,
-           regex-only); use the same flag on diff.
+baseline   Run the detected toolchain's scanners against the working tree at --root.
+           --root must be a checkout of --sha with no tracked changes (untracked files
+           are fine), typically a scratch worktree at the merge-base; anything else
+           exits 2 before a scanner runs. sha.txt records the full commit id.
+           Output is a directory of JSON files for diff to consume
+           (static-<label>.json, static-not-wired.json, suppressions.json, test-weakening.json,
+           agent-scans.json, sha.txt, toolchain.txt, build.txt, no-static.txt). `--no-static` skips
+           every scanner that runs an external tool: Check A's static scanners, the compile
+           precondition, and Checks E-H (agent-scans.json records each of E-H as skipped).
+           Checks B, C and D still run, since they need no tool but git; `--coverage`, which
+           does run one, is unaffected. Use the same flag on diff; a mismatch exits 2.
 
-diff       Run the same scans on the current branch tip and compare against a
-           previously captured baseline directory. Emits a JSON verdict:
+diff       Run the same scans on the working tree and compare against a
+           previously captured baseline directory. Run it from the project root: git's
+           renames and added lines are read for that directory only, keyed from it, with
+           staged, unstaged and untracked (not ignored) changes all counted. Emits a JSON verdict:
            pass, advisory, or fail. Exits 0 on pass/advisory, 1 on fail, and 2 on an
            operational failure (e.g. a --coverage scan that could not complete —
            fail-closed, never read as "no coverage to check").
@@ -101,21 +113,24 @@ from pathlib import Path
 
 
 def _rel(path: str, root: Path) -> str:
-    """Return path relative to root if path is under root; else return as-is."""
+    """Return path relative to root if path is under root; else return as-is. Every tool that
+    feeds this runs with cwd=root, so a relative path is read from root: mypy prints `pkg/x.py`
+    and bandit `./pkg/x.py` (measured). Resolved from the process cwd, a baseline taken from
+    another directory keyed bandit's findings `./pkg/x.py` against diff's `pkg/x.py`."""
+    p = Path(path)
     try:
-        return str(Path(path).resolve().relative_to(root))
+        return str((p if p.is_absolute() else root / p).resolve().relative_to(root))
     except ValueError:
         return path
 
 
 def run_ruff(root: Path) -> Counter:
     """Run ruff with JSON output. Returns Counter[(file, code)] keyed by repo-relative paths."""
-    proc = subprocess.run(
-        ["uv", "run", "ruff", "check", ".", "--output-format=json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    # cwd=root here, in run_mypy and in run_bandit. Until 2026-09-10 all three ran in the process
+    # cwd: measured, a --root baseline taken from the branch checkout dropped an A.mypy block and
+    # demoted A.ruff to an advisory. _py_run turns a uv that cannot be spawned into
+    # ScanOperationalError; until 2026-09-11 it exited 1 with a traceback.
+    proc = _py_run(["uv", "run", "ruff", "check", ".", "--output-format=json"], root)
     # ruff exits 0 clean, 1 with findings, 2 on error; anything else is uv or the shell. Only the
     # first two are a scan. Until 2026-09-10 a non-JSON body was logged and treated as NO
     # FINDINGS, so a missing ruff read as a clean Check A — the fail-open this file exists to stop.
@@ -175,12 +190,8 @@ def run_mypy(root: Path) -> Counter:
     code spellings (e.g. [import] vs [import-not-found]) collapse to a
     canonical key. See _MYPY_CODE_ALIASES for the conservative alias list.
     """
-    proc = subprocess.run(
-        ["uv", "run", "mypy", ".", "--strict", "--show-error-codes", "--no-error-summary"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = _py_run(
+        ["uv", "run", "mypy", ".", "--strict", "--show-error-codes", "--no-error-summary"], root)
     counter: Counter = Counter()
     for line in proc.stdout.splitlines():
         m = _MYPY_LINE.match(line)
@@ -199,11 +210,13 @@ def run_bandit(root: Path) -> Counter:
     from the cwd). The exit code is ignored — we only consume the JSON
     findings list, never bandit's own pass/fail signal.
 
-    Failures to invoke bandit at all (uvx unavailable, network unreachable
-    for the ephemeral install) are not treated as findings — the function
-    returns an empty Counter and logs a one-line note to stderr. Rigs that
-    intentionally opt out of bandit will see zero baseline and zero branch
-    findings, which is a no-op for the differential gate.
+    A uvx that cannot be spawned (not on PATH) raises ScanOperationalError,
+    as in run_ruff and run_mypy; until 2026-09-11 it exited 1 with a traceback.
+    Any other failure to run bandit (network unreachable for the ephemeral
+    install, say) is not treated as findings: the function returns an empty
+    Counter and logs a one-line note to stderr. Rigs that intentionally opt
+    out of bandit will see zero baseline and zero branch findings, which is a
+    no-op for the differential gate.
     """
     # Write JSON to a temp file rather than stdout — `uvx` itself prints a
     # one-line progress indicator to stdout that contaminates the JSON when
@@ -214,23 +227,8 @@ def run_bandit(root: Path) -> Counter:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         report_path = Path(tmp.name)
     try:
-        proc = subprocess.run(
-            [
-                "uvx",
-                "bandit",
-                "-c",
-                "pyproject.toml",
-                "-r",
-                ".",
-                "-f",
-                "json",
-                "-o",
-                str(report_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = _py_run(["uvx", "bandit", "-c", "pyproject.toml", "-r", ".", "-f", "json",
+                        "-o", str(report_path)], root)
         if proc.returncode not in (0, 1):
             # 0 = clean; 1 = findings present; anything else is an invocation problem.
             sys.stderr.write(
@@ -882,20 +880,67 @@ def scan_scala_test_weakening(root: Path) -> dict:
     return {"skips": skips, "asserts": asserts, "params": params}
 
 
-def _sbt_json_or_empty(root: Path, sbt_args: list[str], parse) -> Counter:
-    """Shell out to sbt like the Python scanners shell out to uv, and parse. ANY
-    invocation problem (sbt absent, plugin unconfigured, non-zero for a non-finding
-    reason) returns an empty Counter with a one-line note — a repo that has not wired
-    the lint toolchain sees a no-op differential, exactly like a rig that skips
-    bandit. The regex scanners above are always available and carry the anti-weakening
-    vectors the acceptance exercises; these add Check-A coverage when sbt is wired."""
+# sbt compiles independent modules in parallel and their diagnostics reach stdout interleaved line
+# by line, so a warning's header and its message can be separated by another module's lines. Both
+# scans that read multi-line Scala 3 warnings pass this before compiling. Measured on the lab, a
+# 368-file, 9-module build with 15 unused parameters planted in each of three modules: without it,
+# four unused-symbol scans credited 13/15/12, 15/15/12, 14/15/15 and 14/15/14 of 15 warnings per
+# file. With this setting the scan was exact in 2 of 2 runs there and in 4 of 4 on a 3-module tree
+# with the same plants. The cost on the lab (two runs each way): the unused-symbol scan went from
+# 33 to 53 s and the wart scan from 35 to 61 s.
+_SBT_SERIAL_COMPILE = "set Global / concurrentRestrictions += Tags.limit(Tags.Compile, 1)"
+
+
+def _sbt_check_a(root: Path, sbt_args: list[str], tool: str) -> tuple[int, str]:
+    """One Check A sbt command at `root`: (exit code, stdout then stderr). An sbt that cannot be
+    spawned or runs out the timeout raises ScanOperationalError. Until 2026-09-10 this seam parsed
+    whatever came back, so a plugin the build had not set up, a scalafix that failed on its own
+    config, and a missing sbt all read as zero findings, with no not_wired entry to say so."""
     try:
         proc = subprocess.run(["sbt", "-batch", "-Dsbt.color=false", *sbt_args],
                               cwd=root, capture_output=True, text=True, check=False, timeout=1800)
-    except (OSError, subprocess.TimeoutExpired):
-        sys.stderr.write(f"sdlc-gate: sbt {' '.join(sbt_args)} could not run; treating as no findings\n")
-        return Counter()
-    return parse(proc.stdout + proc.stderr, root)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ScanOperationalError(f"{tool}: sbt could not run: {e}") from e
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+# What sbt 1.12.11 printed in each case, measured 2026-09-10 on corpus P (no plugins), corpus W (P
+# with sbt-scalafix 0.14.7 and sbt-wartremover 3.6.1) and the lab:
+#   no such command or key   `[error] Not a valid command: scalafix`, `[error] Not a valid key:
+#                            wartremoverWarnings (similar: printWarnings)`; exit 1, nothing compiled
+#   a task that failed       one `[error] (<project> / <config> / <task>) <reason>` line per task:
+#                            `Compilation failed`, `scalafix.sbt.ScalafixFailed: TestError
+#                            LinterError`, `scalafix.sbt.InvalidArgument: Unknown rule 'X'`
+#   a build that did not load  `[error] [<root>/build.sbt]:16: ')' expected but eof found.`, and
+#                            no task line
+#   no JDK                   exit 127, shell errors on stderr only
+_SBT_TASK_FAILED = re.compile(
+    r"^\[error\] \((?P<task>(?:[\w.-]+ / )*[\w.-]+)\) (?P<why>.+?)\s*$", re.M)
+
+
+def _sbt_lacks(out: str, name: str) -> bool:
+    pattern = rf"^\[error\] Not a valid (?:command|key): {re.escape(name)}(?:\s|$)"
+    return re.search(pattern, out, re.M) is not None
+
+
+def _sbt_compile_failed(out: str) -> bool:
+    return any(m.group("why") == "Compilation failed" for m in _SBT_TASK_FAILED.finditer(out))
+
+
+def _sbt_failure(code: int, out: str) -> str:
+    """Why sbt failed, on one line: each distinct failed task's reason, else its first error lines,
+    else the end of its output."""
+    reasons = list(dict.fromkeys(m.group("why") for m in _SBT_TASK_FAILED.finditer(out)))
+    if not reasons:
+        reasons = ([l for l in out.splitlines() if l.startswith("[error]")][:3]
+                   or out.strip().splitlines()[-3:])
+    return f"sbt exited {code}: " + " ".join(" / ".join(reasons).split())[:500]
+
+
+def _sbt_compile_failure(code: int, out: str) -> str:
+    """_sbt_failure plus sbt's first `[error]` line, which names the first compile error's file."""
+    first = next((line for line in out.splitlines() if line.startswith("[error]")), "")
+    return f"{_sbt_failure(code, out)}; first error: {' '.join(first.split())[:300]}"
 
 
 def _parse_scalafix(out: str, root: Path) -> Counter:
@@ -909,38 +954,153 @@ def _parse_scalafix(out: str, root: Path) -> Counter:
     return counter
 
 
+# Scala 3 names the file only on a diagnostic's header and prints the wart tag lines later:
+#   [warn] -- Warning: <root>/a/Tally.scala:12:8
+#   [warn] 12 |    var sum = 0
+#   [warn]    |    ^^^^^^^^^^^
+#   [warn]    |    [wartremover:Var] var is disabled
+# Scala 2 (measured on 2.13.18) puts both on one line: `[warn] <root>/a/Tally.scala:5:9:
+# [wartremover:Var] var is disabled`. Wart names can hold digits (`Option2Iterable`).
+_SCALA3_DIAGNOSTIC_HEADER = re.compile(
+    r"^\[(?:warn|error)\] -- (?:\[E\d+\] )?(?:[A-Za-z]+ )*(?:Warning|Error): (?P<path>.+?):\d+:\d+\s*$")
+_WART_ONE_LINE = re.compile(
+    r"(?P<path>[^\s:]+\.scala):\d+.*?(?:wartremover:|Wart\.?\s*)(?P<wart>[A-Za-z0-9]+)")
+_WART_TAG = re.compile(r"\[wartremover:(?P<wart>[A-Za-z0-9]+)\]")
+
+
 def _parse_wartremover(out: str, root: Path) -> Counter:
-    """WartRemover warnings carry the wart name in the message, e.g.
-    `[warn] <path>:<line>: <msg> [wartremover:Null]` or `... Wart: Null`."""
+    """Counter[(file, wart)] from both shapes above. A Scala 3 tag belongs to the file on the most
+    recent header, and only the first tag after that header is read. Until 2026-09-10 only the
+    one-line shape was read: on a 368-file Scala 3 build it credited 0 of 135 warnings and missed
+    a planted var, which only scalafix blocked. A tag left uncredited (no header before it, or a
+    second tag under one header, which is what interleaved compiles produce) has no file this parse
+    can trust, so the output is refused rather than undercounted."""
     counter: Counter = Counter()
-    pat = re.compile(r"(?P<path>[^\s:]+\.scala):\d+.*?(?:wartremover:|Wart\.?\s*)(?P<wart>[A-Za-z]+)")
+    credited = 0
+    path: str | None = None
     for line in out.splitlines():
-        m = pat.search(line)
+        if line.startswith(("[warn] -- ", "[error] -- ")):
+            m = _SCALA3_DIAGNOSTIC_HEADER.match(line)
+            path = _rel(m.group("path"), root) if m else None
+            continue
+        m = _WART_ONE_LINE.search(line)
         if m:
             counter[(_rel(m.group("path"), root), m.group("wart"))] += 1
+            if "[wartremover:" in line:
+                credited += 1
+            continue
+        m = _WART_TAG.search(line)
+        if m and path is not None:
+            counter[(path, m.group("wart"))] += 1
+            credited += 1
+            path = None
+    tags = out.count("[wartremover:")
+    if tags > credited:
+        raise ScanOperationalError(
+            f"the wartremover output holds {tags} [wartremover: tags but credited {credited} to a "
+            "file; a tag with no warning header before it, or a second tag under one header, "
+            "cannot be placed (compiles that ran in parallel interleave their lines)")
     return counter
 
 
+# The only scalafix failure kinds that mean it ran and found something: a lint finding
+# (LinterError) and a rewrite `--check` would apply (TestError). Measured kinds that mean it did
+# not run: InvalidArgument for a broken .scalafix.conf, an unknown rule, or no SemanticDB for a
+# semantic rule. ScalafixFailed: NoRulesError, a build with no .scalafix.conf, runs no rule at all
+# and is treated like a missing plugin: not set up.
+_SCALAFIX_FAILED = re.compile(r"^scalafix\.sbt\.ScalafixFailed: (?P<kinds>\w+(?: \w+)*)$")
+_SCALAFIX_FINDING_KINDS = {"LinterError", "TestError"}
+
+
 def run_scalafix(root: Path) -> Counter:
-    return _sbt_json_or_empty(root, ["scalafix --check"], _parse_scalafix)
+    """`sbt "scalafix --check"`, classified before any finding is read. Not set up raises NotWired.
+    A compile failure raises ScanCompileFailed, for _static_scans to read against the compile
+    precondition. Any other failure that is not findings raises ScanOperationalError. A rewrite diff
+    counts as zero, a known gap: only lint findings carry the `path:line:col: level: [Rule]` shape
+    counted here."""
+    code, out = _sbt_check_a(root, ["scalafix --check"], "scalafix")
+    if _sbt_lacks(out, "scalafix"):
+        raise NotWired("sbt-scalafix is not set up")
+    if code == 0:
+        return _parse_scalafix(out, root)
+    if _sbt_compile_failed(out):
+        raise ScanCompileFailed(f"scalafix's compile failed ({_sbt_compile_failure(code, out)})")
+    failures = [_SCALAFIX_FAILED.match(m.group("why")) for m in _SBT_TASK_FAILED.finditer(out)]
+    kinds = {k for f in failures if f for k in f.group("kinds").split()}
+    if failures and all(failures) and kinds == {"NoRulesError"}:
+        raise NotWired("no rules configured (no .scalafix.conf)")
+    if not failures or not all(failures) or not kinds <= _SCALAFIX_FINDING_KINDS:
+        raise ScanOperationalError(f"scalafix could not run: {_sbt_failure(code, out)}")
+    found = _parse_scalafix(out, root)
+    if "LinterError" in kinds and not found:
+        raise ScanOperationalError(
+            "scalafix reported LinterError but printed no finding in the `path:line:col: level: "
+            "[Rule]` shape this scan reads; refusing to count zero")
+    return found
+
+
+# The wart scan asks sbt for wartremoverWarnings first, in the same invocation, so a build without
+# the plugin stops before compiling (measured on corpus P: exit 1 in 5 s). It shows the key in the
+# scopes compile reads as well: sbt-wartremover's per-task form, `Compile / compile /
+# wartremoverWarnings`, leaves the project-scoped key empty (measured on W, 2026-09-11). Two listing
+# shapes: one project prints `[info] * org.wartremover.warts.Var` per wart and `[info] * ` for none;
+# several print `[info] <project> / wartremoverWarnings` and then `[info] \tList(...)`, `List()` for
+# none.
+_WART_PROBE_ITEM = re.compile(r"^\[info\] \*(?: (?P<wart>.*?))?\s*$", re.M)
+_WART_PROBE_LIST = re.compile(r"^\[info\] \t\w+\((?P<warts>.*)\)\s*$", re.M)
+_WART_PROBE_KEYS = ("wartremoverWarnings", "Compile / compile / wartremoverWarnings",
+                    "Test / compile / wartremoverWarnings")
 
 
 def run_wartremover(root: Path) -> Counter:
-    return _sbt_json_or_empty(root, ["-Dgate.wartScan=true", "Test/compile"], _parse_wartremover)
+    """Warts as warnings under -Dgate.wartScan=true, which the build must read (the lab's build.sbt
+    turns Warts.unsafe on only then). The plugin absent, or no wart listed and no wart tag printed,
+    raises NotWired: until 2026-09-10 both compiled clean and read as a wart scan that found nothing.
+    The compile starts from `clean`, as Check E's does. Until 2026-09-11 it did not, and a build with
+    warts on all the time, already compiled with the same options by the compile precondition or
+    scalafix, compiled nothing and read as zero warts (measured on W). A compile failure raises
+    ScanCompileFailed; any other failure, or a compile of no sources, raises ScanOperationalError. A
+    known gap: a multi-project build that lists warts for some projects and none for others is read
+    as set up, and the projects with none are scanned for nothing."""
+    code, out = _sbt_check_a(root, ["-Dgate.wartScan=true", *(f"show {k}" for k in _WART_PROBE_KEYS),
+                                    _SBT_SERIAL_COMPILE, "clean", "Test/compile"], "wartremover")
+    if _sbt_lacks(out, "wartremoverWarnings"):
+        raise NotWired("sbt-wartremover is not set up")
+    listed = [m.group("wart") or "" for m in _WART_PROBE_ITEM.finditer(out)]
+    listed += [m.group("warts") for m in _WART_PROBE_LIST.finditer(out)]
+    # A printed tag means the plugin ran whatever the listings say, as warts set as errors do.
+    if listed and not any(w.strip() for w in listed) and "[wartremover:" not in out:
+        raise NotWired("no wartremoverWarnings under -Dgate.wartScan=true (wartremoverErrors is not read)")
+    if code != 0:
+        if _sbt_compile_failed(out):
+            raise ScanCompileFailed(
+                f"the wart scan's compile failed ({_sbt_compile_failure(code, out)}), as it does when "
+                "the build keeps -Werror or -Xfatal-warnings under -Dgate.wartScan=true or turns warts "
+                "on as errors")
+        raise ScanOperationalError(f"the wart scan could not run: {_sbt_failure(code, out)}")
+    if not listed:
+        raise ScanOperationalError(
+            "the wart scan printed no wartremoverWarnings listing this scan reads, so a build with "
+            "warts on cannot be told from one with none")
+    if not any(_SBT_COMPILING.match(line) for line in out.splitlines()):
+        raise ScanOperationalError(
+            "the wart scan compiled no Scala sources after `clean`, so it read no warnings and an "
+            "empty result is not a clean one")
+    return _parse_wartremover(out, root)
 
 
 # --- The fail-closed compile precondition (Check Build) ------------------------
-# A red build silences the linters, so `_sbt_json_or_empty` parses an output that carries
-# no scalafix/wartremover findings and returns an empty Counter — which the diff reads as
-# "no new errors" and PASSES a tree that does not even compile (a fail-open). The precondition
-# closes it: compile both source sets first; if either the branch or the baseline does not
-# compile, block on Build/compile_error rather than trusting an empty scan.
+# A red build silences the linters: a Check A run whose compile fails reads nothing, which the diff
+# alone would read as "no new errors" and pass. The precondition closes it: compile both source sets
+# first; if either the branch or the baseline does not compile, block on Build/compile_error rather
+# than trusting an empty scan. Both Scala runners raise ScanCompileFailed on a compile failure, and
+# _static_scans reads it against this status.
 
 
 def _compile_precondition_blocks(branch_status: str, baseline_status: str) -> list[dict]:
     """Fail-closed: if either tree does not compile, the linters could not have run, so
-    'no new findings' is meaningless — block. 'skip' (sbt not invokable / no toolchain wired)
-    is a no-op, matching the existing sbt-absent scanner behavior."""
+    'no new findings' is meaningless — block. 'skip' (the build tool could not be invoked, or
+    the toolchain has no compile step) is a no-op here."""
     failed = [w for w, s in (("branch", branch_status), ("baseline", baseline_status)) if s == "fail"]
     if failed:
         return [{
@@ -952,8 +1112,8 @@ def _compile_precondition_blocks(branch_status: str, baseline_status: str) -> li
 
 def sbt_compile_status(root: Path) -> str:
     """Run `sbt Test/compile` (compiles BOTH the main and test source sets). Returns 'ok'
-    (compiles), 'fail' (does not compile), or 'skip' (sbt not invokable — a no-op, exactly
-    like the sbt-absent path of the static scanners)."""
+    (compiles), 'fail' (does not compile), or 'skip' (sbt not invokable; a no-op here, and
+    Check A, which runs sbt too, then exits 2)."""
     try:
         proc = subprocess.run(["sbt", "-batch", "-Dsbt.color=false", "Test/compile"],
                               cwd=root, capture_output=True, text=True, check=False, timeout=1800)
@@ -1129,7 +1289,18 @@ def _parse_sbt_unused(out: str, root: Path) -> tuple[Counter, int]:
     refused rather than parsed: its warnings come as `path:line:col: Unused import`, which the
     Scala 3 header pattern would pass over, and a non-zero denominator with zero findings would
     then read as a clean 2.13 tree. The target directory on the compiling line carries the
-    version (`target/scala-2.13/classes` against `target/scala-3.3.8/classes`)."""
+    version (`target/scala-2.13/classes` against `target/scala-3.3.8/classes`).
+
+    Every header must be answered by its message before the next header, and every message must
+    answer a header. Until 2026-09-10 one pending slot paired each message with the latest header:
+    on 20 saved interleaved multi-module outputs it credited 27 to 44 of 45 or 46 warnings, some
+    to the wrong file or kind. Output that breaks the pairing is refused, never counted."""
+
+    def refuse(what: str) -> None:
+        raise ScanOperationalError(
+            f"the unused-symbol diagnostics interleaved or carried a message this scan does not "
+            f"read ({what}); refusing to count them")
+
     counter: Counter = Counter()
     files = 0
     pending: str | None = None
@@ -1144,13 +1315,18 @@ def _parse_sbt_unused(out: str, root: Path) -> tuple[Counter, int]:
             continue
         m = _SBT_UNUSED_HEADER.match(line)
         if m:
+            if pending is not None:
+                refuse(f"a header for {m.group('path')} arrived before the message for {pending}")
             pending = _rel(m.group("path"), root)
             continue
-        if pending is not None:
-            m = _SBT_UNUSED_MESSAGE.match(line)
-            if m:
-                counter[(pending, m.group("msg").strip().replace(" ", "-"))] += 1
-                pending = None
+        m = _SBT_UNUSED_MESSAGE.match(line)
+        if m:
+            if pending is None:
+                refuse(f"{m.group('msg').strip()!r} arrived with no header waiting for it")
+            counter[(pending, m.group("msg").strip().replace(" ", "-"))] += 1
+            pending = None
+    if pending is not None:
+        refuse(f"the output ended before the message for {pending}")
     return counter, files
 
 
@@ -1158,9 +1334,10 @@ def run_sbt_unused(root: Path) -> Scan:
     """`clean` then `Test/compile` with `-Wunused:all` on and `-Werror` off in every project. The
     clean is not optional: zinc recompiles nothing for an unchanged file and re-reports nothing,
     so without it the second run of a planted unused parameter reads clean (measured). Zero
-    sources compiled after a clean is therefore a scan that did not happen, not an empty tree."""
-    cmd = ["sbt", "-batch", "-Dsbt.color=false", _SBT_UNUSED_SCAN_COMMAND, "gateUnusedScan",
-           "clean", "Test/compile"]
+    sources compiled after a clean is therefore a scan that did not happen, not an empty tree.
+    Modules compile one at a time (_SBT_SERIAL_COMPILE), so each warning's lines arrive together."""
+    cmd = ["sbt", "-batch", "-Dsbt.color=false", _SBT_UNUSED_SCAN_COMMAND, _SBT_SERIAL_COMPILE,
+           "gateUnusedScan", "clean", "Test/compile"]
     try:
         proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, check=False,
                               timeout=1800)
@@ -3352,11 +3529,22 @@ class ScanOperationalError(RuntimeError):
     rather than reading the absence of findings as a clean result."""
 
 
+class ScanCompileFailed(Exception):
+    """A Check A run whose own compile failed. The runner cannot tell a tree that does not compile
+    from settings only its run adds (-Werror kept under -Dgate.wartScan=true, say), so it raises
+    this and _static_scans reads it against the compile precondition: an empty scan when that failed
+    too, and exit 2 when it did not."""
+
+
 class NotWired(Exception):
-    """This check has no implementation for this toolchain. REPORTED, never skipped: `diff` lists
-    every not-wired check under `not_wired`, the coverage receipt a consumer reads to learn what
-    the gate did not look at for its language. A silent skip would make a toolchain implementing
-    one check byte-identical in output to one implementing all four."""
+    """This check has no implementation for this toolchain, or its tool is not set up in this
+    repository (a Check A runner raises it for a build without sbt-scalafix, say). REPORTED, never
+    silently skipped: `diff` lists it under `not_wired`, the coverage receipt a consumer reads to
+    learn what the gate did not look at, a Check A label as `A.<label>`. Only the Scala runners
+    raise it for Check A: run_mypy, run_bandit, run_eslint, run_tsc, run_golangci and run_checkstyle
+    still read a tool that did not run as no findings, and no entry says so. The same list carries
+    each check with no baseline scan and each check skipped by --no-static. A silent skip would make
+    a toolchain implementing one check byte-identical in output to one implementing all four."""
 
 
 class Scan:
@@ -3381,22 +3569,146 @@ class Scan:
         return f"Scan(tool={self.tool!r}, files={self.files}, findings={len(self.findings)})"
 
 
-def _diff_added_lines(baseline_sha: str) -> dict[str, set[int]]:
-    """Lines the diff ADDED, per repo-relative file, from `git diff -U0`. Check F uses it to
-    attribute a whole-tree clone to this change: only a fingerprint with at least one occurrence
-    on an added line is the branch's doing."""
-    proc = subprocess.run(["git", "diff", "-U0", baseline_sha, "--", "."],
-                          capture_output=True, text=True, check=False)
+def _git_env() -> dict[str, str]:
+    """This process's environment without git's per-repository variables. A pre-commit hook
+    exports GIT_INDEX_FILE, and in a linked worktree GIT_DIR too. With GIT_DIR set and no
+    GIT_WORK_TREE git takes the cwd as the top of the work tree, so run from a project subdirectory
+    the rename map paired every file with itself under another prefix, and G and H blocked
+    unchanged code (measured 2026-09-11). _resolve_baseline_sha strips the same list."""
+    import os
+    local = set(_git_read(["rev-parse", "--local-env-vars"], dict(os.environ)).split())
+    return {k: v for k, v in os.environ.items() if k not in local}
+
+
+def _git_read(args: list[str], env: dict[str, str], stdin: str | None = None) -> str:
+    """One git command in the cwd under `env`, which for diff's reads comes from _git_env(). A git
+    that fails or cannot be spawned raises ScanOperationalError with git's stderr on one line, never
+    an empty result: until 2026-09-10 the rename map ignored the exit status, so a bogus sha read as
+    no renames. Bytes that are not UTF-8 survive as surrogates; the strict decode raised
+    UnicodeDecodeError on a Latin-1 line."""
+    try:
+        proc = subprocess.run(["git", *args], capture_output=True, check=False, env=env, input=stdin,
+                              encoding="utf-8", errors="surrogateescape")
+    except OSError as e:
+        raise ScanOperationalError(f"cannot run git: {e}") from e
     if proc.returncode != 0:
-        raise ScanOperationalError(f"git diff against {baseline_sha} failed: {proc.stderr.strip()[:200]}")
+        raise ScanOperationalError(
+            f"git {args[0]} exited {proc.returncode}: {' '.join(proc.stderr.split())[:300]}")
+    return proc.stdout
+
+
+class _TreeIndex:
+    """The index both of diff's git reads use: a temporary copy of the repository's index with
+    every untracked, non-ignored file under the cwd marked intent-to-add. `git diff <sha>` against
+    it compares the baseline commit with the tree the scanners walk, so staged, unstaged and
+    never-added changes all count, and an unstaged plain `mv` pairs as a rename (measured). Built
+    on first use and deleted on exit. The repository's own index is only ever copied, found with
+    git's per-repository variables left out, so a hook's GIT_INDEX_FILE is not read: the reads
+    compare the working tree, which that index does not change."""
+
+    def __init__(self) -> None:
+        self._tmp = None
+        self._env: dict[str, str] | None = None
+
+    def env(self) -> dict[str, str]:
+        if self._env is None:
+            import os
+            import tempfile
+            plain = _git_env()
+            real = _git_read(["rev-parse", "--git-path", "index"], plain).strip()
+            self._tmp = tempfile.TemporaryDirectory(prefix="sdlc-gate-index-")
+            # Absolute: git resolves a relative GIT_INDEX_FILE from the repository top, not the cwd.
+            index = os.path.abspath(os.path.join(self._tmp.name, "index"))
+            try:
+                shutil.copy2(real, index)  # copy2 keeps the mtime git's racy-entry check compares
+            except FileNotFoundError:
+                # git reads a missing index as an empty one, which is the repository only while HEAD
+                # names no commit. After one, every tracked file would read as deleted, and a sparse
+                # checkout's skip-worktree entries and a submodule would too (measured 2026-09-11).
+                head = _git_read(["rev-list", "--ignore-missing", "--max-count=1", "HEAD"], plain)
+                if head.strip():
+                    raise ScanOperationalError(
+                        f"the git index {real} is missing though HEAD names a commit; without it "
+                        "git reads every tracked file as deleted")
+            except OSError as e:
+                raise ScanOperationalError(f"cannot copy the git index {real}: {e}") from e
+            # core.splitIndex=false for every git call on this index, through the environment (git
+            # 2.31+ reads GIT_CONFIG_COUNT; _git_env has already dropped any inherited one). Under a
+            # split index both the intent-to-add and a git diff that refreshed a touched file wrote
+            # a new sharedindex file into the repository's .git and left it there (measured
+            # 2026-09-11); a -c on the add alone stopped only the first.
+            env = {**plain, "GIT_INDEX_FILE": index, "GIT_CONFIG_COUNT": "1",
+                   "GIT_CONFIG_KEY_0": "core.splitIndex", "GIT_CONFIG_VALUE_0": "false"}
+            listed = _git_read(["ls-files", "--others", "--exclude-standard", "-z", "--", "."], env)
+            # A nested repository is listed as `dir/`, and git add exits 128 on one with no commit.
+            files = [f for f in listed.split("\0") if f and not f.endswith("/")]
+            if files:
+                # Literal pathspecs: git add read an untracked `:odd.py` as magic and exited 128.
+                # --sparse: without it an untracked file outside a sparse checkout's cone made git
+                # add exit 1 (measured 2026-09-11).
+                _git_read(["add", "--sparse", "--intent-to-add",
+                           "--pathspec-from-file=-", "--pathspec-file-nul"],
+                          {**env, "GIT_LITERAL_PATHSPECS": "1"}, "\0".join(files))
+            self._env = env
+        return self._env
+
+    def __enter__(self) -> "_TreeIndex":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._tmp is not None:
+            self._tmp.cleanup()
+
+
+# The git diff both of diff's reads run. Measured 2026-09-11 with git 2.43, user config otherwise
+# reaches the output: diff.noprefix and diff.mnemonicPrefix change the `b/` prefix, diff.external
+# replaces the patch, color.ui=always wraps each header in escape codes, and a textconv driver
+# shifts the line numbers.
+_GIT_DIFF = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/",
+             "--dst-prefix=b/"]
+_GIT_QUOTED = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+
+
+def _git_unquote(name: str) -> str:
+    """A name as a patch header prints it: C-quoted when it holds a double quote, a backslash, a
+    control character or a byte over 0x7f, each such byte in octal (measured 2026-09-11). Decoded
+    here, a non-ASCII name needs no core.quotePath=false."""
+    if len(name) < 2 or name[0] != '"' or name[-1] != '"':
+        return name
+    raw = re.sub(rb'\\([0-7]{3}|[abtnvfr"\\])',
+                 lambda m: bytes([int(m[1], 8) if len(m[1]) == 3 else _GIT_QUOTED[m[1].decode()]]),
+                 name[1:-1].encode("utf-8", "surrogateescape"))
+    return raw.decode("utf-8", "surrogateescape")
+
+
+def _diff_added_lines(baseline_sha: str, tree_index: _TreeIndex | None = None) -> dict[str, set[int]]:
+    """Lines the diff ADDED, per root-relative file, from `git diff -U0` over the working tree.
+    Check F uses it to attribute a whole-tree clone to this change: only a fingerprint with at
+    least one occurrence on an added line is the branch's doing. `--relative` keys the paths from
+    the cwd, as the scanners do; keyed from the repository top, a project in a subdirectory never
+    blocked F. Without `tree_index` it builds its own."""
+    if tree_index is None:
+        with _TreeIndex() as own:
+            return _diff_added_lines(baseline_sha, own)
+    stdout = _git_read([*_GIT_DIFF, "-U0", "--relative", baseline_sha, "--", "."], tree_index.env())
     out: dict[str, set[int]] = {}
     cur: str | None = None
-    for line in proc.stdout.splitlines():
-        if line.startswith("+++ "):
-            cur = None if line == "+++ /dev/null" else line[4:].removeprefix("b/")
-        elif line.startswith("@@") and cur is not None:
+    header = False
+    # Split on "\n" only, and read `+++` only between `diff --git` and the first hunk. An added line
+    # whose text starts `++ ` prints as `+++ `, and str.splitlines broke a line at U+2028, so text
+    # could start a `diff --git` line too: either forged a header that hid the file's later hunks,
+    # and a clone placed there passed F (measured 2026-09-11).
+    for line in stdout.split("\n"):
+        if line.startswith("diff --git "):
+            header = True
+        elif header and line.startswith("+++ "):
+            # git ends the header with a TAB when the name holds a space (measured 2026-09-11).
+            name = line[4:].removesuffix("\t")
+            cur = None if name == "/dev/null" else _git_unquote(name).removeprefix("b/")
+        elif line.startswith("@@"):
+            header = False
             m = re.search(r"\+(\d+)(?:,(\d+))?", line)
-            if m:
+            if m and cur is not None:
                 start, n = int(m.group(1)), int(m.group(2) or "1")
                 out.setdefault(cur, set()).update(range(start, start + max(n, 1)))
     return out
@@ -3413,7 +3725,10 @@ class Toolchain:
     def detect(self, root: Path) -> bool:
         return False
 
-    def static_analysis(self, root: Path) -> dict[str, Counter]:
+    def static_analysis(self, root: Path) -> dict[str, Counter | NotWired | ScanCompileFailed]:
+        """Check A: findings per label. A label whose tool this repository has not set up maps to
+        the NotWired its runner raised, and a label whose run did not compile to its
+        ScanCompileFailed; a runner that cannot run raises ScanOperationalError."""
         return {}
 
     def normalize(self, label: str, counter: Counter) -> Counter:
@@ -3535,8 +3850,16 @@ class ScalaToolchain(Toolchain):
     def detect(self, root: Path) -> bool:
         return (root / "build.sbt").exists()
 
-    def static_analysis(self, root: Path) -> dict[str, Counter]:
-        return {"scalafix": run_scalafix(root), "wartremover": run_wartremover(root)}
+    def static_analysis(self, root: Path) -> dict[str, Counter | NotWired | ScanCompileFailed]:
+        # Each runner on its own, so a scalafix that is not set up, or whose compile failed, still
+        # leaves the wart scan to run and be reported, and the other way round.
+        out: dict[str, Counter | NotWired | ScanCompileFailed] = {}
+        for label, runner in (("scalafix", run_scalafix), ("wartremover", run_wartremover)):
+            try:
+                out[label] = runner(root)
+            except (NotWired, ScanCompileFailed) as e:
+                out[label] = e
+        return out
 
     def suppressions(self, root: Path) -> Counter:
         return scan_scala_suppressions(root)
@@ -3814,7 +4137,8 @@ def _capture_agent_scans(tc: "Toolchain", root: Path) -> dict[str, dict]:
 
 
 def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha: str,
-                      rename_map: dict[str, str], deleted: set[str]
+                      rename_map: dict[str, str], deleted: set[str],
+                      tree_index: _TreeIndex | None = None
                       ) -> tuple[list[dict], list[str], dict[str, dict]]:
     """Run E-H against the baseline's agent-scans.json. Returns (blocks, not_wired, scans)."""
     base_all = _load_agent_scans(base_dir)
@@ -3830,6 +4154,12 @@ def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha:
         if "not_wired" in base:
             not_wired.append(f"{check}: {base['not_wired']}")
             continue
+        # A --no-static baseline has no scan to compare, and an entry like this would crash on
+        # base["files"] below. cmd_diff refuses the mismatch whenever no-static.txt is present;
+        # this covers a baseline dir without it.
+        if "skipped" in base:
+            not_wired.append(f"{check}: baseline captured with --no-static; not compared")
+            continue
         try:
             branch = getattr(tc, method_name)(root)
         except NotWired as e:
@@ -3844,7 +4174,11 @@ def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha:
             sys.exit(2)
         scans[check] = {"tool": branch.tool, "files_branch": branch.files, "files_baseline": base["files"]}
         if added is None:
-            added = _diff_added_lines(baseline_sha)
+            try:
+                added = _diff_added_lines(baseline_sha, tree_index)
+            except ScanOperationalError as e:
+                sys.stderr.write(f"sdlc-gate: {e}\n")
+                sys.exit(2)
         blocks.extend(differ(branch.findings, _deserialize_scan(base["findings"]), rename_map, deleted, added))
     return blocks, not_wired, scans
 
@@ -3852,19 +4186,121 @@ def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha:
 # --- Subcommands --------------------------------------------------------------
 
 
+def _resolve_baseline_sha(root: Path, sha: str) -> str:
+    """The full commit id `sha` names, once `root` is shown to be a checkout of that commit with no
+    tracked changes under it and no file under it marked skip-worktree or assume-unchanged; any
+    other state exits 2 before a scanner runs or a file is written.
+    baseline scans the tree at `root` and files it under `sha`, and until 2026-09-10 nothing tied
+    the two: run in the branch checkout with --sha at the merge-base, as the install doc said, it
+    recorded the branch as its own baseline, and diff passed A, E, F, G and H plants on
+    TypeScript, Scala and Python. Untracked files are allowed: the documented flow links
+    node_modules into the worktree, and uv creates .venv there."""
+    import os
+
+    def refuse(why: str) -> None:
+        sys.stderr.write(f"sdlc-gate: baseline refused: {why}\n")
+        sys.exit(2)
+
+    def git(args: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(["git", *args], capture_output=True, check=False, env=env,
+                                  encoding="utf-8", errors="surrogateescape")
+        except OSError as e:
+            refuse(f"cannot run git: {e}")
+            raise  # not reached: refuse exits
+
+    def said(proc: subprocess.CompletedProcess) -> str:
+        return " ".join(proc.stderr.split())[:300]
+
+    def listed(paths: list[str]) -> str:
+        return ", ".join(paths[:5]) + (f" and {len(paths) - 5} more" if len(paths) > 5 else "")
+
+    # GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and git's other per-repository variables outrank -C.
+    # Measured: with a hook-style GIT_DIR and GIT_WORK_TREE naming a worktree at --sha, rev-parse
+    # read that worktree's HEAD and status its tree while the scanners would walk --root.
+    local = set(git(["rev-parse", "--local-env-vars"]).stdout.split())
+    env = {k: v for k, v in os.environ.items() if k not in local}
+    at = ["-C", str(root)]
+
+    inside = git([*at, "rev-parse", "--is-inside-work-tree"], env)
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        detail = said(inside) or f"git rev-parse --is-inside-work-tree printed {inside.stdout.strip()!r}"
+        refuse(f"--root {root} is not inside a git work tree ({detail})")
+    named = git([*at, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"], env)
+    full = named.stdout.strip()
+    if named.returncode != 0:
+        refuse(f"--sha {sha!r} does not name a commit in the repository at {root}")
+    head = git([*at, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env).stdout.strip()
+    if head != full:
+        wanted = full if sha == full else f"{sha} ({full})"
+        refuse(f"--root {root} is checked out at {head or 'no commit'}, not at --sha {wanted}; "
+               "baseline scans the tree at --root, so check out --sha (for example in a worktree "
+               "at the merge-base) and run baseline there")
+    status = git([*at, "status", "--porcelain", "--untracked-files=no", "--", "."], env)
+    if status.returncode != 0:
+        refuse(f"git status in {root} exited {status.returncode}: {said(status)}")
+    changed = [line[3:] for line in status.stdout.splitlines() if line.strip()]
+    if changed:
+        refuse(f"--root {root} has tracked changes against {full} ({listed(changed)}); baseline "
+               "scans the working tree, so run it in a checkout of --sha with no tracked changes")
+    # git status does not look at a file marked skip-worktree or assume-unchanged, so an edit to one
+    # was scanned and filed under --sha (measured 2026-09-11). ls-files -v tags the first S and the
+    # second in lowercase.
+    tagged = git([*at, "ls-files", "-v", "-z", "--", "."], env)
+    if tagged.returncode != 0:
+        refuse(f"git ls-files in {root} exited {tagged.returncode}: {said(tagged)}")
+    hidden = [e[2:] for e in tagged.stdout.split("\0") if e and (e[0] == "S" or e[0].islower())]
+    if hidden:
+        refuse(f"--root {root} has files marked skip-worktree or assume-unchanged "
+               f"({listed(hidden)}), whose edits git status does not report; baseline scans the "
+               "working tree, so clear the flags (git update-index --no-skip-worktree or "
+               "--no-assume-unchanged, or git sparse-checkout disable) and run it again")
+    return full
+
+
+def _static_scans(tc: "Toolchain", root: Path, build: str) -> tuple[dict[str, Counter], dict[str, str]]:
+    """Check A for baseline and diff: (findings per label, reason per label not set up here). A
+    scanner that raises ScanOperationalError exits 2 with one line: run_ruff, the Scala runners, and
+    run_mypy or run_bandit when uv or uvx cannot be spawned. Otherwise run_mypy, run_bandit,
+    run_eslint, run_tsc, run_golangci and run_checkstyle still read a tool that did not run as no
+    findings. Until 2026-09-10 neither caller caught the error: a ruff that could not run exited 1
+    with a traceback (measured). `build` is this tree's compile precondition. A label whose own
+    compile failed is an empty scan only when that failed too, which diff blocks as Build; otherwise
+    the gate exits 2. Until 2026-09-11 every such compile failure was an empty scan, and with
+    -Werror kept under -Dgate.wartScan=true a new wart passed (measured on W)."""
+    try:
+        scans = tc.static_analysis(root)
+    except ScanOperationalError as e:
+        sys.stderr.write(f"sdlc-gate: {' '.join(str(e).split())}\n")
+        sys.exit(2)
+    failed = [f"A.{label}: {s}" for label, s in scans.items() if isinstance(s, ScanCompileFailed)]
+    if failed and build != "fail":
+        why = ("the compile precondition passed, so the scan's own settings break the build"
+               if build == "ok" else f"the compile precondition returned {build}, not fail")
+        sys.stderr.write(f"sdlc-gate: {' '.join('; '.join(failed).split())}; {why} and its empty "
+                         "result is not a clean one\n")
+        sys.exit(2)
+    return ({label: Counter() if isinstance(s, ScanCompileFailed) else s
+             for label, s in scans.items() if not isinstance(s, NotWired)},
+            {label: str(s) for label, s in scans.items() if isinstance(s, NotWired)})
+
+
 def cmd_baseline(args: argparse.Namespace) -> None:
+    root = Path(args.root).resolve()
+    sha = _resolve_baseline_sha(root, args.sha)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    root = Path(args.root).resolve()
     tc = select_toolchain(root, getattr(args, "toolchain", None))
+    no_static = bool(getattr(args, "no_static", False))
 
-    sys.stderr.write(f"sdlc-gate: capturing {tc.name} baseline at {out_dir} (sha={args.sha})\n")
-    static = {} if getattr(args, "no_static", False) else tc.static_analysis(root)
+    sys.stderr.write(f"sdlc-gate: capturing {tc.name} baseline at {out_dir} (sha={sha})\n")
+    # The compile precondition status travels with the baseline so diff can fail-closed on a
+    # baseline that did not compile (its empty static scan is not trustworthy). It runs first, as
+    # in diff, because Check A reads a compile failure of its own against it.
+    build_status = "skip" if no_static else tc.compile_check(root)
+    static, static_not_wired = ({}, {}) if no_static else _static_scans(tc, root, build_status)
     suppressions = tc.suppressions(root)
     test_w = tc.test_weakening(root)
-    # The compile precondition status travels with the baseline so diff can fail-closed on a
-    # baseline that did not compile (its empty static scan is not trustworthy).
-    build_status = "skip" if getattr(args, "no_static", False) else tc.compile_check(root)
     coverage: dict[str, float] = {}
     if getattr(args, "coverage", False):
         try:
@@ -3875,13 +4311,26 @@ def cmd_baseline(args: argparse.Namespace) -> None:
 
     for label, counter in static.items():
         (out_dir / f"static-{label}.json").write_text(json.dumps(_serialize(counter), indent=2))
+    # A label not set up here has no findings and its reason recorded, so diff can tell it from a
+    # label that ran and found nothing, and refuse a branch that drops a linter the baseline ran.
+    for label in static_not_wired:
+        (out_dir / f"static-{label}.json").write_text(json.dumps([], indent=2))
+    (out_dir / "static-not-wired.json").write_text(json.dumps(static_not_wired, indent=2))
     (out_dir / "suppressions.json").write_text(json.dumps(_serialize(suppressions), indent=2))
     (out_dir / "test-weakening.json").write_text(json.dumps(test_w, indent=2))
-    agent_scans = _capture_agent_scans(tc, root)
+    # E-H run external tools too (Scala's E is `sbt clean Test/compile`), so --no-static skips
+    # them. Until 2026-09-10 they ran regardless: with uvx off PATH, `baseline --no-static
+    # --toolchain python` exited 2. Each skip is recorded, never omitted.
+    if no_static:
+        agent_scans = {check: {"skipped": "--no-static"} for check, _, _ in _AGENT_CHECKS}
+    else:
+        agent_scans = _capture_agent_scans(tc, root)
     (out_dir / "agent-scans.json").write_text(json.dumps(agent_scans, indent=2))
-    (out_dir / "sha.txt").write_text(args.sha + "\n")
+    (out_dir / "sha.txt").write_text(sha + "\n")
     (out_dir / "toolchain.txt").write_text(tc.name + "\n")
     (out_dir / "build.txt").write_text(build_status + "\n")
+    # The mode travels with the baseline so diff can refuse a mismatch before scanning anything.
+    (out_dir / "no-static.txt").write_text(("true" if no_static else "false") + "\n")
     if getattr(args, "coverage", False):
         (out_dir / "coverage.json").write_text(json.dumps(coverage, indent=2))
 
@@ -3889,13 +4338,15 @@ def cmd_baseline(args: argparse.Namespace) -> None:
         json.dumps(
             {
                 "ok": True,
-                "sha": args.sha,
+                "sha": sha,
                 "toolchain": tc.name,
+                "no_static": no_static,
                 "out_dir": str(out_dir),
                 "static": {
                     label: {"total": sum(c.values()), "keys": len(c)}
                     for label, c in static.items()
                 },
+                "static_not_wired": static_not_wired,
                 "suppressions_total": sum(suppressions.values()),
                 "suppressions_keys": len(suppressions),
                 "skip_total": sum(test_w["skips"].values()),
@@ -3907,25 +4358,29 @@ def cmd_baseline(args: argparse.Namespace) -> None:
     )
 
 
-def _git_rename_map(baseline_sha: str) -> tuple[dict[str, str], set[str]]:
-    """Returns (rename_map: baseline_path -> branch_path, deleted_paths)."""
-    proc = subprocess.run(
-        ["git", "diff", "--name-status", "-M", f"{baseline_sha}..HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _git_rename_map(baseline_sha: str, tree_index: _TreeIndex | None = None
+                    ) -> tuple[dict[str, str], set[str]]:
+    """Returns (rename_map: baseline_path -> branch_path, deleted_paths), root-relative, for the
+    working tree against the baseline commit. Until 2026-09-10 it read <sha>..HEAD with paths from
+    the repository top: a staged `git mv` made Check G block two unchanged functions, and in a
+    subdirectory project B, E and G blocked a pure rename. Without `tree_index` it builds its own."""
+    if tree_index is None:
+        with _TreeIndex() as own:
+            return _git_rename_map(baseline_sha, own)
+    # -z: each name verbatim. The line form quoted a non-ASCII name (measured 2026-09-11).
+    stdout = _git_read([*_GIT_DIFF, "--name-status", "-z", "-M", "--relative", baseline_sha, "--",
+                        "."], tree_index.env())
     rename_map: dict[str, str] = {}
     deleted: set[str] = set()
-    for line in proc.stdout.splitlines():
-        parts = line.split("\t")
-        if not parts:
-            continue
-        status = parts[0]
-        if status.startswith(("R", "C")) and len(parts) >= 3:
-            rename_map[parts[1]] = parts[2]
-        elif status == "D" and len(parts) >= 2:
-            deleted.add(parts[1])
+    fields = iter(stdout.split("\0"))
+    for status in fields:
+        if status.startswith(("R", "C")):
+            old, new = next(fields, ""), next(fields, "")
+            rename_map[old] = new
+        elif status:
+            path = next(fields, "")
+            if status == "D":
+                deleted.add(path)
     return rename_map, deleted
 
 
@@ -3961,6 +4416,10 @@ def _load_baseline_snapshots(base_dir: Path) -> dict:
         counter = _deserialize(json.loads(f.read_text())) if f.exists() else Counter()
         static[label] = tc.normalize(label, counter)
 
+    # None for a baseline dir from a gate that did not write the file: every label counts as set up.
+    nw_path = base_dir / "static-not-wired.json"
+    static_not_wired = json.loads(nw_path.read_text()) if nw_path.exists() else None
+
     baseline_supp = _deserialize(json.loads((base_dir / "suppressions.json").read_text()))
     tw_path = base_dir / "test-weakening.json"
     if not tw_path.exists():
@@ -3972,6 +4431,7 @@ def _load_baseline_snapshots(base_dir: Path) -> dict:
         "toolchain": tc_name,
         "tc": tc,
         "static": static,
+        "static_not_wired": static_not_wired,
         "supp": baseline_supp,
         "tw": baseline_tw,
     }
@@ -4057,15 +4517,13 @@ def _matching_waiver(waivers: list[dict], file: str) -> dict | None:
 def _removed_assert_predicates(baseline_sha: str, file: str) -> list[str]:
     """Normalized predicate text of each assertion removed from `file`
     between the baseline commit and the working tree. Empty on git failure
-    (treated by the caller as a failed verification → block)."""
+    (treated by the caller as a failed verification, so the loss blocks).
+    Read like diff's other git reads: a plain git diff under color.ui=always
+    wrapped each removed line in escape codes, so a correct waiver found no
+    removed assertion (measured 2026-09-11)."""
     try:
-        out = subprocess.run(
-            ["git", "diff", baseline_sha, "--", file],
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout
-    except OSError:
+        out = _git_read([*_GIT_DIFF, baseline_sha, "--", file], _git_env())
+    except ScanOperationalError:
         return []
     preds: list[str] = []
     for line in out.splitlines():
@@ -4215,7 +4673,40 @@ def cmd_diff(args: argparse.Namespace) -> None:
         sys.exit(2)
 
     baseline = _load_baseline_snapshots(base_dir)
-    rename_map, deleted = _git_rename_map(baseline["sha"])
+    no_static = bool(getattr(args, "no_static", False))
+    # The modes must match. A full diff against a --no-static baseline reads every existing
+    # Check A finding as new, since that baseline recorded none; a --no-static diff against a full
+    # baseline compares an empty scan to real findings and reads clean. Refused before any scanner
+    # runs. A baseline dir without no-static.txt came from an older gate and is not enforced.
+    mode_file = base_dir / "no-static.txt"
+    if mode_file.exists():
+        try:
+            recorded = mode_file.read_text().strip()
+        except (OSError, UnicodeDecodeError) as e:
+            recorded = f"<unreadable: {e}>"
+        wanted = "true" if no_static else "false"
+        if recorded not in ("true", "false"):
+            sys.stderr.write(f"sdlc-gate: {mode_file} holds {recorded!r}, not true or false; "
+                             "recapture the baseline\n")
+            sys.exit(2)
+        if recorded != wanted:
+            sys.stderr.write(f"sdlc-gate: the baseline was captured with no-static={recorded} and "
+                             f"this diff runs with no-static={wanted}; pass the same --no-static "
+                             "flag to baseline and diff\n")
+            sys.exit(2)
+    with _TreeIndex() as tree_index:
+        _diff_against_baseline(args, base_dir, baseline, no_static, tree_index)
+
+
+def _diff_against_baseline(args: argparse.Namespace, base_dir: Path, baseline: dict, no_static: bool,
+                           tree_index: _TreeIndex) -> None:
+    """cmd_diff once the baseline has loaded: every scan, every check, the report and the exit.
+    Both git reads share `tree_index`, which cmd_diff deletes when this exits."""
+    try:
+        rename_map, deleted = _git_rename_map(baseline["sha"], tree_index)
+    except ScanOperationalError as e:
+        sys.stderr.write(f"sdlc-gate: {e}\n")
+        sys.exit(2)
 
     root = Path().resolve()
     tc: Toolchain = baseline["tc"]
@@ -4224,18 +4715,30 @@ def cmd_diff(args: argparse.Namespace) -> None:
     # linters, so an empty static scan must not read as "no new findings". If either the branch
     # or the baseline fails to compile, block immediately — before running (and trusting) the
     # scanners. 'skip' (sbt not wired) is a no-op; a pre-port baseline with no build.txt is 'skip'.
-    branch_build = "skip" if getattr(args, "no_static", False) else tc.compile_check(root)
+    branch_build = "skip" if no_static else tc.compile_check(root)
     baseline_build = (base_dir / "build.txt").read_text().strip() if (base_dir / "build.txt").exists() else "skip"
     compile_blocks = _compile_precondition_blocks(branch_build, baseline_build)
     if compile_blocks:
         sys.stdout.write(json.dumps({
             "verdict": "fail", "toolchain": tc.name, "baseline_sha": baseline["sha"],
-            "blocks": compile_blocks, "advisories": [],
+            "no_static": no_static, "blocks": compile_blocks, "advisories": [],
             "summary": {"compile": {"branch": branch_build, "baseline": baseline_build}},
         }, indent=2) + "\n")
         sys.exit(1)
 
-    branch_static = {} if getattr(args, "no_static", False) else tc.static_analysis(root)
+    branch_static, branch_not_wired = ({}, {}) if no_static else _static_scans(tc, root, branch_build)
+    # A linter the baseline ran and this tree has not set up would compare the baseline's findings
+    # with none and read clean, so the branch that removed it is refused rather than judged.
+    base_not_wired = baseline["static_not_wired"]
+    removed = [label for label in branch_not_wired if label not in (base_not_wired or {})]
+    if removed:
+        older = ("" if base_not_wired is not None else
+                 "; the baseline has no static-not-wired.json, so it came from an older gate and "
+                 "counts every label as set up: recapture it if that is wrong")
+        which = ", ".join(f"A.{label} ({branch_not_wired[label]})" for label in removed)
+        sys.stderr.write(f"sdlc-gate: {which}: set up at the baseline but not on this tree; a branch "
+                         f"that removes a linter cannot be judged by it{older}\n")
+        sys.exit(2)
     branch_supp = tc.suppressions(root)
     branch_tw = tc.test_weakening(root)
 
@@ -4293,9 +4796,15 @@ def cmd_diff(args: argparse.Namespace) -> None:
         baseline_cov = json.loads(cov_path.read_text()) if cov_path.exists() else {}
         blocks.extend(_diff_coverage(branch_cov, baseline_cov, rename_map, COVERAGE_EPSILON))
 
-    agent_blocks, not_wired, agent_scans = _run_agent_checks(
-        tc, root, base_dir, baseline["sha"], rename_map, deleted)
+    if no_static:
+        # No E-H method and no `git diff -U0`: each check is listed as skipped instead.
+        agent_blocks, agent_scans = [], {}
+        not_wired = [f"{check}: skipped by --no-static" for check, _, _ in _AGENT_CHECKS]
+    else:
+        agent_blocks, not_wired, agent_scans = _run_agent_checks(
+            tc, root, base_dir, baseline["sha"], rename_map, deleted, tree_index)
     blocks.extend(agent_blocks)
+    not_wired.extend(f"A.{label}: {reason}" for label, reason in branch_not_wired.items())
 
     if blocks:
         verdict = "fail"
@@ -4308,11 +4817,17 @@ def cmd_diff(args: argparse.Namespace) -> None:
         "verdict": verdict,
         "toolchain": tc.name,
         "baseline_sha": baseline["sha"],
+        # true: --no-static skipped Check A and the compile precondition. false does not prove their
+        # tools ran: several Check A scanners read a tool that did not run as no findings.
+        "no_static": no_static,
         "blocks": blocks,
         "advisories": advisories,
-        # The coverage receipt: which of E-H did NOT run for this toolchain, and the file
-        # denominators of those that did. A consumer reads this to know what the gate did not
-        # look at; a report listing only findings reads identical whether it ran four checks or none.
+        # The coverage receipt: which of E-H did NOT run (not wired for this toolchain, no
+        # baseline scan, or skipped by --no-static), then each Check A label whose runner found its
+        # tool not set up, as A.<label> (only the Scala runners check); and the file denominators of
+        # the E-H checks that did run.
+        # A consumer reads this to know what the gate did not look at; a report listing only
+        # findings reads identical whether it ran four checks or none.
         "not_wired": not_wired,
         "agent_scans": agent_scans,
         "summary": {
@@ -4340,16 +4855,24 @@ def main() -> None:
         "baseline",
         help="Capture static-analysis / suppression / test-weakening baselines from the current tree",
     )
-    p_baseline.add_argument("--sha", required=True, help="SHA being captured")
+    p_baseline.add_argument("--sha", required=True,
+                            help="Commit being captured. --root must be checked out at it with no "
+                                 "tracked changes, else exit 2; the full commit id is recorded.")
     p_baseline.add_argument("--out", required=True, help="Output directory")
     p_baseline.add_argument("--root", default=".", help="Project root (default: cwd)")
-    p_baseline.add_argument("--toolchain", default=None, choices=["python", "scala", "java"],
-                            help="Force the toolchain (default: auto-detect build.sbt/pom.xml/"
-                                 "build.gradle/pyproject.toml)")
+    # From the registry, so a toolchain added there cannot be refused here again: this list was
+    # python|scala|java while go and typescript were registered and select_toolchain's own error
+    # told the caller to pass them.
+    p_baseline.add_argument("--toolchain", default=None, choices=sorted(_TOOLCHAINS),
+                            help="Force the toolchain (default: auto-detect from build.sbt, "
+                                 "pom.xml/build.gradle/build.gradle.kts, pyproject.toml/setup.py, "
+                                 "go.mod, or package.json/tsconfig.json)")
     p_baseline.add_argument("--no-static", action="store_true",
-                            help="Skip the static-analysis scanners (sbt/uv); run only the fast "
-                                 "regex checks (suppressions + test-weakening). Use the SAME flag on "
-                                 "baseline and diff.")
+                            help="Skip the scanners that run external tools: Check A, the compile "
+                                 "precondition, and Checks E-H. Checks B, C and D still run, and "
+                                 "--coverage, if given, still runs its tool. diff lists each "
+                                 "skipped E-H check under not_wired. Use the SAME flag on baseline "
+                                 "and diff; a mismatch exits 2.")
     p_baseline.add_argument("--coverage", action="store_true",
                             help="Also capture scoverage statement coverage (scala). Runs an "
                                  "instrumented clean+test — heavy, opt-in. Use the SAME flag on diff.")
@@ -4374,7 +4897,10 @@ def main() -> None:
         ),
     )
     p_diff.add_argument("--no-static", action="store_true",
-                        help="Skip the static-analysis scanners; must match the baseline's capture.")
+                        help="Skip the scanners that run external tools: Check A, the compile "
+                             "precondition, and Checks E-H, each skipped E-H check listed under "
+                             "not_wired; --coverage, if given, still runs its tool. Must match the "
+                             "baseline's capture; a mismatch exits 2.")
     p_diff.add_argument("--coverage", action="store_true",
                         help="Also diff scoverage coverage vs the baseline (scala); a per-directory "
                              "statement-coverage drop beyond 0.5pp blocks. Must match the baseline's "
