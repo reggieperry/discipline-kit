@@ -6,24 +6,24 @@ Portable engineering discipline for Claude Code — the auto-loading rules, prin
 
 The kit's operator is Claude Code; the interface is the prompt. Use the prompts below to install the kit. Each is **read-first** (it points the instance at the docs before it acts), ends with a **receipt demand** (show me the output), and is **dual-audience** — the instance reading this README executes the prompt as its own checklist. There is one ceremony: the **Install** prompt. After it, the auto-loading rules make the discipline ambient — the rest are orientation and recovery, not setup.
 
-> **Install (one time):** "The discipline kit is at `<path>` (or: clone `<repo-url>` to a sibling directory). Read its `README.md`, `install.md`, and `SECURITY.md` first. Then install the harness into this repository and run its acceptance in one command — `install-harness.sh --dir . --verify` — the single-user (private) tier is the only shipped mode. Show me the full verify output, including the forgery-probe result and the `VERSION` stamp. After install, most users should run the Tour prompt next."
+> **Install (one time):** "The discipline kit is at `<path>` (or: clone `<repo-url>` to a sibling directory). Read its `README.md` and `SECURITY.md` first. Run `./install.sh` from the kit to place the user-level pieces, then run the per-project lines it prints inside this repository. Show me the installer's output and `git status` afterwards."
 >
 >
 >
-> **When a commit blocks:** "Show me the refuted claim and the check output verbatim, then walk me through the three honest moves before touching anything."
+> **When a commit blocks:** "Show me the check that failed and its output verbatim, then walk me through the three honest moves before touching anything."
 >
-> **Upgrade:** "Run `install-harness.sh --upgrade`, show me the `VERSION` delta, and re-run `harness-verify`."
+> **Upgrade:** "Pull the kit, run `./install.sh` again for the user-level pieces, and run `install.sh --refresh-rules` inside this repository to take the rules from the newest release tag. Show me what changed."
 >
 >
-> **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the authoring-layer entry in the operators-manual's Options section and the four skills — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files."
+> **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the four authoring skills under the kit's `harness/skills/` — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files."
 
-This installs the rules, the review skills, and a commit-path check. Authoring stories and ADRs — written locally or pulled from your team's board over its API — is the optional authoring layer (a Tour choice, above); the opt-in build chain that runs them is documented below; the trust model is `SECURITY.md`.
+This installs the rules and the review skills. It installs no git hook: the gate section below shows how to run the gate, including as a pre-commit hook. Authoring stories and ADRs — written locally or pulled from your team's board over its API — is the optional authoring layer (a Tour choice, above); the opt-in build chain that runs them is documented below; the trust model is `SECURITY.md`.
 
 It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It also ships an **opt-in, attended-only build chain** (see below), off by default; the heavier autonomous robot the source system runs does not come along.
 
 ## Status, scope, and license
 
-**v1.5.1.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the rule-grade check and its fixture, the differential-gate unit tests, and the algebra-note validator — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
+**v2.0.0.** Licensed under **Apache-2.0** (`LICENSE`). CI runs the kit's own acceptance suite — the scrub-gate, the rule-grade check and its fixture, the differential-gate unit tests, and the algebra-note validator — on every push and pull request (`.github/workflows/ci.yml`, read-only, no secrets). Security posture and trust boundaries: `SECURITY.md`.
 
 **The dev-ledger was removed on 2026-07-30.** Its own record showed every signature it ever minted cited a single check — the repo's mechanical check — so the claim apparatus carried no information the check did not already return. What survives is the part that was catching things: the auto-loading rules, the review skills, the differential gate, and a commit-path check (`scripts/check.sh`). See `CHANGELOG.md`.
 
@@ -35,11 +35,13 @@ claude-user/            → installs into ~/.claude
   settings.json           conservative permissions (local git only, no auto-bypass)
   skills/deep-reason/     fresh-context adversary and verdict subagent
   skills/pr-review/       language-aware collaborative PR/branch/diff review
-  skills/adversarial-review/  N role-partitioned adversaries against a diff (pre-pr/own-pr/foreign-pr)
+  skills/adversarial-review/  N role-partitioned adversaries against a diff (pre-pr/own-pr/foreign-pr);
+                          copy it by hand, install.sh places deep-reason and pr-review
 claude-project/         → copies into each repo's .claude/
-  rules/                  50 auto-loading rules in three layers:
+  rules/                  57 auto-loading rules in three layers:
                           craft-* (language-neutral: abstraction, complexity,
-                            documentation, domain-modeling, refactoring, tdd, xunit)
+                            documentation, domain-modeling, logging, measurement,
+                            refactoring, tdd, xunit)
                             + decoupling + writing-style
                           go-*     (8: style, errors, types, concurrency, modules,
                             testing, security, llm)
