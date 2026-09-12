@@ -12,7 +12,7 @@ The kit's operator is Claude Code; the interface is the prompt. Use the prompts 
 >
 > **When a commit blocks:** "Show me the check that failed and its output verbatim, then walk me through the three honest moves before touching anything."
 >
-> **Upgrade:** "Pull the kit, run `./install.sh` again for the user-level pieces, and run `install.sh --refresh-rules` inside this repository to take the rules from the newest release tag. Show me what changed."
+> **Upgrade:** "The kit is at `<path-to-kit>`. Do these five in order. (1) `git -C <path-to-kit> pull`, which brings the new release tag with it. (2) Read **Staying current** in `<path-to-kit>/README.md`, which the pull you just did is what puts there. (3) Confirm you now have the NEW installer *without running it*: `grep -c -- '--version' <path-to-kit>/install.sh` must print a count above zero. Do not probe by running the installer: every installer *before* v2.0.0 parses no arguments at all, so handed a flag it ignores it and performs a full user-level install from the stale tree instead (measured on v1.5.1: exit 0, eight files written into the home directory). v2.0.0 itself refuses an unknown flag safely but has no `--version` to ask with, so a zero count means the pull did not bring the new installer. (4) `<path-to-kit>/install.sh --refresh-rules --dir .` inside this repository, which takes the rules and the guides from the newest release tag; read what it says it copied aside. (5) `<path-to-kit>/install.sh` for the user-level pieces. Then show me `cat .claude/rules/.kit-version` and `cat ~/.claude/discipline/KIT-VERSION` as the receipt, including the `state:` line and the per-piece dispositions."
 >
 >
 > **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the four authoring skills under the kit's `harness/skills/` — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files."
@@ -20,6 +20,76 @@ The kit's operator is Claude Code; the interface is the prompt. Use the prompts 
 This installs the rules and the review skills. It installs no git hook: the gate section below shows how to run the gate, including as a pre-commit hook. Authoring stories and ADRs — written locally or pulled from your team's board over its API — is the optional authoring layer (a Tour choice, above); the opt-in build chain that runs them is documented below; the trust model is `SECURITY.md`.
 
 It is distilled from a personal SDLC discipline pack, a Go/Python craft taxonomy developed in a separate Go-harness repo, and an accumulated corpus of working memories, with every machine, project, and personal identifier removed. The rule layer is multi-language: a language-neutral `craft-*` core plus per-language `go-*`, `python-*`, `scala-*` (Scala 3 + cats-effect), `java-*` (Java 21 LTS), and `ts-*` (TypeScript/React+Vite) rules (the `pr-review` skill loads the reviewed repo's matching layer). What lands here is the *interactive discipline*: the part that makes a single Claude Code session reason and review better. It also ships an **opt-in, attended-only build chain** (see below), off by default; the heavier autonomous robot the source system runs does not come along.
+
+### Staying current
+
+Two stamps say what a machine actually has, and both are plain text a session can `cat`:
+
+- `~/.claude/discipline/KIT-VERSION` (or under `$CLAUDE_HOME`), written by the user-level
+  install. It records a **state**, the kit path, the commit, `git describe`, the install time,
+  and **a disposition per piece**. It names a **commit rather than a release**, and says so,
+  because that mode copies `claude-user/` and `reference/` from the checkout's working tree. Read
+  the dispositions, not only the commit: `installed` means this run wrote the kit's copy, while
+  `kept-existing` means the file was already there and was left alone, so after an upgrade it
+  still holds the previous release's text. `CLAUDE.md` and `settings.json` are the two that are
+  never overwritten, which is why the stamp records them one by one instead of letting one commit
+  speak for the whole install. The state works as the refresh stamp's does below: it is written
+  before the first copy and rewritten after the last, so `complete` means every copy succeeded
+  and `in-progress` or `partial` means a run died partway, with the dispositions naming the
+  pieces it reached.
+- `<repo>/.claude/rules/.kit-version`, written by `--refresh-rules`. It records a **state**, the
+  **release tag** the rules and guides came from, that tag's commit, the kit path it was run
+  from, the time, and the counts. It is a dotfile with no `.md` suffix, so no rule loader picks
+  it up. The state is written *before* the first copy and rewritten after the last: `complete`
+  means every copy succeeded, and `in-progress` or `partial` means a run died partway and some
+  files here are the new tag while others are not. A stamp may be stale; it may not be wrong.
+
+Compare either against `<path-to-kit>/install.sh --version`, which prints the kit path, the
+commit, `git describe`, the newest release tag the checkout can see, and the flags this installer
+supports. It creates no file and copies nothing, so it is safe to run before deciding to install.
+(It is not a no-op on disk: `git describe --dirty` refreshes the checkout's git index, as any
+status-like git read does. No tracked content changes.) `git describe` names the nearest ancestor
+release tag plus the distance from it, so `v2.0.0-7-g1a2b3c4` means *seven commits past* v2.0.0,
+not v2.0.0.
+
+Two facts decide whether that comparison means anything:
+
+- **Tags arrive by fetch.** A checkout whose tags were never fetched resolves the newest tag it
+  has been *told* about, refreshes a repo from it, and reports success. A plain
+  `git -C <path-to-kit> pull` brings new tags with it; `git -C <path-to-kit> fetch --tags` is the
+  direct form.
+- **An old installer ignores flags.** Every installer *before* v2.0.0, which is v1.0.0 through
+  v1.5.1, parses no arguments: handed `--version` or `--refresh-rules` it ignores the flag and
+  runs a full user-level install from whatever the checkout holds (measured on v1.5.1: exit 0,
+  eight files into the home directory). v2.0.0 does parse flags and refuses an unknown one with
+  usage and exit 2, writing nothing, but it carries no `--version` to ask with. Either way you
+  cannot tell which you hold without looking, so probe with `grep`, never by running it.
+
+What `--refresh-rules` does to a repository, so none of it is a surprise: it copies the tag's
+rules over `.claude/rules/` and the tag's guides over `.claude/sdlc-discipline/guides/`. If that
+guides directory does not exist it is reported and skipped, never created. **Rules and guides are
+protected the same way**, since both are replaced wholesale: a file whose exact bytes match no
+release tag the kit checkout can see is copied aside to `<name>.md.local-<timestamp>` before
+being overwritten, what was preserved is listed, and a second backup in the same second is
+numbered rather than allowed to overwrite the first. A kit-named rule the resolved tag no longer
+ships is reported and left in place for you to retire. A rule that is a *symlink* is replaced by
+a real file rather than written through, so the release's body lands inside the repository you
+pointed at instead of wherever the link went, and each replacement is reported.
+
+**What "matches no release" does and does not tell you.** The test is content: the file's bytes
+against that path's blob at every `v*` tag **the kit checkout has**, and the run prints how many
+tags that was. So the installer can see *that* a file matches nothing it read, and cannot see
+*who wrote it* or *what it was never told about*. Three things produce a non-match, and they are
+not distinguishable from the file alone: you edited it; you installed it by copying
+`claude-project/rules/*.md` out of the checkout's working tree, which is exactly what
+[Per-project setup](#per-project-setup) below, and the installer's own printed lines, tell you to
+do; or the checkout's tag set is short, since tags arrive by fetch, and your file matches a
+release this clone was never told about. A working-tree copy matches a release only if the
+checkout sat exactly on a tag. The run names all three rather than calling your files modified,
+points at `git -C <path-to-kit> fetch --tags` for the third, and when `.claude/rules/.kit-version`
+was absent it adds that a first refresh has no record of what the earlier install took, so on
+that run the first two are indistinguishable in principle. Backing the file up is the safe
+direction, not a finding.
 
 ## Status, scope, and license
 
@@ -68,7 +138,8 @@ harness/                → per-repo assets: rules, skills, agents, templates
   templates/              check.sh / languages / hook snippets + ADR + story templates
 memories/               → optional, per-project memory dir
   72 scrubbed methodology memories + MEMORY.md index
-install.sh              user-level installer (guards existing config)
+install.sh              user-level installer (guards existing config; also --version
+                        and --refresh-rules, which re-syncs a repo from a release tag)
 scrub-gate.sh           self-audit: fails if any private identifier survives
 scripts/refresh-from-pack.sh   rebuild rules/guides/gate from a newer pack tag
 ```
@@ -102,10 +173,11 @@ This mints a SHA-named immutable tool snapshot outside every target, vendors the
 ## Install (user-level)
 
 ```
-./install.sh
+./install.sh              # place the user-level pieces, and stamp what landed
+./install.sh --version    # say what this checkout is, and write nothing
 ```
 
-Copies the skills, the deep-reasoning template, and the gate into `~/.claude`. It will **not** overwrite an existing `~/.claude/CLAUDE.md` or `settings.json` — it backs them up and prints what to merge. Override the target with `CLAUDE_HOME=/path ./install.sh`.
+Copies the skills, the deep-reasoning template, and the gate into `~/.claude`. It will **not** overwrite an existing `~/.claude/CLAUDE.md` or `settings.json`: it backs them up and prints what to merge. Override the target with `CLAUDE_HOME=/path ./install.sh`. It also writes `~/.claude/discipline/KIT-VERSION`, the stamp a later session reads to tell what it has; see [Staying current](#staying-current).
 
 ### What the gate needs
 
