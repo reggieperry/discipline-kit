@@ -938,9 +938,20 @@ class BaselineShaTests(_RealRepoCase):
         self.assertEqual(report, {})
         self.assertIsNone(written, "no --out directory, so no file is written, sha.txt least of all")
         self.assertEqual(tc.calls, [], "no scanner runs")
-        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assert_one_line_then_shell(err)
         for token in tokens:
             self.assertIn(token, err)
+
+    def assert_one_line_then_shell(self, err: str) -> None:
+        """The prose is ONE line. Anything below it is the flow, between its two markers, and
+        nothing else: a sentence loose under the first line is a sentence in a block a reader
+        pastes into a shell, which is how the previous revision shipped a line that did not
+        parse."""
+        head, *rest = err.splitlines()
+        self.assertTrue(head.startswith("sdlc-gate: baseline refused: "), err)
+        if rest:
+            self.assertEqual(rest[0], gate._RECIPE_START, err)
+            self.assertEqual(rest[-1], gate._RECIPE_END, err)
 
     def test_head_other_than_sha_exits_2(self):
         # The old documented flow: in the branch checkout, --sha at the merge-base.
@@ -1035,6 +1046,61 @@ class BaselineShaTests(_RealRepoCase):
             result = self.baseline(top, sha)
         self.assert_refused(result, "git ls-files", "exited 128", "index file corrupt")
 
+    # THE REFUSAL HAS TO CARRY THE FIX, not only the fault. These messages are read in a CI log
+    # where the README is not at hand, and the corrected flow is not derivable from the rule they
+    # state: a reader told "run it in a checkout of --sha with no tracked changes" still has to
+    # invent the worktree recipe. Measured 2026-09-11: a consumer upgrading from v1.5.1, whose
+    # documented flow ran baseline in the branch checkout, met these four refusals with no
+    # instruction in them. Each case pins the actionable token rather than the sentence, so
+    # rewording is free and deleting the fix is not.
+    RECIPE = "git worktree add"
+    # The pointer to the section carrying the full block. Mutating it to "" left the suite green
+    # until this token was named here, so half of what the refusals gained was undefended.
+    POINTER = ('"Using it"', "README")
+
+    def test_head_other_than_sha_refusal_carries_the_worktree_recipe(self):
+        top, base, _ = self.two_commits()
+        self.assert_refused(self.baseline(top, base), self.RECIPE, "baseline --sha", *self.POINTER)
+
+    def test_tracked_change_refusal_carries_the_worktree_recipe(self):
+        top, sha = self.repo({"pkg/a.py": "a\n"})
+        (top / "pkg/a.py").write_text("a\nedited\n")
+        self.assert_refused(self.baseline(top, sha), self.RECIPE, "baseline --sha", *self.POINTER)
+
+    def test_flagged_file_refusal_carries_the_flag_fix_and_the_worktree_recipe(self):
+        # Clearing the flag is one fix and a fresh worktree is the other, since a new worktree has
+        # its own index and inherits neither flag.
+        top, sha = self.repo({"pkg/a.py": "a\n"})
+        _git(top, "update-index", "--skip-worktree", "pkg/a.py")
+        (top / "pkg/a.py").write_text("a\nhidden edit\n")
+        result = self.baseline(top, sha)
+        _git(top, "update-index", "--no-skip-worktree", "pkg/a.py")
+        _git(top, "checkout", "-q", "--", ".")
+        self.assert_refused(result, "--no-skip-worktree", "--no-assume-unchanged", self.RECIPE,
+                            *self.POINTER)
+
+    def test_root_outside_a_work_tree_names_the_fix_and_prints_no_flow(self):
+        # THE ONE REFUSAL THAT PRINTS NO FLOW, and the only one where that is right: every command
+        # in the flow is a git read of the repository at --root, and the fault is that there is no
+        # repository at --root, so printing them would be printing commands that cannot run where
+        # the reader is. It still has to name the fix in words and say where the block is.
+        _, sha = self.repo({"pkg/a.py": "a\n"})
+        plain = self.scratch / "plain"
+        plain.mkdir()
+        os.environ["GIT_CEILING_DIRECTORIES"] = str(self.scratch)  # no repository above the scratch
+        result = self.baseline(plain, sha)
+        self.assert_refused(result, "worktree at the merge-base", *self.POINTER)
+        err = result[2]
+        self.assertEqual(len(err.splitlines()), 1, err)
+        self.assertNotIn(gate._RECIPE_START, err)
+
+    def test_sha_that_names_no_commit_refusal_says_how_to_name_the_merge_base(self):
+        # The one refusal whose --sha cannot be resolved, so the flow it prints computes the
+        # merge-base rather than naming a commit.
+        top, _ = self.repo({"pkg/a.py": "a\n"})
+        self.assert_refused(self.baseline(top, "not-a-commit"), "git merge-base", self.RECIPE,
+                            *self.POINTER)
+
     def test_untracked_and_ignored_files_are_allowed(self):
         # The documented flow links node_modules into the worktree, and uv creates .venv there.
         top, sha = self.repo({".gitignore": "node_modules\n", "pkg/a.py": "a\n"})
@@ -1100,6 +1166,222 @@ class BaselineShaTests(_RealRepoCase):
             code, _, err, written, _ = self.baseline(wt, base)
             self.assertEqual(code, 0, err)
             self.assertEqual(written["sha.txt"], base + "\n")
+
+
+# The eight files a baseline writes. An --out that resolved to "." put them in the tree being
+# scanned, so their absence from a project directory is what says the recipe passed a real one.
+_BASELINE_FILES = frozenset({"agent-scans.json", "build.txt", "no-static.txt", "sha.txt",
+                             "static-not-wired.json", "suppressions.json", "test-weakening.json",
+                             "toolchain.txt"})
+
+# The lines the printed flow and the README's block under "Using it" have in common. The README's
+# is the full form (the golangci-lint caches, the node_modules link, the sparse-checkout case), so
+# the two are not the same text and cannot be compared as one; these are the shell they share, and
+# an edit to either that does not reach the other fails the case that reads them.
+_SHARED_WITH_THE_README = (
+    "unset $(git rev-parse --local-env-vars)",
+    "P=$(git rev-parse --show-prefix)",
+    "WT=$(mktemp -d); OUT=$(mktemp -d)",
+    'git worktree add --quiet --detach "$WT" "$BASE"',
+    '(cd "$WT/$P" || exit 2;',
+    'baseline --sha "$BASE" --out "$OUT"',
+    'diff --baseline-dir "$OUT"',
+    "rc=$?",
+    'git worktree remove --force "$WT"; rm -rf "$OUT"',
+    '(exit "$rc")',
+)
+
+
+class BaselineRecipeRunsTests(_RealRepoCase):
+    """THE FLOW A REFUSAL PRINTS IS EXTRACTED FROM THE GATE'S OWN STDERR AND EXECUTED HERE, the way
+    a reader extracts it: the lines from one marker to the other.
+
+    Token assertions are what let the previous revision ship a flow that does not run. Measured
+    2026-09-11, pasting what it printed: `sdlc-gate.py` is on no PATH, so exit 127; `$OUT` was
+    never set, so baseline resolved its output directory to "." and scattered the eight files into
+    the tree it was scanning, reporting ok, and the failure surfaced only at the next command; the
+    `$P` that carries a subdirectory project into the worktree was dropped, so baseline ran at the
+    worktree top; the `unset` that makes the block work inside a pre-commit hook was dropped, so a
+    hook died on `fatal: .git/index`; no `git worktree remove`, so a worktree stayed registered;
+    and pasted whole it did not parse at all. A case that runs it catches every one of those. That
+    the previous round pinned `git worktree add` and shipped exit 127 is the reason this file now
+    executes rather than greps.
+
+    The cases pass --no-static, so the flow needs python3 and git and no other tool; the printed
+    flow carries the flag because _same_mode_flags reads it off the invocation's own argv, and a
+    flow that dropped it would hand a caller in that mode a recipe that exits 2 on a missing uv."""
+
+    def python_repo(self, prefix: str = "") -> tuple[Path, Path, str]:
+        """A python project at `prefix` in a repository whose branch tip is one commit past its
+        merge-base; returns (repository top, project directory, the merge-base commit). With a
+        prefix, the marker file is only in the project directory, so a flow that lost $P and ran at
+        the worktree top detects no toolchain and exits 2 rather than passing quietly."""
+        files = {f"{prefix}pyproject.toml": "[project]\nname = 'x'\nversion = '0.1'\n",
+                 f"{prefix}pkg/a.py": "def a(x):\n    return x\n"}
+        if prefix:
+            files["docs/notes.md"] = "outside the project\n"
+        top, base = self.repo(files)
+        (top / f"{prefix}pkg/b.py").write_text("def b(y):\n    return y\n")
+        _git(top, "add", "-A")
+        _git(top, "commit", "-qm", "branch")
+        return top, (top / prefix) if prefix else top, base
+
+    def refusal(self, project: Path, sha: str) -> str:
+        """The gate's stderr from a real refusal, run as a caller runs it."""
+        out = self.scratch / "never-written"
+        proc = subprocess.run([sys.executable, str(_GATE_PATH), "baseline", "--no-static",
+                               "--sha", sha, "--out", str(out)],
+                              cwd=project, capture_output=True, text=True, check=False)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertFalse(out.exists(), "refused before --out is made")
+        return proc.stderr
+
+    def recipe_from(self, err: str) -> str:
+        """What a reader copies: the lines from one marker to the other, inclusive. It has to parse
+        as it stands, markers included, since a reader who copies them too is the common case."""
+        lines = err.splitlines()
+        self.assertIn(gate._RECIPE_START, lines, err)
+        self.assertIn(gate._RECIPE_END, lines, err)
+        block = "\n".join(lines[lines.index(gate._RECIPE_START):
+                                 lines.index(gate._RECIPE_END) + 1]) + "\n"
+        script = self.scratch / "recipe.sh"
+        script.write_text(block)
+        parsed = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True,
+                                check=False)
+        self.assertEqual(parsed.returncode, 0, f"{parsed.stderr}\n{block}")
+        return block
+
+    def run_recipe(self, cwd: Path, block: str) -> subprocess.CompletedProcess:
+        script = self.scratch / "run-recipe.sh"
+        script.write_text(block)
+        return subprocess.run(["bash", str(script)], cwd=cwd, capture_output=True, text=True,
+                              check=False)
+
+    def test_the_printed_flow_runs_verbatim_and_files_the_merge_base(self):
+        top, project, base = self.python_repo()
+        tip = _git(top, "rev-parse", "HEAD").strip()
+        proc = self.run_recipe(project, self.recipe_from(self.refusal(project, base)))
+        self.assertEqual(proc.returncode, 0, f"{proc.stdout}\n{proc.stderr}")
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["baseline_sha"], base)  # the merge-base, never the branch's own tree
+        self.assertIn(f"(sha={base})", proc.stderr)
+        self.assertNotIn(tip, proc.stderr)
+        self.assertEqual(sorted(p.name for p in project.iterdir() if p.name in _BASELINE_FILES), [])
+        self.assertEqual(len(_git(top, "worktree", "list").splitlines()), 1,
+                         "the flow leaves no worktree registered")
+
+    def test_the_printed_flow_runs_verbatim_for_a_project_in_a_subdirectory(self):
+        top, project, base = self.python_repo("proj/")
+        proc = self.run_recipe(project, self.recipe_from(self.refusal(project, base)))
+        self.assertEqual(proc.returncode, 0, f"{proc.stdout}\n{proc.stderr}")
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["verdict"], "pass")
+        self.assertEqual(report["baseline_sha"], base)
+        self.assertEqual(sorted(p.name for p in project.iterdir() if p.name in _BASELINE_FILES), [])
+        self.assertEqual(len(_git(top, "worktree", "list").splitlines()), 1)
+
+    def test_the_printed_flow_runs_verbatim_as_a_pre_commit_hook(self):
+        # git exports GIT_INDEX_FILE to a pre-commit hook, and the first line of the flow is what
+        # clears it. Without that line the hook's own `git worktree add` writes the merge-base tree
+        # into the index the commit is about to write: fatal: .git/index (measured).
+        top, project, base = self.python_repo()
+        block = self.recipe_from(self.refusal(project, base))
+        hook = Path(_git(top, "rev-parse", "--absolute-git-dir").strip()) / "hooks" / "pre-commit"
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text("#!/usr/bin/env bash\n" + block)
+        hook.chmod(0o755)
+        (top / "pkg/c.py").write_text("def c(z):\n    return z\n")
+        _git(top, "add", "-A")
+        proc = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                               "-c", "commit.gpgsign=false", "commit", "-m", "hooked"],
+                              cwd=top, capture_output=True, text=True, check=False)
+        self.assertEqual(proc.returncode, 0, f"{proc.stdout}\n{proc.stderr}")
+        self.assertNotIn("fatal:", proc.stderr)
+        self.assertEqual(_git(top, "log", "--format=%s", "-1").strip(), "hooked")
+        self.assertEqual(_git(top, "status", "--porcelain").strip(), "")
+        self.assertEqual(len(_git(top, "worktree", "list").splitlines()), 1)
+
+    def test_every_refusal_that_prints_a_flow_prints_one_that_parses_and_names_a_real_gate(self):
+        top, project, base = self.python_repo()
+        tip = _git(top, "rev-parse", "HEAD").strip()
+
+        def tracked_change() -> None:
+            (project / "pkg/a.py").write_text("def a(x):\n    return x + 1\n")
+
+        def flagged_file() -> None:
+            _git(top, "update-index", "--skip-worktree", "pkg/a.py")
+            (project / "pkg/a.py").write_text("def a(x):\n    return x + 2\n")
+
+        for label, prepare, sha in (("head elsewhere", None, base),
+                                    ("no such commit", None, "not-a-commit"),
+                                    ("tracked change", tracked_change, tip),
+                                    ("flagged file", flagged_file, tip)):
+            with self.subTest(label):
+                if prepare is not None:
+                    prepare()
+                block = self.recipe_from(self.refusal(project, sha))
+                if prepare is flagged_file:
+                    _git(top, "update-index", "--no-skip-worktree", "pkg/a.py")
+                _git(top, "checkout", "-q", "--", ".")
+                # The gate names itself by its own path, because nothing puts it on PATH and the
+                # installed copy and a checkout copy sit at different ones.
+                self.assertIn(str(_GATE_PATH), block)
+                self.assertTrue(_GATE_PATH.exists())
+                self.assertIn("--no-static", block.split("baseline --sha")[1])
+                for fragment in _SHARED_WITH_THE_README:
+                    self.assertIn(fragment, block, label)
+
+    def test_the_printed_flow_and_the_readme_block_do_not_drift(self):
+        readme = _GATE_PATH.parent.parent / "README.md"
+        self.assertTrue(readme.exists(), f"run this from the kit checkout; no README at {readme}")
+        text = readme.read_text()
+        _, project, base = self.python_repo()
+        block = self.recipe_from(self.refusal(project, base))
+        for fragment in _SHARED_WITH_THE_README:
+            self.assertIn(fragment, block, "the printed flow lost a line the README block has")
+            self.assertIn(fragment, text, "the README block lost a line the printed flow has")
+
+
+class BaselineEmptyOutTests(_RealRepoCase):
+    """`--out ""` is what an unset shell variable expands to, and it is what the flow the previous
+    revision printed passed. Path("") is Path("."), so baseline wrote its eight files into the tree
+    it was scanning and answered {"ok": true} at exit 0 (measured 2026-09-11). Where that surfaced
+    depended on where the next command stood: in the documented flow the baseline runs inside the
+    worktree, so diff back in the branch checkout died on FileNotFoundError: 'sha.txt' at exit 1,
+    and run in one directory diff read the scattered files as its baseline and returned a verdict at
+    exit 0 on the branch compared with itself."""
+
+    def project(self) -> tuple[Path, str]:
+        return self.repo({"pyproject.toml": "[project]\nname = 'x'\n", "pkg/a.py": "a = 1\n"})
+
+    def baseline_cli(self, top: Path, out: str) -> subprocess.CompletedProcess:
+        sha = _git(top, "rev-parse", "HEAD").strip()
+        return subprocess.run([sys.executable, str(_GATE_PATH), "baseline", "--no-static",
+                               "--sha", sha, "--out", out],
+                              cwd=top, capture_output=True, text=True, check=False)
+
+    def test_an_empty_out_is_refused_and_nothing_is_written(self):
+        top, _ = self.project()
+        before = sorted(p.name for p in top.iterdir())
+        for out in ("", "   "):
+            with self.subTest(out=repr(out)):
+                proc = self.baseline_cli(top, out)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertEqual(proc.stdout, "", "never {'ok': true} for a baseline not filed")
+                self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+                for token in ("--out is empty", "OUT=$(mktemp -d)", '"Using it"', "README"):
+                    self.assertIn(token, proc.stderr)
+                self.assertEqual(sorted(p.name for p in top.iterdir()), before)
+
+    def test_negative_control_a_real_out_captures_the_baseline(self):
+        top, sha = self.project()
+        out = self.scratch / "out"
+        proc = self.baseline_cli(top, str(out))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual((out / "sha.txt").read_text().strip(), sha)
+        self.assertEqual(json.loads(proc.stdout)["ok"], True)
 
 
 class RunRuffFailClosedTests(unittest.TestCase):

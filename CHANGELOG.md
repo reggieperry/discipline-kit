@@ -2,7 +2,7 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
-## Unreleased
+## v2.1.0 — 2026-09-11
 
 ### Added
 
@@ -28,6 +28,24 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
   copy, rewritten `partial` by an exit trap if the run dies, and `complete` only at the end, and
   the user-level stamp's per-piece dispositions say which pieces a partial run reached. A stamp
   may be stale; it may not be wrong.
+- **The pr-review skill finds the repo's own gate, and asks whether the instruments got weaker.**
+  Two sections that had been written and used in a local copy of the installed skill had never
+  reached the kit; the v2.0.0 install overwrote that copy, which is how they surfaced. Step 3 now
+  says to locate the repo's OWN gate before running anything, and gives the commands: the
+  configured hooks path, the pre-commit hook git resolves under it via
+  `git rev-parse --git-path hooks`, and the usual script entry points. Whatever the hook invokes
+  is the repo's definition of green. A build tool's `check` task is a narrower check wearing the
+  same word, and the difference is silent, because it exits 0 having examined less. Measured on a
+  Scala repo: the `sbt check` alias covers formatting, lint, three project checks and the suites,
+  while the `scripts/check.sh` its hook runs wraps that alias and adds seven more, with a secret
+  scan in front of both, so a review that ran the alias alone would have reported green and
+  missed eight. The review now has to say which gate it ran, since `gate green` is several
+  different claims. The core lens gains **Did the instruments get weaker?**, the six shapes a diff
+  uses to reduce what a project can see, plus the mirror question for a check the diff adds: a
+  check that stopped looking and a check that found nothing exit the same way, so no gate catches
+  this class by construction. Step 3's closing paragraph now names the differential gate as a
+  separate run, gives its installed path, and says to read `not_wired` before trusting a pass.
+  Step 7 gains exit 2 beside green and failures, because could-not-run is neither.
 
 ### Changed
 
@@ -83,10 +101,98 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
   sorted temporary files instead, the floor is checked and named at the top of the refresh path,
   and the fixture asserts the bash-4 constructs stay absent. No bash 3.2 was available to run
   against, so that claim is construct-absence plus the guard, not a measurement on that shell.
+- **The baseline refusals print the fix, and what they print runs.** Five of them named what was
+  wrong, and three went as far as naming a fix in words. Told "run it in a checkout of `--sha` with no tracked changes", a reader
+  who did not already know the corrected flow could not act on it, and these lines are read in a CI
+  log where the README is not at hand. Each names the fix now, and four of the five print the
+  corrected flow below it as shell, between two marker comments: the README's gate block under
+  **Using it**, without the golangci-lint caches, the `node_modules` link and the sparse-checkout
+  case, with the gate named by the path it is running from, every variable it reads set inside the
+  block, and the caller's own `--no-static` or `--coverage` repeated so the flow runs in the mode
+  the caller asked for. The four: `--root` checked out somewhere other than `--sha`, tracked
+  changes under `--root`, a file marked skip-worktree or assume-unchanged, and a `--sha` that names
+  no commit, whose flow computes the merge-base rather than naming a commit. The fifth, a `--root`
+  outside a work tree, prints no flow and should not: every command in one is a git read of the
+  repository at `--root`, and the fault is that there is no repository at `--root`, so it names the
+  fix in words. The three that report a broken git are left alone, since they carry git's own
+  words. Exit codes and every precondition are unchanged, and the prose is still one line; what may
+  follow it is shell or a shell comment, never a sentence.
+- **The flow a refusal prints is executed by the tests, not grepped.** The first attempt at the
+  bullet above shipped a shortened variant that did not run, and a case pinning the token `git
+  worktree add` passed it. Measured 2026-09-11, by extracting what it printed and running it: it
+  named the gate `sdlc-gate.py`, which nothing puts on `PATH`, so `command not found` and exit 127;
+  it passed an `$OUT` that nothing sets, so `baseline` resolved its output directory to `.`, wrote
+  the baseline files into the tree it was scanning and reported `ok` at exit 0; it dropped
+  the `$P` that carries a subdirectory project into the worktree, so with the first two repaired the
+  run took the worktree top for the project and exited 2 on `no toolchain detected`, capturing
+  nothing; it dropped the `unset $(git rev-parse --local-env-vars)` that is what makes the block
+  work inside a pre-commit hook, where a hook then died on `fatal: .git/index`; it never removed the
+  worktree, leaving one registered; and its prose tail meant `bash -n` on the whole line exited 2
+  before any of that could happen. Three cases in `reference/test_sdlc_gate_contract.py` now
+  extract the flow from the gate's own stderr, the way a reader extracts it, and run it: in a plain
+  repository, in a project in a subdirectory, and as a pre-commit hook. The first two read the
+  baseline that comes out: the verdict, `baseline_sha` being the merge-base rather than the
+  branch's own tree, no baseline file left in the project directory, and no worktree left
+  registered. The hook case asserts the commit completes, which is what the cleared git
+  variables buy, since without that first line the hook's own `git worktree add` writes the
+  merge-base tree into the index the commit is about to write. A fourth pins every printed flow as parsing and naming a gate that exists, and a
+  fifth fails if the flow and the README block drift apart. Each was observed failing against a
+  mutant, the flow reverted to the variant above and the README pointer emptied included.
+- **`baseline --out ""` is refused instead of filling the checkout with the baseline.** `Path("")`
+  is `Path(".")`, and an empty `--out` is what an unset shell variable expands to, so the run wrote
+  its baseline files into the tree it was scanning, beside the source, and answered `{"ok": true}` at
+  exit 0. Nothing failed where the fault was, and what happened next depended on where you stood.
+  Both measured 2026-09-11: in the documented flow the baseline runs inside the worktree, so the
+  files land there and `diff`, back in the branch checkout, dies on `FileNotFoundError: 'sha.txt'`
+  at exit 1; run in one directory, `diff` reads the scattered files as its baseline and returns a
+  verdict at exit 0 on the branch compared with itself, which is the defect this release exists to
+  close, reached by another road. It exits 2 before anything is written now, and names a directory
+  of its own as the fix.
+- **The Upgrade prompt reads the changelog before it installs anything.** It walked an instance
+  through upgrading the installer and reading the stamps and never mentioned this file, so an
+  instance that followed it perfectly learned nothing about a breaking change and installed one
+  regardless. It is six steps now. The new fourth reads the two stamps to find the release the
+  machine holds, reads `CHANGELOG.md` from the top down to that release, and reports the breaking
+  changes and migration notes before the installer runs. No released installer writes either stamp,
+  so on a machine installed from a release tag both are absent and the no-stamp path is the one
+  that runs; the step says so, and names v2.0.0 as the floor to read back to.
+- **The v2.0.0 entry gained a migration section.** It opened by saying the release was breaking and
+  then went straight into categories, with no instruction for a caller on the old flow and nothing
+  telling a reader that the results that flow produced are not evidence. Both are stated there now,
+  with the refusal to recognize.
 
 ## v2.0.0 — 2026-09-11
 
 A breaking release. The differential gate now refuses a baseline that is not the tree it names, several tool failures exit 2 where they used to read as clean, and `--no-static` skips Checks E-H, so a caller written against v1.5.1's documented flow has to change. The dev-ledger and its installer are gone. Everything below landed since v1.5.1.
+
+### Migrating from v1.5.1
+
+**Discard the results the old flow produced.** v1.5.1 documented running `baseline` in the branch checkout with `--sha` at the merge-base. That captured the baseline from the branch's own tree, so `diff` compared the branch with itself and a pass meant only that the branch matched itself. It is the flow that was broken and not one check: every check ran against a copy of the tree it was judging. Measured 2026-09-10, against this release's gate: planted regressions in Checks A, E, F, G, and H, on TypeScript, Scala, and Python, all passed. Read that as the demonstration it is rather than as your inventory. v1.5.1 shipped Checks A through D, so what you have to discard is A through D greens; Checks E-H landed after v1.5.1, and no E-H result was ever produced on your machine. Every green that flow returned is uninformative, merged branches included. Re-run the corrected flow against anything you are relying on it for; do not read the old passes as evidence that those branches were gated.
+
+**What a caller written against v1.5.1 has to change.** Capture the baseline in a git worktree at the merge-base instead of in the branch checkout, and run `diff` back in the branch checkout:
+
+```
+unset $(git rev-parse --local-env-vars)
+BASE=$(git merge-base HEAD origin/main)
+P=$(git rev-parse --show-prefix)
+WT=$(mktemp -d); OUT=$(mktemp -d)
+git worktree add --quiet --detach "$WT" "$BASE"
+(cd "$WT/$P" || exit 2; python3 ~/.claude/discipline/sdlc-gate.py baseline --sha "$BASE" --out "$OUT" >&2) &&
+  python3 ~/.claude/discipline/sdlc-gate.py diff --baseline-dir "$OUT"
+rc=$?
+git worktree remove --force "$WT"; rm -rf "$OUT"
+(exit "$rc")
+```
+
+That is the block trimmed to the change. The full one, with the per-command golangci-lint caches, the `node_modules` link for TypeScript, the sparse-checkout case, and the pre-commit-hook form, is under **Using it** in `README.md`, and it is the version to copy. Replace `origin/main` with the branch the work merges into. A project in a subdirectory of its repository runs the block from that subdirectory. For the mode that needs only `python3` and `git`, add `--no-static` to both commands.
+
+**What the refusal looks like.** One line of prose on stderr and exit 2, before any scanner runs and before anything is written to `--out`. This is v2.0.0's, with the paths and ids standing in for yours:
+
+```
+sdlc-gate: baseline refused: --root <root> is checked out at <branch tip>, not at --sha <merge-base>; baseline scans the tree at --root, so check out --sha (for example in a worktree at the merge-base) and run baseline there
+```
+
+The release after v2.0.0 rewrote everything from `so` onward, into what this run would have produced (the branch's own tree filed under `--sha`, and `diff` then comparing the branch with itself) followed by the corrected flow as pasteable shell on the lines below. So the two agree up to `so` and nowhere after it, and `--root <root> is checked out at <branch tip>, not at --sha <merge-base>` is the half to recognize either way. What that later release prints below the line is a short form of the block above, with the gate named by its own path, and not the block itself. Four more refusals share the shape: tracked changes under `--root`, a file marked skip-worktree or assume-unchanged, a `--sha` that names no commit, and a `--root` that is not inside a work tree. Exit 2 means the gate could not run. It never means it passed.
 
 ### Changed, breaking
 
