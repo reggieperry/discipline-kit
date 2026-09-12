@@ -102,6 +102,7 @@ import argparse
 import ast
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -4186,6 +4187,66 @@ def _run_agent_checks(tc: "Toolchain", root: Path, base_dir: Path, baseline_sha:
 # --- Subcommands --------------------------------------------------------------
 
 
+# --- The corrected baseline flow, as shell a refusal can print --------------------------------
+
+_RECIPE_START = "# --- sdlc-gate: copy from here; run it from the project directory ---"
+_RECIPE_END = '# --- sdlc-gate: to here; the full block is under "Using it" in the kit README ---'
+
+
+_MODE_FLAGS = ("--no-static", "--coverage")
+
+
+def _same_mode_flags() -> list[str]:
+    """The flags baseline and diff have to agree on, read from this invocation's own argv so the
+    printed recipe runs in the mode the caller asked for. Without them a caller in the
+    python3-and-git-only mode is handed a recipe that exits 2 on a missing uv. From argv rather than
+    from the parsed arguments because the refusals are raised inside _resolve_baseline_sha, which
+    takes the two things it checks and nothing else."""
+    given = [token for token in sys.argv[1:] if token.startswith("--")]
+    return [flag for flag in _MODE_FLAGS
+            if any(token == flag or (len(token) > 2 and flag.startswith(token)
+                                     and sum(f.startswith(token) for f in _MODE_FLAGS) == 1)
+                   for token in given)]
+
+
+def _baseline_recipe(commit: str) -> str:
+    """The corrected flow as shell, for a reader who has the refusal and nothing else.
+
+    A refusal is read in a CI log, where the README is not at hand, so what it prints has to RUN as
+    printed. The shortened line the previous revision printed did not, measured 2026-09-11 by
+    extracting it from the gate's own stderr and running it: it named the gate `sdlc-gate.py`, which
+    nothing puts on PATH (exit 127); it passed an `$OUT` that nothing sets, so baseline resolved its
+    output directory to "." and scattered its baseline files into the tree it was scanning while reporting
+    ok; it dropped the `$P` that carries a subdirectory project into the worktree, and the `unset`
+    that is what makes the block work inside a pre-commit hook; it left the worktree registered; and
+    its prose tail meant the line did not parse at all.
+
+    So: the gate names itself by __file__ and by the interpreter running it, since the installed copy
+    and a checkout copy sit at different paths and neither is on PATH; every variable the block reads
+    is set inside the block; and every line is shell or a shell comment, the two markers included, so
+    a reader who copies the markers too still gets a script that parses and runs. It is the README's
+    block under "Using it" without the golangci-lint caches, the node_modules link and the
+    sparse-checkout case, which are what the fuller version there adds."""
+    run_gate = (f"{shlex.quote(sys.executable or 'python3')} "
+                f"{shlex.quote(str(Path(__file__).resolve()))}")
+    mode = "".join(f" {flag}" for flag in _same_mode_flags())
+    return "\n".join((
+        _RECIPE_START,
+        "unset $(git rev-parse --local-env-vars)",
+        f"BASE={commit}",
+        "P=$(git rev-parse --show-prefix)",
+        "WT=$(mktemp -d); OUT=$(mktemp -d)",
+        'git worktree add --quiet --detach "$WT" "$BASE"',
+        f'(cd "$WT/$P" || exit 2; {run_gate} baseline --sha "$BASE" --out "$OUT"{mode} >&2) &&',
+        f'  {run_gate} diff --baseline-dir "$OUT"{mode}',
+        "rc=$?",
+        'git worktree remove --force "$WT"; rm -rf "$OUT"',
+        '(exit "$rc")',
+        _RECIPE_END,
+        "",
+    ))
+
+
 def _resolve_baseline_sha(root: Path, sha: str) -> str:
     """The full commit id `sha` names, once `root` is shown to be a checkout of that commit with no
     tracked changes under it and no file under it marked skip-worktree or assume-unchanged; any
@@ -4197,8 +4258,23 @@ def _resolve_baseline_sha(root: Path, sha: str) -> str:
     node_modules into the worktree, and uv creates .venv there."""
     import os
 
-    def refuse(why: str) -> None:
-        sys.stderr.write(f"sdlc-gate: baseline refused: {why}\n")
+    # EVERY REFUSAL A CALLER CAN ACT ON NAMES THE FIX, not only the fault, and names it as something
+    # that runs. These are read in a CI log, where the README is not at hand and the corrected flow
+    # does not follow from the rule the check states: told "run it in a checkout of --sha with no
+    # tracked changes", a caller still has to invent the worktree. Measured 2026-09-11: an upgrade
+    # from v1.5.1, whose documented flow ran baseline in the branch checkout, meets these refusals,
+    # and every green the old flow gave was the branch compared with itself. Four of the eight print
+    # the flow from _baseline_recipe, which is executed as printed by cases in
+    # test_sdlc_gate_contract.py. The other four print none, for two reasons: --root outside a work
+    # tree because the flow's commands are git reads of a repository that is not there (the comment
+    # at that refusal), and the three that report a broken git (cannot run git, status, ls-files)
+    # because they carry git's own words and there is no flow to point at.
+
+    def refuse(why: str, recipe: str = "") -> None:
+        """One line naming the fault and the fix, then, for a refusal that has one, the corrected
+        flow. The first line is the whole of the prose: everything below it is shell or a shell
+        comment, so a reader can paste it as it stands."""
+        sys.stderr.write(f"sdlc-gate: baseline refused: {why}\n{recipe}")
         sys.exit(2)
 
     def git(args: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
@@ -4225,24 +4301,38 @@ def _resolve_baseline_sha(root: Path, sha: str) -> str:
     inside = git([*at, "rev-parse", "--is-inside-work-tree"], env)
     if inside.returncode != 0 or inside.stdout.strip() != "true":
         detail = said(inside) or f"git rev-parse --is-inside-work-tree printed {inside.stdout.strip()!r}"
-        refuse(f"--root {root} is not inside a git work tree ({detail})")
+        # No flow printed here, and this is the one refusal that prints none it could: every
+        # command in it is a git read of the repository at --root, and there is no repository at
+        # --root, so they are commands that cannot run where the fault is.
+        refuse(f"--root {root} is not inside a git work tree ({detail}); baseline scans the tree "
+               "at --root, so --root has to be a checkout of --sha, which the documented flow "
+               "makes as a worktree at the merge-base: point --root at one, or run baseline from "
+               'inside it (that block is under "Using it" in the kit README)')
     named = git([*at, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"], env)
     full = named.stdout.strip()
     if named.returncode != 0:
-        refuse(f"--sha {sha!r} does not name a commit in the repository at {root}")
+        refuse(f"--sha {sha!r} does not name a commit in the repository at {root}; --sha takes the "
+               "commit the branch forked from, which git merge-base names, so the flow below "
+               "computes it; replace origin/main with the branch the work merges into",
+               _baseline_recipe("$(git merge-base HEAD origin/main)"))
     head = git([*at, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"], env).stdout.strip()
     if head != full:
         wanted = full if sha == full else f"{sha} ({full})"
         refuse(f"--root {root} is checked out at {head or 'no commit'}, not at --sha {wanted}; "
-               "baseline scans the tree at --root, so check out --sha (for example in a worktree "
-               "at the merge-base) and run baseline there")
+               "baseline scans the tree at --root, so this run would file the branch's own tree "
+               "under --sha and diff would then compare the branch with itself; capture the "
+               "baseline in a worktree at --sha instead, with the flow below",
+               _baseline_recipe(full))
     status = git([*at, "status", "--porcelain", "--untracked-files=no", "--", "."], env)
     if status.returncode != 0:
         refuse(f"git status in {root} exited {status.returncode}: {said(status)}")
     changed = [line[3:] for line in status.stdout.splitlines() if line.strip()]
     if changed:
         refuse(f"--root {root} has tracked changes against {full} ({listed(changed)}); baseline "
-               "scans the working tree, so run it in a checkout of --sha with no tracked changes")
+               f"scans the working tree, so those changes would be filed under {full} as if that "
+               "commit contained them; commit, stash or discard them, or leave them alone and "
+               "capture the baseline in a worktree instead, with the flow below",
+               _baseline_recipe(full))
     # git status does not look at a file marked skip-worktree or assume-unchanged, so an edit to one
     # was scanned and filed under --sha (measured 2026-09-11). ls-files -v tags the first S and the
     # second in lowercase.
@@ -4253,8 +4343,12 @@ def _resolve_baseline_sha(root: Path, sha: str) -> str:
     if hidden:
         refuse(f"--root {root} has files marked skip-worktree or assume-unchanged "
                f"({listed(hidden)}), whose edits git status does not report; baseline scans the "
-               "working tree, so clear the flags (git update-index --no-skip-worktree or "
-               "--no-assume-unchanged, or git sparse-checkout disable) and run it again")
+               f"working tree, so such an edit would be filed under {full} unseen; clear the flags "
+               "(git update-index --no-skip-worktree or --no-assume-unchanged, or git "
+               "sparse-checkout disable) and run baseline again, or capture the baseline in a "
+               'worktree with the flow below, adding git -C "$WT" sparse-checkout disable to it if '
+               "this checkout is sparse, since a worktree inherits the cone",
+               _baseline_recipe(full))
     return full
 
 
@@ -4287,6 +4381,23 @@ def _static_scans(tc: "Toolchain", root: Path, build: str) -> tuple[dict[str, Co
 
 def cmd_baseline(args: argparse.Namespace) -> None:
     root = Path(args.root).resolve()
+    # AN EMPTY --out RESOLVED TO THE CURRENT DIRECTORY, which is the tree being scanned. Path("") is
+    # Path("."), and `--out ""` is what an unset shell variable expands to, so this wrote its
+    # baseline files into the checkout beside the source and reported {"ok": true} at exit 0
+    # (measured 2026-09-11). Nothing failed where the fault was, and what happened next depended on
+    # where the next command stood: in the documented flow the baseline runs inside the worktree, so
+    # the files land there and diff, back in the branch checkout, dies on FileNotFoundError:
+    # 'sha.txt' at exit 1; run in one directory, diff reads the scattered files as its baseline and
+    # returns a verdict at exit 0 on the branch compared with itself, which is the defect the whole
+    # check below exists to close, reached by another road. Both measured. Refusing rather than
+    # quietly doing the wrong thing is the point of every check below.
+    if not str(args.out).strip():
+        sys.stderr.write("sdlc-gate: baseline refused: --out is empty, which resolves to the "
+                         "current directory: baseline would write its files into the tree it "
+                         "is scanning and report ok. Pass a directory of its own, as the documented "
+                         'flow does with OUT=$(mktemp -d) (that block is under "Using it" in the '
+                         'kit README)\n')
+        sys.exit(2)
     sha = _resolve_baseline_sha(root, args.sha)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
