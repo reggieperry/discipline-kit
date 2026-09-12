@@ -2,6 +2,88 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## Unreleased
+
+### Added
+
+- **An update path a session can verify, rather than assume.** Nothing an install placed recorded
+  a version, so a session could not tell a current install from a year-old one, and the only way
+  to ask an unknown checkout what it was involved running it. Four pieces, together:
+  `install.sh --version` reports the checkout's path, commit, `git describe`, newest visible
+  release tag and flag list, creating no file and copying nothing; the user-level install writes
+  `~/.claude/discipline/KIT-VERSION`; `--refresh-rules` writes `<repo>/.claude/rules/.kit-version`;
+  and the README gains a **Staying current** section with the two facts that decide whether
+  comparing them means anything (tags arrive by fetch, and every installer before v2.0.0 ignores
+  flags and installs instead, so probe with `grep` and never by running it).
+- **`--refresh-rules` refreshes the guides too, and protects them like the rules.** Both sets are
+  replaced wholesale from the release tag, so both are now classified by content first: a file
+  whose exact bytes match no `v*` release is copied aside to `<name>.md.local-<timestamp>` before
+  being overwritten. Guides were being overwritten with no backup while rules in the same run were
+  protected, and nothing shipped said so.
+- **Both stamps carry a state, and each is written before the copies.** Writing a stamp only
+  after every copy succeeded left new files on disk under the previous run's stamp when one died
+  partway: measured on a refresh, 9 of 52 rules new with the stamp still naming the old tag;
+  measured on the user-level install, the deep-reason skill rewritten from a newer kit with the
+  stamp still naming the commit before it. Each is now written `in-progress` before the first
+  copy, rewritten `partial` by an exit trap if the run dies, and `complete` only at the end, and
+  the user-level stamp's per-piece dispositions say which pieces a partial run reached. A stamp
+  may be stale; it may not be wrong.
+
+### Changed
+
+- **A file matching no release is no longer called "locally modified", and the run names the tag
+  set it actually read.** The classifier reads content, so it can see that a file matches no
+  release and cannot see who wrote it. The kit's own per-project setup says to copy the rules out
+  of the checkout's working tree, and those copies match a release only if the checkout sat
+  exactly on a tag: measured, a consumer who edited nothing had 7 of 51 rules copied aside on a
+  mid-cycle install. There is a third cause, and it was neither named nor hinted: tags arrive by
+  fetch, so the test reads only the `v*` tags the checkout holds, and a clone told about one
+  release called every other release's bytes a non-match (measured: 42 files copied aside against
+  a one-tag clone, all 42 byte-identical to v2.0.0). The backup stays, since that is the safe
+  direction, but the run now prints how many tags it read, points at
+  `git -C <path-to-kit> fetch --tags`, and names all three causes; so do the README and the
+  installer's comments. On a first refresh, with no `.kit-version` present, the first two are
+  indistinguishable in principle.
+- **The user-level stamp records a disposition per piece.** `CLAUDE.md` and `settings.json` are
+  deliberately never overwritten, so a stamp that recorded only the new commit read as current for
+  a machine that was half old. Each piece is now `installed` or `kept-existing`, with the backup it
+  was copied to named.
+- **No backup can overwrite another.** Backup names carry a per-run timestamp with one-second
+  resolution, so two refreshes in the same second reused one name and the second copy destroyed
+  the first preserved file (measured: three edits, two surviving backups). Colliding names are now
+  numbered, in both the refresh and the user-level install.
+- **Refusals in place of raw shell errors, and one silent no-op closed.** `--dir` naming a
+  directory that does not exist, and a flag whose value is missing, died on `cd:` and on
+  `$2: unbound variable`; both are named refusals now (exit 1 and exit 2). `--version` combined
+  with `--refresh-rules` printed a version, refreshed nothing and exited 0, which in a log is
+  indistinguishable from a refresh that worked; it is refused like `--version --tag` already was.
+- **`--dir` outside `--refresh-rules` is refused rather than ignored.** `--dir <repo>` without
+  the refresh flag ran a full user-level install into the home directory and exited 0, having
+  written nothing into the named repository (measured: nine files into the home directory);
+  `--tag` was already refused this way, and the Upgrade prompt teaches the `--dir` form, so one
+  dropped word turned a repository refresh into a home install that reads as success in a log.
+  `--version --dir .` also exited 0 while `--version --dir <anywhere else>` exited 2, because the
+  guard compared the target to its default instead of tracking whether the flag was given. Both
+  are refused now.
+- **The refresh never writes through a symlink.** `cp` follows one, so a rule symlinked to a file
+  outside the repository carried the release's body out of the repository the run was pointed at,
+  and the link survived to do it again next time. The link is replaced by a real file, after the
+  backup that preserves what it pointed at, and each replacement is reported.
+- **A file the classifier can neither read nor address stops the run by name.** A comment promised
+  that anything unreadable or unhashable fell to the copy-aside side. No such fallback existed,
+  and none is possible: a file this script cannot read it cannot back up either, and overwriting
+  one after a failed backup is the single outcome that loses work. An unreadable rule ended the
+  run in git's raw `fatal: could not open ...` at exit 128, and a name carrying a newline did the
+  same, since the batched lookup addresses one path per line. Both are named refusals now, the
+  pairing of names to hashes is counted rather than trusted, and a shipped name carrying
+  whitespace, which can never match its own blob and so would be copied aside on every refresh
+  forever, is refused before anything is copied.
+- **The refresh path no longer needs bash 4.** Associative arrays and `mapfile` are 4.0, in the one
+  script whose purpose is landing on another machine, and macOS ships bash 3.2. The lookups are
+  sorted temporary files instead, the floor is checked and named at the top of the refresh path,
+  and the fixture asserts the bash-4 constructs stay absent. No bash 3.2 was available to run
+  against, so that claim is construct-absence plus the guard, not a measurement on that shell.
+
 ## v2.0.0 — 2026-09-11
 
 A breaking release. The differential gate now refuses a baseline that is not the tree it names, several tool failures exit 2 where they used to read as clean, and `--no-static` skips Checks E-H, so a caller written against v1.5.1's documented flow has to change. The dev-ledger and its installer are gone. Everything below landed since v1.5.1.
