@@ -97,6 +97,20 @@ shipped, not a guessed one.
                                                                        pieces it reached
   version-with-dir-2             --version with --dir, '.' and any  -> 2, refused alike
                                  other directory
+  rule-gate-wired-0              a fresh home, a home whose         -> 0, the gate file lands in
+                                 settings.json is kept, and one        each; the stamp says wired
+                                 that already names the gate           or NOT wired; a kept file
+                                                                       gets the exact PreToolUse
+                                                                       entry the kit's settings.json
+                                                                       carries; the installed hook
+                                                                       command exits 0 on garbage
+                                                                       and with the gate deleted
+  rule-gate-kept-settings-       a kept settings.json with its own  -> 0, each stamp says NOT
+    shapes-0                     hooks, a permissions entry naming     wired; the existing hooks
+                                 the gate, a repeated "hooks" key,     get a merged copy beside
+                                 invalid JSON; a fresh install         the file, never over it;
+                                 outside ~/.claude                     the fresh one is NOT
+                                                                       confirmed wired
 
   THE D7 COURT
   court-clean-real-0             the real repository               -> 0, denominators printed
@@ -121,6 +135,7 @@ Run: python3 harness/fixtures/install_test.py   (exit 0 = pass).
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -182,6 +197,7 @@ USER_PAYLOAD = (
     "claude-user/settings.json",
     "reference/deep-reasoning-agent.md",
     "reference/sdlc-gate.py",
+    "reference/rule_gate.py",
     "reference/review-checklist.md",
     "reference/voicing-document.md",
 )
@@ -1352,6 +1368,158 @@ def shipped_name_with_space_refused(td: Path) -> None:
     )
 
 
+def rule_gate_wired(td: Path) -> None:
+    """The rule gate lands every run, and the stamp says whether anything will run it.
+
+    settings.json is never overwritten, so on an upgrade the gate file arrives while the hook that
+    calls it does not. A stamp reading "installed" there would describe a gate that never runs.
+    The printed entry is compared, as parsed JSON, with the PreToolUse entry in the kit's real
+    claude-user/settings.json, so the two cannot drift apart. The installed command is then run
+    the way Claude Code runs a hook, through a shell: on garbage it must exit 0, and with the
+    gate file deleted it must still exit 0, because python3 exits 2 on a missing script and exit 2
+    from a PreToolUse hook blocks the call.
+    """
+    kit = kit_tree(td, full=True)
+    real_settings = REPO / "claude-user" / "settings.json"
+    shutil.copy(real_settings, kit / "claude-user" / "settings.json")
+    shutil.copy(REPO / "reference" / "rule_gate.py", kit / "reference" / "rule_gate.py")
+    want_hooks = json.loads(real_settings.read_text())["hooks"]
+
+    def install(home: Path) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+        env = clean_env()
+        env["HOME"] = str(home)
+        env["CLAUDE_HOME"] = str(home / ".claude")
+        got = subprocess.run(["bash", str(kit / "install.sh")], capture_output=True, text=True,
+                             env=env)
+        said = got.stdout + got.stderr
+        expect(got.returncode == 0, f"want exit 0, got {got.returncode}: {said.strip()[:400]}")
+        gate_file = home / ".claude" / "discipline" / "rule_gate.py"
+        expect(gate_file.is_file() and gate_file.read_bytes() == (REPO / "reference" /
+               "rule_gate.py").read_bytes(), f"the gate did not land at {gate_file}")
+        stamp = home / ".claude" / "discipline" / "KIT-VERSION"
+        return got, stamp_fields(stamp_text(stamp, "user-level stamp"))
+
+    fresh = td / "fresh"
+    got, fields = install(fresh)
+    expect(fields.get("rule_gate", "").startswith("installed and wired"),
+           f"a fresh settings.json carries the hook, so the gate is wired: {fields}")
+    installed = json.loads((fresh / ".claude" / "settings.json").read_text())
+    expect(installed.get("hooks") == want_hooks,
+           f"the fresh settings.json lost the hooks: {installed}")
+    command = installed["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    env = {"HOME": str(fresh), "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+           "DISCIPLINE_RULE_GATE_LOG": str(td / "gate.log")}
+    ran = subprocess.run(["bash", "-c", command], input="not json", capture_output=True,
+                         text=True, env=env)
+    expect(ran.returncode == 0 and "additionalContext" in ran.stdout,
+           f"the installed hook must fail open on garbage with exit 0: {ran}")
+    (fresh / ".claude" / "discipline" / "rule_gate.py").unlink()
+    ran = subprocess.run(["bash", "-c", command], input="{}", capture_output=True, text=True,
+                         env=env)
+    expect(ran.returncode == 0, f"a missing gate file must not exit 2 and block writes: {ran}")
+
+    want_entry = want_hooks["PreToolUse"][0]
+
+    def printed_entry(said: str) -> dict:
+        start = said.find("rule-gate PreToolUse entry")
+        expect(start >= 0, f"the kept-settings message must print the entry: {said[:600]}")
+        start = said.index("\n{", start) + 1
+        depth, end = 0, start
+        for end in range(start, len(said)):
+            depth += {"{": 1, "}": -1}.get(said[end], 0)
+            if depth == 0:
+                break
+        return json.loads(said[start:end + 1])
+
+    kept = td / "kept"
+    (kept / ".claude").mkdir(parents=True)
+    (kept / ".claude" / "settings.json").write_text('{"permissions": {"allow": []}}\n')
+    got, fields = install(kept)
+    said = got.stdout + got.stderr
+    expect(fields.get("rule_gate", "").startswith("installed but NOT wired"),
+           f"a kept settings.json without the hook leaves the gate unwired: {fields}")
+    expect(printed_entry(said) == want_entry,
+           f"the printed entry must equal the kit's settings.json PreToolUse entry: {said[:900]}")
+    expect('  "hooks": {' not in said, "a whole hooks key is what a paste turned into a duplicate")
+
+    wired = td / "wired"
+    (wired / ".claude").mkdir(parents=True)
+    (wired / ".claude" / "settings.json").write_text(real_settings.read_text())
+    got, fields = install(wired)
+    expect(fields.get("rule_gate", "").startswith("installed and wired"),
+           f"a kept settings.json that runs the gate is wired: {fields}")
+    expect("rule-gate PreToolUse entry" not in got.stdout,
+           "the entry is printed only when it is missing")
+
+
+def rule_gate_kept_settings_shapes(td: Path) -> None:
+    """A kept settings.json is read as JSON, so "wired" means a hook Claude Code would run.
+
+    The earlier test was a grep for the gate's file name. It called a permissions entry naming
+    the file wired, and a file holding "hooks" twice, where JSON readers keep the last key and
+    that one lacked the gate. And the block it printed was a whole "hooks" key: pasted into a
+    file that already had hooks it made exactly that duplicate, so the gate or the user's own
+    hooks vanished. Now the entry alone is printed, and for a file that parses cleanly a merged
+    copy is written beside it, never over it. A fresh install to a CLAUDE_HOME other than
+    ~/.claude is not stamped wired either: its hook command names ~/.claude's copy.
+    """
+    kit = kit_tree(td, full=True)
+    real_settings = REPO / "claude-user" / "settings.json"
+    shutil.copy(real_settings, kit / "claude-user" / "settings.json")
+    shutil.copy(REPO / "reference" / "rule_gate.py", kit / "reference" / "rule_gate.py")
+    want_entry = json.loads(real_settings.read_text())["hooks"]["PreToolUse"][0]
+    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}
+
+    def install(home: Path, settings: str | None,
+                claude_home: Path | None = None) -> tuple[str, str, Path]:
+        dest = claude_home or home / ".claude"
+        dest.mkdir(parents=True)
+        if settings is not None:
+            (dest / "settings.json").write_text(settings)
+        env = clean_env()
+        env["HOME"] = str(home)
+        env["CLAUDE_HOME"] = str(dest)
+        got = subprocess.run(["bash", str(kit / "install.sh")], capture_output=True, text=True,
+                             env=env)
+        said = got.stdout + got.stderr
+        expect(got.returncode == 0, f"want exit 0, got {got.returncode}: {said.strip()[:400]}")
+        fields = stamp_fields(stamp_text(dest / "discipline" / "KIT-VERSION", "user stamp"))
+        return fields.get("rule_gate", ""), said, dest
+
+    state, said, dest = install(td / "existing", json.dumps(
+        {"permissions": {"allow": []}, "hooks": {"PreToolUse": [mine]}}))
+    expect(state.startswith("installed but NOT wired"), f"existing hooks, no gate: {state}")
+    merged = sorted(dest.glob("settings.json.with-rule-gate-*"))
+    expect(len(merged) == 1, f"one merged copy beside the kept file: {merged}")
+    got = json.loads(merged[0].read_text())
+    expect(got["hooks"]["PreToolUse"] == [mine, want_entry] and got["permissions"] == {"allow": []},
+           f"the merged copy keeps the user's hook and adds the gate's: {got}")
+    expect(json.loads((dest / "settings.json").read_text())["hooks"]["PreToolUse"] == [mine],
+           "the kept settings.json itself is never written")
+    expect("add the\n    entry to that array" in said, f"the message says where it goes: {said}")
+
+    state, _, _ = install(td / "permissions-only", json.dumps(
+        {"permissions": {"deny": ["Edit(~/.claude/discipline/rule_gate.py)"]}}))
+    expect(state.startswith("installed but NOT wired") and "not in a PreToolUse hook" in state,
+           f"a permissions entry naming the file is not a hook: {state}")
+
+    gate_hooks = json.dumps({"PreToolUse": [want_entry]})
+    state, said, dest = install(td / "repeated-key", '{"hooks": ' + gate_hooks + ', "hooks": '
+                                + json.dumps({"PreToolUse": [mine]}) + "}")
+    expect(state.startswith("installed but NOT wired") and "repeats the key(s) hooks" in state,
+           f"a second hooks key replaces the first, which held the gate: {state}")
+    expect(not list(dest.glob("settings.json.with-rule-gate-*")),
+           "no merged copy from a file whose reading drops a repeated key")
+
+    state, _, _ = install(td / "invalid", '{"hooks": ')
+    expect(state.startswith("installed but NOT wired") and "not valid JSON" in state,
+           f"an unparseable settings.json runs nothing: {state}")
+
+    state, said, _ = install(td / "elsewhere-home", None, td / "staging" / ".claude")
+    expect(state.startswith("installed but NOT confirmed wired"),
+           f"a fresh install outside ~/.claude names ~/.claude's gate, not its own: {state}")
+
+
 def user_install_abort_stamp_honest(td: Path) -> None:
     """The user-level stamp must not read as a clean install over a half-copied one.
 
@@ -1526,6 +1694,8 @@ def main() -> int:
         case("symlinked-rule-not-written-through-0", symlinked_rule_not_written_through),
         case("shipped-name-with-space-refused-1", shipped_name_with_space_refused),
         case("user-install-abort-stamp-honest-1", user_install_abort_stamp_honest),
+        case("rule-gate-wired-0", rule_gate_wired),
+        case("rule-gate-kept-settings-shapes-0", rule_gate_kept_settings_shapes),
         court_case("court-clean-real-0", 0, (COURT_PASS, "consumer script"), lambda td: REPO),
         court_case(
             "court-clean-plant-0", 0, (COURT_PASS,),

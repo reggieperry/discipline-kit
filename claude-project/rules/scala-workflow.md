@@ -3,6 +3,7 @@ paths:
   - "**/*.scala"
   - "**/*.sc"
   - "build.sbt"
+  - "**/*.sbt"
 ---
 
 # Scala build loop and when to stop

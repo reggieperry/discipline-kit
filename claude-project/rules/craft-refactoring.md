@@ -5,6 +5,9 @@ paths:
   - "**/*.py"
   - "**/*.scala"
   - "**/*.sc"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.java"
 ---
 
 # Refactoring existing code

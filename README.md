@@ -193,6 +193,45 @@ PMD is found as `pmd` on `PATH`, else `$PMD_HOME/bin/pmd`, else under `~/.local/
 
 `--no-static` needs only `python3` and `git`. It runs Checks B, C and D and skips Check A, the compile precondition and Checks E-H; the report lists each skipped E-H check under `not_wired` and sets `no_static` to true. `--coverage`, if given, still runs its tool. Pass the flag to both `baseline` and `diff`; a mismatch exits 2.
 
+### The rule gate
+
+Claude Code loads a path-scoped rule only when Claude reads a matching file or one is @-mentioned, never on a write. The rule gate, `~/.claude/discipline/rule_gate.py`, is a PreToolUse hook on Write, Edit, MultiEdit and NotebookEdit that closes that gap. It works out which of the project's `.claude/rules` apply to the file being written, and checks the calling agent's own transcript (a subagent's own file, not its parent's) for each one having been loaded since the last compaction. If one is missing, it refuses the write and puts the rule's full text in the refusal, so the retry is written with the rule in view. It needs only `python3`. The decision record is [ADR-0008](docs/adrs/ADR-0008-rule-gate.md).
+
+**Turning it on.** A fresh install writes a `settings.json` that already carries the hook. If `~/.claude/settings.json` existed, `install.sh` leaves it alone, prints this PreToolUse entry, and writes a copy of your file with the entry added beside it (`settings.json.with-rule-gate-<time>`) for you to compare and move into place:
+
+```
+{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$HOME/.claude/discipline/rule_gate.py\" || true"
+    }
+  ]
+}
+```
+
+To add it by hand: if your file has a `"hooks"` object with a `"PreToolUse"` array, add the entry to that array; if `"hooks"` has no `"PreToolUse"`, add `"PreToolUse": [ <entry> ]` inside it; with no `"hooks"` at all, add `"hooks": { "PreToolUse": [ <entry> ] }` at the top level. Never add a second `"hooks"` key: Claude Code keeps only the last one, so the other one's hooks stop running without an error.
+
+Keep the `|| true`: `python3` exits 2 when the script is missing, and exit 2 from a PreToolUse hook blocks the call, so without it a deleted gate file would refuse every write on the machine. The `rule_gate:` line in `~/.claude/discipline/KIT-VERSION` says whether the gate is wired: the installer reads `settings.json` as JSON and calls it wired only when a PreToolUse hook on Write and Edit runs the copy it installed. If you installed with `CLAUDE_HOME` pointing elsewhere, the stamp says not confirmed wired; edit the path in the command to match.
+
+**Turning it off.** Set `DISCIPLINE_RULE_GATE=off` in the environment Claude Code runs in, or remove the entry.
+
+**The log.** `~/.claude/discipline/rule-gate.log` (`DISCIPLINE_RULE_GATE_LOG` moves it) gets one tab-separated line for each refusal (`DENY`, or `DENY-SIBLING` for a later call of the same model response, refused without repeating the text), each time the gate could not check and let the write through (`FAIL-OPEN`), and each rule it gave but still could not see as loaded, which it then stops refusing (`BLIND`). A rule goes `BLIND` when the gate's own text is in the transcript and it cannot count it, when the refused call has had no result for two minutes, or after three refusals whose text never reached the model, as when another hook's refusal of the same call took its place. `FAIL-OPEN` or `BLIND` lines mean it was not able to look, most likely because Claude Code changed its transcript format. No lines does not prove the gate checked anything. It writes nothing when it found nothing missing, and also nothing when it did not run or did not look: the gate file is missing (the `|| true` hides the error), `DISCIPLINE_RULE_GATE=off` is set, or the file written is outside the project.
+
+**The cost.** A Python file pulls in about 14 rules, about 113 KB (about 28k tokens), once per context window: compaction usually drops them, and the next write brings them back. A refused write's content is thrown away and generated again.
+
+**Known limits.**
+
+- Writes made through Bash are not gated. Parsing write targets out of real commands gave only false refusals.
+- In bypass-permissions mode, Claude Code's system prompt steers the model toward Bash for file changes, which goes around the gate.
+- Fork subagents are untested. If the gate cannot see what such a subagent loaded, it falls back to the `BLIND` allow.
+- It does not run in chain phases, which exclude user-scope settings.
+- A file outside the project root is not checked, including one in a directory added with `--add-dir`.
+- A refusal counts as a load only once the model has seen it, which the gate works out from the response each call belongs to. A call whose own entry is not yet on disk, in a response whose calls on disk all have results, is taken to start a new response. Had Claude Code written an earlier call's refusal to disk before a later call of the same response, that call would get through; the live runs never showed it, since a response's entries reach disk together when it ends.
+- Loading a rule is not evidence that it is followed. That was measured only for one or two short rules, not for fourteen in one context.
+- Its facts were measured on Claude Code 2.1.286. A later version can change the transcript shapes or the glob matcher, and no test in this repository would notice.
+
 ## Per-project setup
 
 Inside each repo you want the discipline to govern:
@@ -203,11 +242,11 @@ cp /path/to/discipline-kit/claude-project/rules/*.md                  .claude/ru
 cp /path/to/discipline-kit/claude-project/sdlc-discipline/guides/*.md .claude/sdlc-discipline/guides/
 ```
 
-Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `tests/**`, `docs/**`, …) when you edit a matching file: the `go-*` rules fire on Go files, `python-*` on Python, `scala-*` on Scala, `java-*` on Java, `craft-*` on all of them, no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
+Each rule is scoped by the path globs in its `paths:` frontmatter (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `tests/**`, `docs/**`, …). The `go-*` rules cover Go files, `python-*` Python, `scala-*` Scala, `java-*` Java, `ts-*` TypeScript and `shell-*` shell. The `craft-*` rules cover the source files of all six languages, except `craft-xunit`, which covers only test files, and those of five of the languages: shell test files reach `craft-tdd` but not `craft-xunit`; five of them (complexity, abstraction, domain-modeling, documentation, measurement) also cover ADRs, stories, and design and plan documents. Claude Code loads a scoped rule into context when Claude reads a matching file with the Read tool, or when such a file is @-mentioned. Write, Edit and Bash do not load it, so a file Claude writes without reading a matching file first is written without its rules. The kit's [rule gate](#the-rule-gate), which the user-level install wires in (for a settings.json it keeps, it prints the entry to add), refuses a Write or Edit until the matching rules are in context. Nothing else needs wiring per project. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
 
 ## Using it
 
-- **Rules** load themselves on edit. Nothing to invoke.
+- **Rules** load when Claude reads a matching file, and the rule gate refuses a write until they have. Nothing to invoke.
 - **`/deep-reason`** spins up a fresh-context Opus subagent for verdict-shaped or hard-to-reverse decisions; the self-trigger criteria are in the installed `CLAUDE.md`.
 - **`/pr-review`** reviews a PR, branch, or diff — it runs the gate first, loads the *reviewed repo's own* rules, then applies the language-neutral core.
 - **`/adversarial-review`** fans out N fresh-context adversaries decorrelated by role against a diff (modes `pre-pr` / `own-pr` / `foreign-pr`) — the tier-two red-team above `pr-review`, reserved for detector-class, sensitive, contested, or hairy-state changes; it hunts what no check encodes yet and never votes.

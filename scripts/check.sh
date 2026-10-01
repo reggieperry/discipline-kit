@@ -40,10 +40,13 @@ bash scripts/tag-consumption-check.sh
 # ADR landed, sequencer or not.
 bash scripts/chain-refspec-check.sh
 python3 harness/rule_grades.py
-# WHICH RULES CAN FIRE, AND FOR WHICH LANGUAGES. A rule injects on a matching path edit, so one
-# whose globs reach nothing has never fired and is indistinguishable from one that works — both
-# are silent. The per-language half derives its expectation from the shipped `<lang>-testing.md`
-# overlays rather than a hand-kept list, and found two gaps on its first run.
+# WHICH RULES CAN FIRE, AND FOR WHICH LANGUAGES. A rule loads when Claude reads a file its globs
+# match (and the rule gate demands it before a matching write), so one whose globs reach nothing
+# has never loaded and is indistinguishable from one that works — both are silent. The
+# per-language half derives its expectation from the shipped `<lang>-testing.md` overlays rather
+# than a hand-kept list, and found two gaps on its first run. It also checks that every craft
+# rule reaches every language's source, and that the paths the kit's own ADR and story templates
+# write to reach the craft design rules.
 python3 harness/rule_coverage.py
 python3 harness/fixtures/authoring_artifacts_test.py
 # The story graph's fixture and checker, both on the commit path since 2026-08-12, when the
@@ -54,6 +57,12 @@ python3 harness/chain_graph.py
 python3 harness/fixtures/authoring_artifacts_fixture_test.py
 python3 harness/fixtures/rule_grades_test.py
 python3 harness/fixtures/rule_coverage_test.py
+# The rule gate's fixture. reference/rule_gate.py is the PreToolUse hook the user-level install
+# wires, and rule_coverage.py above loads its matcher, so both read globs the way Claude Code
+# does. The fixture replays every golden vector the node-ignore bundled in Claude Code produced,
+# fails when a shipped glob has no vectors, drives each way a rule counts as loaded through
+# synthetic transcripts in the measured entry shapes, and runs the hook end to end.
+python3 harness/fixtures/rule_gate_test.py
 python3 harness/fixtures/scope_check_test.py
 # The scrub gate runs first in this file and had never been observed firing. Its fixture points
 # it at throwaway trees with planted tokens, so a tier that stops scanning is caught here rather

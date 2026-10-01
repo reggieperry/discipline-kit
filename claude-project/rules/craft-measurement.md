@@ -5,8 +5,13 @@ paths:
   - "**/*.py"
   - "**/*.scala"
   - "**/*.sc"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.java"
   - "scripts/**"
   - "**/adr/*.md"
+  - "**/adrs/*.md"
+  - "**/stories/*.md"
   - "**/*design*.md"
   - "**/*PLAN*.md"
   - "**/*plan*.md"
@@ -18,8 +23,8 @@ paths:
 > story set is where the design is actually made, and this rule used to reach none of them:
 > measured 2026-09-07 in a consumer repository, an ADR fired exactly one rule, the writing
 > register. A subsystem was designed with no design discipline in front of the author. The
-> globs are shapes rather than paths, so they travel: `adr/`, `*design*`, `*plan*`,
-> `*stories*`, `*intake*`.
+> globs are shapes rather than paths, so they travel: `adr/`, `adrs/`, `stories/`, `*design*`,
+> `*plan*`, `*stories*`, `*intake*`.
 
 # Measuring, and why an instrument reads clean when it is not looking
 

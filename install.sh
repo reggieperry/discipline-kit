@@ -2,7 +2,7 @@
 #
 # install.sh — place the user-level discipline into ~/.claude.
 #
-# Copies the portable skills, the deep-reasoning template, the review gate, and
+# Copies the portable skills, the deep-reasoning template, the review gate, the rule gate, and
 # (guarded) the user CLAUDE.md and settings.json. Existing CLAUDE.md / settings.json
 # are never clobbered — they are backed up and a merge note is printed instead.
 #
@@ -542,6 +542,7 @@ user_state=unstarted
 unfinished="unfinished: this run stopped before this piece was placed"
 skills_state="$unfinished"
 reference_state="$unfinished"
+rule_gate_state="$unfinished"
 claude_md_state="$unfinished"
 settings_state="$unfinished"
 kit_commit_now="$(kit_commit)"
@@ -579,6 +580,7 @@ write_user_stamp() {
     echo "installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
     echo "skills: $skills_state"
     echo "reference: $reference_state"
+    echo "rule_gate: $rule_gate_state"
     echo "CLAUDE.md: $claude_md_state"
     echo "settings.json: $settings_state"
   } > "$DEST/discipline/KIT-VERSION"
@@ -610,6 +612,110 @@ cp "$KIT/reference/voicing-document.md" "$DEST/discipline/voicing-document.md"
 reference_state="installed (deep-reasoning-agent.md, discipline/{sdlc-gate.py,review-checklist.md,voicing-document.md}; rewritten every run)"
 echo "  reference: deep-reasoning-agent.md, discipline/{sdlc-gate.py,review-checklist.md,voicing-document.md}"
 
+# --- the rule gate ---
+# A PreToolUse hook that refuses a Write or Edit whose path-scoped project rules are not in the
+# session's context, because Claude Code loads such a rule only when a matching file is READ.
+# The file lands every run; whether it RUNS depends on settings.json naming it, which the guarded
+# block below may not touch, so its disposition is decided there.
+cp "$KIT/reference/rule_gate.py" "$DEST/discipline/rule_gate.py"
+rule_gate_state="unfinished: discipline/rule_gate.py was copied, but this run stopped before settings.json was examined"
+
+# The PreToolUse entry claude-user/settings.json carries, printed for a settings.json this script
+# will not overwrite. It is the entry, not a whole "hooks" key: pasted beside an existing "hooks"
+# key, a second one would make the file hold the key twice, and a JSON reader keeps only the last,
+# so either the gate or the user's own hooks would vanish without an error. `|| true` is there
+# because python3 exits 2 when the script is missing, and exit 2 from a PreToolUse hook blocks the
+# call: without it, a deleted gate file would refuse every write.
+# install_test.py holds this text equal to the entry in claude-user/settings.json.
+# shellcheck disable=SC2016  # $HOME is for the hook's shell to expand when Claude Code runs it
+RULE_GATE_ENTRY='{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$HOME/.claude/discipline/rule_gate.py\" || true"
+    }
+  ]
+}'
+
+# Whether a settings.json runs THIS install's gate on Write and Edit, read as JSON the way Claude
+# Code reads it (a repeated key keeps its last value). A grep for the file name was the earlier
+# test, and it called a permissions entry naming the file, or a "hooks" key a later duplicate
+# replaced, wired. Prints a state (wired, named, absent, invalid) and a detail line: the
+# repeated keys, or the parse error.
+# shellcheck disable=SC2016  # Python source: the $HOME spellings in it are text it rewrites
+RULE_GATE_CHECK='
+import json, os, re, sys
+path, home, dest = sys.argv[1:4]
+want = os.path.normpath(os.path.join(dest, "discipline", "rule_gate.py"))
+repeated = []
+def pairs(kv):
+    seen = set()
+    for k, _ in kv:
+        if k in seen:
+            repeated.append(k)
+        seen.add(k)
+    return dict(kv)
+try:
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    data = json.loads(text, object_pairs_hook=pairs)
+except (OSError, ValueError) as e:
+    print("invalid")
+    print(str(e))
+    sys.exit(0)
+def covers(m):
+    if m is None or m in ("", "*"):
+        return True
+    if not isinstance(m, str):
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_|]+", m):
+        return {"Write", "Edit"} <= set(m.split("|"))
+    try:
+        return all(re.search(m, t) for t in ("Write", "Edit"))
+    except re.error:
+        return False
+def runs_gate(cmd):
+    for spelling in ("${HOME}", "$HOME"):
+        cmd = cmd.replace(spelling, home)
+    cmd = re.sub(r"(^|[\s\"=])~/", lambda m: m.group(1) + home + "/", cmd)
+    return want in cmd.replace("//", "/")
+hooks = data.get("hooks") if isinstance(data, dict) else None
+entries = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+state = "named" if "rule_gate.py" in text else "absent"
+for e in entries if isinstance(entries, list) else []:
+    if isinstance(e, dict) and covers(e.get("matcher")):
+        for h in e.get("hooks") if isinstance(e.get("hooks"), list) else []:
+            if isinstance(h, dict) and isinstance(h.get("command"), str) and runs_gate(h["command"]):
+                state = "wired"
+print(state)
+print(", ".join(sorted(set(repeated))))
+'
+
+# The kept settings.json with the gate's entry added, written to a NEW file beside it for the
+# user to review and move into place. The live file is never touched.
+RULE_GATE_MERGE='
+import json, sys
+src, out, entry = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+with open(src, encoding="utf-8") as f:
+    data = json.load(f)
+hooks = data.setdefault("hooks", {})
+hooks.setdefault("PreToolUse", []).append(entry)
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+'
+
+# The state word, a newline, and the detail line; "unchecked" when python3 cannot run the check.
+rule_gate_wiring() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'unchecked\npython3 was not found, and the gate needs it too\n'
+    return 0
+  fi
+  python3 -c "$RULE_GATE_CHECK" "$1" "$HOME" "$DEST" 2>/dev/null ||
+    printf 'unchecked\nthe check could not run\n'
+}
+
 # --- CLAUDE.md (guarded) ---
 if [[ -e "$DEST/CLAUDE.md" ]]; then
   claude_md_backup="$(unique_path "$DEST/CLAUDE.md.bak-$stamp")"
@@ -630,10 +736,73 @@ if [[ -e "$DEST/settings.json" ]]; then
   settings_state="kept-existing (yours was left in place and copied to ${settings_backup##*/}; the kit's permissions were NOT merged, so this piece is whatever it was before this run)"
   echo "  settings.json EXISTS—backed up to ${settings_backup##*/}; NOT overwritten."
   echo "    Review $KIT/claude-user/settings.json and merge the permissions you want."
+  wiring="$(rule_gate_wiring "$DEST/settings.json")"
+  wiring_state="${wiring%%$'\n'*}"
+  wiring_detail=""
+  case "$wiring" in *$'\n'*) wiring_detail="${wiring#*$'\n'}" ;; esac
+  repeated_note=""
+  if [ "$wiring_state" != invalid ] && [ -n "$wiring_detail" ]; then
+    repeated_note="; it also repeats the key(s) $wiring_detail, and Claude Code keeps only the last of each"
+  fi
+  case "$wiring_state" in
+    wired)
+      rule_gate_state="installed and wired (discipline/rule_gate.py, rewritten every run; your kept settings.json runs it as a PreToolUse hook on Write and Edit$repeated_note)"
+      echo "    Your settings.json runs discipline/rule_gate.py as a PreToolUse hook, so the rule gate is wired."
+      ;;
+    unchecked)
+      rule_gate_state="installed; wiring NOT checked (discipline/rule_gate.py is in place, but $wiring_detail, so this run cannot say whether your kept settings.json runs it)"
+      echo "    The rule gate is installed, but its wiring was not checked: $wiring_detail."
+      ;;
+    invalid)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place, but your kept settings.json is not valid JSON: $wiring_detail)"
+      echo "    The rule gate is installed, but your settings.json is not valid JSON ($wiring_detail),"
+      echo "    so Claude Code cannot be running it. Fix the file, then add the entry below."
+      ;;
+    named)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place; your kept settings.json names rule_gate.py, but not in a PreToolUse hook on Write and Edit that runs $DEST/discipline/rule_gate.py$repeated_note)"
+      ;;
+    *)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place, but your kept settings.json does not name it, so the gate does not run until the PreToolUse entry install.sh prints is added$repeated_note)"
+      ;;
+  esac
+  if [ "$wiring_state" = named ] || [ "$wiring_state" = absent ] || [ "$wiring_state" = invalid ]; then
+    echo "    The rule gate is installed but NOT wired. To turn it on, add this rule-gate PreToolUse entry"
+    echo "    to $DEST/settings.json:"
+    echo ""
+    echo "$RULE_GATE_ENTRY"
+    echo ""
+    echo "    Where it goes: if the file has a \"hooks\" object holding a \"PreToolUse\" array, add the"
+    echo "    entry to that array. If \"hooks\" has no \"PreToolUse\", add \"PreToolUse\": [ <entry> ]"
+    echo "    inside \"hooks\". With no \"hooks\" at all, add \"hooks\": { \"PreToolUse\": [ <entry> ] }"
+    echo "    at the top level. Separate it from its neighbors with a comma. Never add a second"
+    echo "    \"hooks\" key: Claude Code keeps only the last one, and the other's hooks stop running."
+    if [ -n "$repeated_note" ]; then
+      echo "    Your file already repeats the key(s) $wiring_detail; merge each pair into one first."
+    fi
+    # No merged copy from a file that repeats a key: reading it keeps the last value, so the
+    # copy would silently drop what the earlier one held.
+    if [ "$wiring_state" != invalid ] && [ -z "$repeated_note" ] && command -v python3 >/dev/null 2>&1; then
+      merged="$(unique_path "$DEST/settings.json.with-rule-gate-$stamp")"
+      if python3 -c "$RULE_GATE_MERGE" "$DEST/settings.json" "$merged" "$RULE_GATE_ENTRY" 2>/dev/null; then
+        echo "    A copy of your settings.json with the entry added is at ${merged##*/}. Compare it with"
+        echo "    yours (diff -u settings.json ${merged##*/}) and move it into place if it is right."
+      fi
+    fi
+  fi
 else
   cp "$KIT/claude-user/settings.json" "$DEST/settings.json"
   settings_state="installed (conservative: local git only, no auto-bypass)"
-  echo "  settings.json installed (conservative: local git only, no auto-bypass)"
+  wiring="$(rule_gate_wiring "$DEST/settings.json")"
+  if [ "${wiring%%$'\n'*}" = wired ]; then
+    rule_gate_state="installed and wired (discipline/rule_gate.py, rewritten every run; the settings.json this run wrote carries its PreToolUse hook)"
+  else
+    rule_gate_state="installed but NOT confirmed wired (the settings.json this run wrote runs \$HOME/.claude/discipline/rule_gate.py, and this install put the gate in $DEST/discipline; it runs only if Claude Code reads $DEST/settings.json and the command names that path)"
+  fi
+  echo "  settings.json installed (conservative: local git only, no auto-bypass; wires the rule gate)"
+fi
+if [ "$DEST" != "$HOME/.claude" ]; then
+  echo "    NOTE: the rule gate's hook command names \$HOME/.claude/discipline/rule_gate.py, and this"
+  echo "    install went to $DEST. Edit the command's path to match if Claude Code reads $DEST."
 fi
 
 # --- the version stamp for the user-level pieces ---
@@ -663,7 +832,10 @@ Per-project step (run inside each repo you want the discipline to govern):
   cp $KIT/claude-project/rules/*.md                     .claude/rules/
   cp $KIT/claude-project/sdlc-discipline/guides/*.md    .claude/sdlc-discipline/guides/
 
-The rules auto-load by path glob (e.g. **/*.py) when you edit matching files.
+A rule loads when Claude reads a file matching its path globs (e.g. **/*.py) with the Read
+tool, or when such a file is @-mentioned. Write, Edit and Bash do not load it. Once
+settings.json wires the rule gate, it refuses a Write or Edit until the matching rules are in
+context.
 
 Those two cp lines copy from THIS CHECKOUT'S WORKING TREE, so what lands matches a release tag
 only if the checkout sits exactly on one. The first --refresh-rules in that repo will therefore
