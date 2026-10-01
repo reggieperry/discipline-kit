@@ -2,12 +2,23 @@
 #
 # install.sh — place the user-level discipline into ~/.claude.
 #
-# Copies the portable skills, the deep-reasoning template, the review gate, and
+# Copies the portable skills, the deep-reasoning template, the review gate, the rule gate, and
 # (guarded) the user CLAUDE.md and settings.json. Existing CLAUDE.md / settings.json
 # are never clobbered — they are backed up and a merge note is printed instead.
 #
 # Project-level pieces (rules, guides, memories) are NOT auto-installed — they go
 # per-repo; the instructions are printed at the end.
+#
+# `--refresh-rules [--dir <repo>] [--tag <tag>]` re-syncs a repo that already has
+# .claude/rules: the rules, the guides, and the rule gate, all read from ONE release tag. The
+# gate lands at .claude/hooks/rule_gate.py and is wired in the repo's .claude/settings.json:
+# created when absent, merged in place only when git tracks the file with no uncommitted changes
+# (so git diff shows the entry and git checkout takes it back), and otherwise left alone with the
+# entry printed. settings.local.json is never touched. A tag cut before the gate existed skips
+# it, says so, and leaves the repo's hooks as they were. The user-level copy steps aside for a
+# repo's own wired copy, so wiring both is safe while Claude Code loads project hooks; a session
+# that does not (--setting-sources without project, disableAllHooks) leaves neither copy checking
+# (ADR-0008, Consequences).
 #
 # Both install modes leave a version stamp, because an instance that cannot name what it has
 # cannot tell whether it is current: discipline/KIT-VERSION for the user-level pieces (a COMMIT,
@@ -135,8 +146,10 @@ fi
 # under a name the kit never shipped is untouched; a rule OR GUIDE whose content matches no
 # release tag THIS CHECKOUT HOLDS is copied aside before being overwritten (see the classification
 # below, and be careful what a non-match does and does not establish, since tags arrive by fetch);
-# CLAUDE.md is never touched. Run
-# it inside the repo, or point at one with --dir.
+# CLAUDE.md is never touched. The tag's reference/rule_gate.py, when it has one, goes to
+# .claude/hooks/rule_gate.py the same way and is wired in .claude/settings.json: created when
+# absent, merged only where git tracks the file cleanly, and otherwise printed (see THE GATE, then
+# its wiring, below). Run it inside the repo, or point at one with --dir.
 #
 # The rules come from a RELEASE TAG's tree, never from whatever the checkout's working tree holds:
 # ADR-0002/D7 — consumers resolve tags the operator mints, so a bad merge on main cannot reach a
@@ -161,6 +174,185 @@ unique_path() {
   done
   printf '%s' "$candidate"
 }
+
+# Where a printed rule-gate entry goes in a settings.json, for both modes. One text, because a
+# reader who sees the instruction twice should not have to work out whether the two differ.
+print_entry_placement() {
+  echo "    Where it goes: if the file has a \"hooks\" object holding a \"PreToolUse\" array, add the"
+  echo "    entry to that array. If \"hooks\" has no \"PreToolUse\", add \"PreToolUse\": [ <entry> ]"
+  echo "    inside \"hooks\". With no \"hooks\" at all, add \"hooks\": { \"PreToolUse\": [ <entry> ] }"
+  echo "    at the top level. Separate it from its neighbors with a comma. Never add a second"
+  echo "    \"hooks\" key: Claude Code keeps only the last one, and the other's hooks stop running."
+}
+
+# THE PROJECT-LEVEL ENTRY, which --refresh-rules wires into a repository's own settings.json. It
+# names the vendored copy through $CLAUDE_PROJECT_DIR, which Claude Code sets for hook commands to
+# the directory the session started in (measured on 2.1.286: a project hook logged it, and the
+# hook's working directory, as that directory). `|| true` for the user-level entry's reason: a
+# missing script exits 2, and exit 2 from a PreToolUse hook blocks the call.
+# install_test.py holds this text equal to the entry it writes out by hand.
+# shellcheck disable=SC2016  # $CLAUDE_PROJECT_DIR is for the hook's shell to expand
+PROJECT_GATE_ENTRY='{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" || true"
+    }
+  ]
+}'
+
+# Decides, and where it may, makes the project-level wiring. Prints a state word and a detail
+# line: already-wired (and where), created, merged, or not-wired (and why). The order is the
+# point. A settings.local.json that runs the gate already wires it, and a second copy in
+# settings.json would run it twice, but this never writes settings.local.json. Next an already
+# wired settings.json is left alone whatever git says about it. Only then is a file merged, and
+# only one the caller found tracked and clean (why_not empty), whose keys are not repeated, and
+# whose text a JSON writer reproduces exactly at its own indent: rewriting any other file would
+# change lines besides the entry, and git diff would no longer show just the addition.
+#
+# "Runs the gate" means what reference/rule_gate.py's own deferral means, because the user-level
+# copy steps aside on exactly that test and a stamp saying "wired" on any looser one leaves a write
+# nobody checks. A command hook whose matcher selects every write tool (an empty or "*" matcher,
+# a plain A|B list naming all four, or else a regular expression matching each) and whose command
+# runs THIS repository's file: its script, after an optional python interpreter, is
+# $CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py, the relative .claude/hooks/rule_gate.py, or an
+# absolute path to the same file. A command that only mentions the path (another checkout's copy,
+# rule_gate.py.orig, an echo) runs nothing here. A hook that does run it but for fewer than the
+# four tools is reported, never merged beside: a second entry would run the gate twice for the
+# tools both select. The write goes to a temporary file in .claude/ that replaces settings.json
+# only once it is whole, so a write that fails partway leaves the original as it was.
+# With a fifth argument "check" it only answers already-wired or not-wired, creating and writing
+# nothing: the report for a gate an earlier tag vendored.
+# shellcheck disable=SC2016  # $CLAUDE_PROJECT_DIR here is a spelling Python compares, not expands
+RULE_GATE_PROJECT_WIRE='
+import json, os, re, shlex, stat, sys, tempfile
+settings, local, entry_text, why_not = sys.argv[1:5]
+check_only = sys.argv[5:6] == ["check"]
+entry = json.loads(entry_text)
+tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+copy = os.path.join(".claude", "hooks", "rule_gate.py")
+def say(state, detail=""):
+    print(state)
+    print(detail)
+    sys.exit(0)
+def selects(m, tool):
+    if m is None or m in ("", "*"):
+        return True
+    if not isinstance(m, str):
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_|]+", m):
+        return tool in m.split("|")
+    try:
+        return re.search(m, tool) is not None
+    except re.error:
+        return False
+def runs_copy(cmd):
+    try:
+        words = shlex.split(cmd) if isinstance(cmd, str) else []
+    except ValueError:
+        return False
+    if words and re.fullmatch(r"python[0-9.]*", os.path.basename(words[0])):
+        words = words[1:]
+    if not words:
+        return False
+    if words[0] in ("$CLAUDE_PROJECT_DIR/" + copy, "${CLAUDE_PROJECT_DIR}/" + copy, copy, "./" + copy):
+        return True
+    try:
+        return os.path.isabs(words[0]) and os.path.samefile(words[0], copy)
+    except OSError:
+        return False
+partial = []
+def runs_gate(data, name):
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    entries = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+    for e in entries if isinstance(entries, list) else []:
+        for h in e.get("hooks", []) if isinstance(e, dict) and isinstance(e.get("hooks"), list) else []:
+            if not (isinstance(h, dict) and h.get("type") == "command" and runs_copy(h.get("command"))):
+                continue
+            left_out = [t for t in tools if not selects(e.get("matcher"), t)]
+            if not left_out:
+                return True
+            partial.append("a PreToolUse hook in %s runs .claude/hooks/rule_gate.py under the matcher %s, which leaves out %s, so the gate does not run for those writes; widen that matcher to the one in the entry below rather than adding a second entry"
+                           % (name, json.dumps(e.get("matcher")), ", ".join(left_out)))
+    return False
+try:
+    with open(local, encoding="utf-8") as f:
+        if runs_gate(json.load(f), ".claude/settings.local.json"):
+            say("already-wired", ".claude/settings.local.json")
+except (OSError, ValueError):
+    pass
+if check_only:
+    try:
+        with open(settings, encoding="utf-8") as f:
+            if runs_gate(json.load(f), ".claude/settings.json"):
+                say("already-wired", ".claude/settings.json")
+    except (OSError, ValueError):
+        pass
+    say("not-wired", partial[0] if partial else "no settings file here runs it")
+if os.path.islink(settings) and not os.path.exists(settings):
+    say("not-wired", why_not or "it is a symlink to nothing")
+if not os.path.lexists(settings):
+    if partial:
+        say("not-wired", partial[0])
+    try:
+        with open(settings, "x", encoding="utf-8") as f:
+            f.write(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2) + "\n")
+    except OSError as e:
+        say("not-wired", "it could not be created: %s" % e)
+    say("created")
+repeated = []
+def pairs(kv):
+    seen = set()
+    for k, _ in kv:
+        if k in seen:
+            repeated.append(k)
+        seen.add(k)
+    return dict(kv)
+try:
+    with open(settings, encoding="utf-8", newline="") as f:
+        text = f.read()
+    data = json.loads(text, object_pairs_hook=pairs)
+except (OSError, ValueError) as e:
+    say("not-wired", "it could not be read as JSON (%s)" % e)
+if runs_gate(data, ".claude/settings.json"):
+    say("already-wired", ".claude/settings.json")
+if partial:
+    say("not-wired", partial[0])
+if why_not:
+    say("not-wired", why_not)
+if repeated:
+    say("not-wired", "it repeats the key(s) %s, and rewriting it would keep only the last of each"
+        % ", ".join(sorted(set(repeated))))
+hooks = data.get("hooks", {}) if isinstance(data, dict) else None
+if not isinstance(hooks, dict) or not isinstance(hooks.get("PreToolUse", []), list):
+    say("not-wired", "its \"hooks\" or \"hooks.PreToolUse\" is not the shape an entry is added to")
+body = text[:-1] if text.endswith("\n") else text
+style = None
+for indent in (2, 4, "\t"):
+    for ascii_only in (False, True):
+        if style is None and json.dumps(data, indent=indent, ensure_ascii=ascii_only) == body:
+            style = (indent, ascii_only)
+if style is None:
+    say("not-wired", "its layout is not one a JSON writer reproduces, so rewriting it would change "
+        "lines besides the entry")
+data.setdefault("hooks", hooks).setdefault("PreToolUse", []).append(entry)
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(settings), prefix=".settings.json.", suffix=".tmp")
+try:
+    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+        f.write(json.dumps(data, indent=style[0], ensure_ascii=style[1]) + text[len(body):])
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, stat.S_IMODE(os.stat(settings).st_mode))
+    os.replace(tmp, settings)
+except OSError as e:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    say("not-wired", "writing it failed (%s), and the half-written copy was discarded" % e)
+say("merged")
+'
 
 if [ "$REFRESH_RULES" = 1 ]; then
   # THE SHELL FLOOR, NAMED IN THE SCRIPT THAT NEEDS IT. This path used associative arrays and
@@ -223,6 +415,31 @@ if [ "$REFRESH_RULES" = 1 ]; then
   aside_count=0
   refresh_state=unstarted
 
+  # THE RULE GATE RIDES THE SAME TAG, and only a tag that has it. Every release before the gate
+  # existed lacks reference/rule_gate.py, and `git archive` naming a path the tree lacks dies, so
+  # the path is asked about first and the archive below names it only when it is there. A tag
+  # without it changes nothing about the repo's hooks: an older gate already vendored here stays,
+  # and the stamp says so, since the user-level copy may be deferring to it.
+  gate_dst=.claude/hooks/rule_gate.py
+  gate_in_tag=0
+  rule_gate_state="not in tag $TAG"
+  if g cat-file -e "$TAG:reference/rule_gate.py" 2>/dev/null; then
+    gate_in_tag=1
+    rule_gate_state="unfinished: this refresh stopped before .claude/hooks/rule_gate.py was placed"
+  fi
+  # NEVER VENDOR THROUGH A LINKED DIRECTORY. place_one replaces a linked FILE, but a linked
+  # .claude/hooks (or .claude) carried the gate out of the repository, and the copy run through
+  # it once resolved outside the root and deferred to itself, so nothing checked a write. The
+  # gate is not placed or wired, and the run says why.
+  gate_link=""
+  if [ "$gate_in_tag" = 1 ]; then
+    for d in .claude .claude/hooks; do
+      if [ -L "$d" ] && [ -z "$gate_link" ]; then
+        gate_link="$d"
+      fi
+    done
+  fi
+
   # THE STAMP IS WRITTEN BEFORE THE FIRST COPY AND REWRITTEN AFTER THE LAST. Writing it only
   # after every copy succeeded left new rule bodies on disk under the PREVIOUS run's stamp
   # whenever one died partway: measured, 9 of 52 rules carried the new content while the stamp
@@ -234,9 +451,12 @@ if [ "$REFRESH_RULES" = 1 ]; then
       echo "# Written by 'install.sh --refresh-rules'. NOT A RULE: the leading dot and the absent"
       echo "# .md suffix keep the rule loader off it."
       echo "#"
-      echo "# WHAT LANDED: the kit-shipped rules here, and the guides under"
-      echo "# .claude/sdlc-discipline/guides/, were read from the kit's RELEASE TAG below with"
-      echo "# 'git archive', never from the kit checkout's working tree."
+      echo "# WHAT LANDED: the kit-shipped rules here, the guides under"
+      echo "# .claude/sdlc-discipline/guides/, and, when rule_gate below begins \"vendored\", the"
+      echo "# rule gate at .claude/hooks/rule_gate.py were read from the kit's RELEASE TAG below"
+      echo "# with 'git archive', never from the kit checkout's working tree. rule_gate says"
+      echo "# whether the tag had the gate, whether .claude/settings.json runs it, and whether a"
+      echo "# gate some earlier tag vendored was left in place."
       echo "#"
       echo "# STATE. complete: every copy this refresh planned succeeded. in-progress: a refresh"
       echo "# is running, or died before it could say otherwise. partial: it died partway, so"
@@ -254,6 +474,7 @@ if [ "$REFRESH_RULES" = 1 ]; then
       echo "rules_copied: $rules_copied"
       echo "guides_copied: $guides_copied"
       echo "files_copied_aside: $aside_count"
+      echo "rule_gate: $rule_gate_state"
       echo "prior_stamp: $prior_stamp"
     } > .claude/rules/.kit-version
   }
@@ -268,11 +489,15 @@ if [ "$REFRESH_RULES" = 1 ]; then
   }
   trap cleanup_refresh EXIT
 
-  # claude-project WHOLE, in ONE archive: the rules and the guides are one payload from one
-  # release, and reading them from two archives would let a consumer end up holding rules from
-  # one tag and guides from another.
-  if ! g archive "$TAG" claude-project | tar -x -C "$tmp"; then
-    echo "✖ could not read claude-project from tag $TAG." >&2
+  # claude-project WHOLE, and the gate beside it, in ONE archive: the rules, the guides and the
+  # gate are one payload from one release, and reading them from separate archives would let a
+  # consumer end up holding rules from one tag and guides or a gate from another.
+  archive_paths=(claude-project)
+  if [ "$gate_in_tag" = 1 ]; then
+    archive_paths+=(reference/rule_gate.py)
+  fi
+  if ! g archive "$TAG" "${archive_paths[@]}" | tar -x -C "$tmp"; then
+    echo "✖ could not read ${archive_paths[*]} from tag $TAG." >&2
     exit 1
   fi
   src_rules="$tmp/claude-project/rules"
@@ -351,6 +576,17 @@ if [ "$REFRESH_RULES" = 1 ]; then
   }
   note_present rules .claude/rules
   note_present guides .claude/sdlc-discipline/guides
+  # The vendored gate is classified the way a rule is, under the key hooks/rule_gate.py, which the
+  # query below maps to reference/rule_gate.py in each release tag. Only when this run will place
+  # one: a tag without the gate leaves the file alone, so there is nothing to classify.
+  if [ "$gate_in_tag" = 1 ] && [ -z "$gate_link" ] && [ -f "$gate_dst" ]; then
+    if [ ! -r "$gate_dst" ]; then
+      echo "✖ cannot read $PWD/$gate_dst, so this run cannot tell whether it matches a release, and a file it cannot read it cannot copy aside either. Fix its permissions or move it out of the way, then re-run; nothing has been copied." >&2
+      exit 1
+    fi
+    printf 'hooks/rule_gate.py\n' >> "$tmp/present-keys"
+    printf '%s/%s\n' "$PWD" "$gate_dst" >> "$tmp/present-paths"
+  fi
   : > "$tmp/present-blobs"
   if [ -s "$tmp/present-paths" ]; then
     # --no-filters hashes the bytes on disk, which is what the tag's blob holds and what
@@ -384,6 +620,9 @@ if [ "$REFRESH_RULES" = 1 ]; then
       printf 'guides/%s\n' "${f##*/}" >> "$tmp/names"
     done
   fi
+  if [ "$gate_in_tag" = 1 ]; then
+    printf 'hooks/rule_gate.py\n' >> "$tmp/names"
+  fi
   cut -d' ' -f1 "$tmp/present-blobs" >> "$tmp/names"
   sort -u -o "$tmp/names" "$tmp/names"
 
@@ -398,6 +637,7 @@ if [ "$REFRESH_RULES" = 1 ]; then
     while IFS= read -r key; do
       case "$key" in
         rules/*) path="claude-project/rules/${key#rules/}" ;;
+        hooks/*) path="reference/${key#hooks/}" ;;
         *) path="claude-project/sdlc-discipline/guides/${key#guides/}" ;;
       esac
       printf '%s:%s %s\n' "$reltag" "$path" "$key" >> "$tmp/query"
@@ -423,6 +663,34 @@ if [ "$REFRESH_RULES" = 1 ]; then
   : > "$tmp/aside"
   : > "$tmp/relinked"
   relinked_count=0
+  # One file from the tag onto its place here, under its lookup key: the rules, the guides and the
+  # gate all go through this, so each gets the same backup and the same symlink handling.
+  place_one() {
+    key="$1"
+    f="$2"
+    dst="$3"
+    if [ -e "$dst" ]; then
+      here="$(awk -v k="$key" '$1 == k {print $2; exit}' "$tmp/present-blobs")"
+      if [ -z "$here" ] || ! grep -qxF "$key $here" "$tmp/shipped"; then
+        backup="$(unique_path "$dst.local-$stamp")"
+        cp "$dst" "$backup"
+        printf '%s\n' "$backup" >> "$tmp/aside"
+        aside_count=$((aside_count + 1))
+      fi
+    fi
+    # NEVER WRITE THROUGH A SYMLINK. cp follows one, so a rule symlinked to a file outside the
+    # repository carried the tag's body OUT of the repository this run was pointed at, and left
+    # the link in place to do it again on the next refresh. Whatever the link pointed at is
+    # already preserved above when it matched no release; the link itself is replaced by a real
+    # file here, and the run says so, because changing the shape of someone's directory is not
+    # a thing to do quietly.
+    if [ -L "$dst" ]; then
+      rm -f "$dst"
+      printf '%s\n' "$dst" >> "$tmp/relinked"
+      relinked_count=$((relinked_count + 1))
+    fi
+    cp "$f" "$dst"
+  }
   copy_kind() {
     kind="$1"
     src="$2"
@@ -430,28 +698,7 @@ if [ "$REFRESH_RULES" = 1 ]; then
     for f in "$src"/*.md; do
       [ -f "$f" ] || continue
       name="${f##*/}"
-      dst="$dstdir/$name"
-      if [ -e "$dst" ]; then
-        here="$(awk -v k="$kind/$name" '$1 == k {print $2; exit}' "$tmp/present-blobs")"
-        if [ -z "$here" ] || ! grep -qxF "$kind/$name $here" "$tmp/shipped"; then
-          backup="$(unique_path "$dst.local-$stamp")"
-          cp "$dst" "$backup"
-          printf '%s\n' "$backup" >> "$tmp/aside"
-          aside_count=$((aside_count + 1))
-        fi
-      fi
-      # NEVER WRITE THROUGH A SYMLINK. cp follows one, so a rule symlinked to a file outside the
-      # repository carried the tag's body OUT of the repository this run was pointed at, and left
-      # the link in place to do it again on the next refresh. Whatever the link pointed at is
-      # already preserved above when it matched no release; the link itself is replaced by a real
-      # file here, and the run says so, because changing the shape of someone's directory is not
-      # a thing to do quietly.
-      if [ -L "$dst" ]; then
-        rm -f "$dst"
-        printf '%s\n' "$dst" >> "$tmp/relinked"
-        relinked_count=$((relinked_count + 1))
-      fi
-      cp "$f" "$dst"
+      place_one "$kind/$name" "$f" "$dstdir/$name"
       case "$kind" in
         rules) rules_copied=$((rules_copied + 1)) ;;
         guides) guides_copied=$((guides_copied + 1)) ;;
@@ -472,6 +719,67 @@ if [ "$REFRESH_RULES" = 1 ]; then
     fi
   else
     guides_note="this repo has no .claude/sdlc-discipline/guides, so the guides were SKIPPED; the directory is deliberately not created here, because a repo that never took the guides should not silently start carrying five long documents (the per-project lines printed by 'install.sh' with no arguments add them)"
+  fi
+
+  # THE GATE, then its wiring. The file goes through place_one, so a copy the repo changed is
+  # copied aside and a symlink is replaced rather than written through, exactly as for a rule.
+  # The wiring is decided by RULE_GATE_PROJECT_WIRE above, after git says whether settings.json
+  # is tracked and clean; the git here is the REPO's, scrubbed of inherited redirects as g is.
+  wire_state=""
+  wire_detail=""
+  if [ "$gate_in_tag" = 1 ] && [ -n "$gate_link" ]; then
+    wire_state=not-vendored
+    rule_gate_state="in tag $TAG, NOT vendored: $gate_link is a symlink, and this refresh never writes through one; .claude/hooks and .claude/settings.json were left as they were"
+  elif [ "$gate_in_tag" = 1 ]; then
+    mkdir -p .claude/hooks
+    place_one hooks/rule_gate.py "$tmp/reference/rule_gate.py" "$gate_dst"
+    rule_gate_state="unfinished: .claude/hooks/rule_gate.py was placed, but this refresh stopped before .claude/settings.json was examined"
+    cg() {
+      env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+        -u GIT_COMMON_DIR -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM git -C "$PWD" "$@"
+    }
+    why_not=""
+    if [ -L .claude/settings.json ]; then
+      why_not="it is a symlink, and this refresh never writes through one"
+    elif [ -e .claude/settings.json ]; then
+      if [ "$(cg rev-parse --is-inside-work-tree 2>/dev/null)" != true ]; then
+        why_not="$(pwd) is not a git work tree, so a change to it could not be reviewed with git diff or taken back with git checkout"
+      elif ! cg ls-files --error-unmatch -- .claude/settings.json >/dev/null 2>&1; then
+        why_not="git does not track it, so a change to it could not be taken back with git checkout"
+      elif [ -n "$(cg status --porcelain -- .claude/settings.json 2>/dev/null)" ]; then
+        why_not="it has uncommitted changes, which a merge would mix with this one"
+      fi
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+      wiring="$(python3 -c "$RULE_GATE_PROJECT_WIRE" .claude/settings.json .claude/settings.local.json "$PROJECT_GATE_ENTRY" "$why_not" 2>/dev/null)" ||
+        wiring=$'not-wired\nthe wiring step could not run'
+    else
+      wiring=$'not-wired\npython3 was not found, and the gate needs it too'
+    fi
+    wire_state="${wiring%%$'\n'*}"
+    case "$wiring" in *$'\n'*) wire_detail="${wiring#*$'\n'}" ;; esac
+    case "$wire_state" in
+      created) rule_gate_state="vendored+wired (this refresh created .claude/settings.json holding only the PreToolUse entry)" ;;
+      merged) rule_gate_state="vendored+wired (this refresh added the PreToolUse entry to the tracked .claude/settings.json; git diff shows it, and git checkout -- .claude/settings.json takes it back)" ;;
+      already-wired) rule_gate_state="vendored+already-wired (a PreToolUse hook in $wire_detail already runs .claude/hooks/rule_gate.py; nothing was changed)" ;;
+      *)
+        wire_state=not-wired
+        rule_gate_state="vendored, NOT wired: .claude/settings.json was left as it was because $wire_detail; the refresh printed the entry to add"
+        ;;
+    esac
+  elif [ -e "$gate_dst" ] || [ -L "$gate_dst" ]; then
+    # The tag predates the gate, but an earlier tag's gate is here. Left alone, and named with
+    # whether a settings file runs it, because the user-level copy steps aside for a wired one.
+    earlier="not-wired"
+    if command -v python3 >/dev/null 2>&1; then
+      earlier="$(python3 -c "$RULE_GATE_PROJECT_WIRE" .claude/settings.json .claude/settings.local.json "$PROJECT_GATE_ENTRY" "" check 2>/dev/null)" || earlier="not-wired"
+    fi
+    case "$earlier" in
+      already-wired*) earlier="wired in ${earlier#*$'\n'}" ;;
+      *) earlier="not wired" ;;
+    esac
+    wire_state=left-in-place
+    rule_gate_state="not in tag $TAG; a .claude/hooks/rule_gate.py vendored by an earlier tag was left in place ($earlier)"
   fi
 
   write_rules_stamp complete
@@ -500,6 +808,41 @@ if [ "$REFRESH_RULES" = 1 ]; then
   if [ -n "$guides_note" ]; then
     echo "  guides: $guides_note"
   fi
+  case "$wire_state" in
+    "")
+      echo "  rule gate: not in tag $TAG, so it was skipped. The tag predates the gate; .claude/hooks and .claude/settings.json were left as they were."
+      ;;
+    left-in-place)
+      echo "  rule gate: not in tag $TAG, so it was skipped, and .claude/hooks and .claude/settings.json"
+      echo "    were left as they were. The .claude/hooks/rule_gate.py an earlier tag vendored is still"
+      echo "    here ($earlier): an earlier tag's gate beside this tag's rules. Delete it, or refresh"
+      echo "    from a tag that ships the gate."
+      ;;
+    not-vendored)
+      echo "  rule gate: in tag $TAG, but NOT vendored: $gate_link is a symlink, and this refresh never"
+      echo "    writes through one. .claude/hooks and .claude/settings.json were left as they were."
+      echo "    Replace the link with a real directory and refresh again."
+      ;;
+    created | merged)
+      echo "  rule gate: .claude/hooks/rule_gate.py from $TAG, wired in .claude/settings.json ($wire_state)."
+      if [ "$wire_state" = merged ]; then
+        echo "    The file was tracked with no uncommitted changes, so 'git diff .claude/settings.json'"
+        echo "    shows the entry and 'git checkout -- .claude/settings.json' takes it back."
+      fi
+      ;;
+    already-wired)
+      echo "  rule gate: .claude/hooks/rule_gate.py from $TAG; $wire_detail already runs it, so no settings file was changed."
+      ;;
+    *)
+      echo "  rule gate: .claude/hooks/rule_gate.py from $TAG, but NOT wired: .claude/settings.json was left"
+      echo "    as it was because $wire_detail."
+      echo "    To turn it on, add this rule-gate PreToolUse entry to $(pwd)/.claude/settings.json:"
+      echo ""
+      echo "$PROJECT_GATE_ENTRY"
+      echo ""
+      print_entry_placement
+      ;;
+  esac
   if [ "$aside_count" -gt 0 ]; then
     echo "  copied aside $aside_count file(s) whose bytes match no release tag this checkout has, before overwriting:"
     sed 's/^/    /' "$tmp/aside"
@@ -542,6 +885,7 @@ user_state=unstarted
 unfinished="unfinished: this run stopped before this piece was placed"
 skills_state="$unfinished"
 reference_state="$unfinished"
+rule_gate_state="$unfinished"
 claude_md_state="$unfinished"
 settings_state="$unfinished"
 kit_commit_now="$(kit_commit)"
@@ -579,6 +923,7 @@ write_user_stamp() {
     echo "installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
     echo "skills: $skills_state"
     echo "reference: $reference_state"
+    echo "rule_gate: $rule_gate_state"
     echo "CLAUDE.md: $claude_md_state"
     echo "settings.json: $settings_state"
   } > "$DEST/discipline/KIT-VERSION"
@@ -610,6 +955,110 @@ cp "$KIT/reference/voicing-document.md" "$DEST/discipline/voicing-document.md"
 reference_state="installed (deep-reasoning-agent.md, discipline/{sdlc-gate.py,review-checklist.md,voicing-document.md}; rewritten every run)"
 echo "  reference: deep-reasoning-agent.md, discipline/{sdlc-gate.py,review-checklist.md,voicing-document.md}"
 
+# --- the rule gate ---
+# A PreToolUse hook that refuses a Write or Edit whose path-scoped project rules are not in the
+# session's context, because Claude Code loads such a rule only when a matching file is READ.
+# The file lands every run; whether it RUNS depends on settings.json naming it, which the guarded
+# block below may not touch, so its disposition is decided there.
+cp "$KIT/reference/rule_gate.py" "$DEST/discipline/rule_gate.py"
+rule_gate_state="unfinished: discipline/rule_gate.py was copied, but this run stopped before settings.json was examined"
+
+# The PreToolUse entry claude-user/settings.json carries, printed for a settings.json this script
+# will not overwrite. It is the entry, not a whole "hooks" key: pasted beside an existing "hooks"
+# key, a second one would make the file hold the key twice, and a JSON reader keeps only the last,
+# so either the gate or the user's own hooks would vanish without an error. `|| true` is there
+# because python3 exits 2 when the script is missing, and exit 2 from a PreToolUse hook blocks the
+# call: without it, a deleted gate file would refuse every write.
+# install_test.py holds this text equal to the entry in claude-user/settings.json.
+# shellcheck disable=SC2016  # $HOME is for the hook's shell to expand when Claude Code runs it
+RULE_GATE_ENTRY='{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$HOME/.claude/discipline/rule_gate.py\" || true"
+    }
+  ]
+}'
+
+# Whether a settings.json runs THIS install's gate on Write and Edit, read as JSON the way Claude
+# Code reads it (a repeated key keeps its last value). A grep for the file name was the earlier
+# test, and it called a permissions entry naming the file, or a "hooks" key a later duplicate
+# replaced, wired. Prints a state (wired, named, absent, invalid) and a detail line: the
+# repeated keys, or the parse error.
+# shellcheck disable=SC2016  # Python source: the $HOME spellings in it are text it rewrites
+RULE_GATE_CHECK='
+import json, os, re, sys
+path, home, dest = sys.argv[1:4]
+want = os.path.normpath(os.path.join(dest, "discipline", "rule_gate.py"))
+repeated = []
+def pairs(kv):
+    seen = set()
+    for k, _ in kv:
+        if k in seen:
+            repeated.append(k)
+        seen.add(k)
+    return dict(kv)
+try:
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    data = json.loads(text, object_pairs_hook=pairs)
+except (OSError, ValueError) as e:
+    print("invalid")
+    print(str(e))
+    sys.exit(0)
+def covers(m):
+    if m is None or m in ("", "*"):
+        return True
+    if not isinstance(m, str):
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_|]+", m):
+        return {"Write", "Edit"} <= set(m.split("|"))
+    try:
+        return all(re.search(m, t) for t in ("Write", "Edit"))
+    except re.error:
+        return False
+def runs_gate(cmd):
+    for spelling in ("${HOME}", "$HOME"):
+        cmd = cmd.replace(spelling, home)
+    cmd = re.sub(r"(^|[\s\"=])~/", lambda m: m.group(1) + home + "/", cmd)
+    return want in cmd.replace("//", "/")
+hooks = data.get("hooks") if isinstance(data, dict) else None
+entries = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+state = "named" if "rule_gate.py" in text else "absent"
+for e in entries if isinstance(entries, list) else []:
+    if isinstance(e, dict) and covers(e.get("matcher")):
+        for h in e.get("hooks") if isinstance(e.get("hooks"), list) else []:
+            if isinstance(h, dict) and isinstance(h.get("command"), str) and runs_gate(h["command"]):
+                state = "wired"
+print(state)
+print(", ".join(sorted(set(repeated))))
+'
+
+# The kept settings.json with the gate's entry added, written to a NEW file beside it for the
+# user to review and move into place. The live file is never touched.
+RULE_GATE_MERGE='
+import json, sys
+src, out, entry = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+with open(src, encoding="utf-8") as f:
+    data = json.load(f)
+hooks = data.setdefault("hooks", {})
+hooks.setdefault("PreToolUse", []).append(entry)
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+'
+
+# The state word, a newline, and the detail line; "unchecked" when python3 cannot run the check.
+rule_gate_wiring() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'unchecked\npython3 was not found, and the gate needs it too\n'
+    return 0
+  fi
+  python3 -c "$RULE_GATE_CHECK" "$1" "$HOME" "$DEST" 2>/dev/null ||
+    printf 'unchecked\nthe check could not run\n'
+}
+
 # --- CLAUDE.md (guarded) ---
 if [[ -e "$DEST/CLAUDE.md" ]]; then
   claude_md_backup="$(unique_path "$DEST/CLAUDE.md.bak-$stamp")"
@@ -630,10 +1079,69 @@ if [[ -e "$DEST/settings.json" ]]; then
   settings_state="kept-existing (yours was left in place and copied to ${settings_backup##*/}; the kit's permissions were NOT merged, so this piece is whatever it was before this run)"
   echo "  settings.json EXISTS—backed up to ${settings_backup##*/}; NOT overwritten."
   echo "    Review $KIT/claude-user/settings.json and merge the permissions you want."
+  wiring="$(rule_gate_wiring "$DEST/settings.json")"
+  wiring_state="${wiring%%$'\n'*}"
+  wiring_detail=""
+  case "$wiring" in *$'\n'*) wiring_detail="${wiring#*$'\n'}" ;; esac
+  repeated_note=""
+  if [ "$wiring_state" != invalid ] && [ -n "$wiring_detail" ]; then
+    repeated_note="; it also repeats the key(s) $wiring_detail, and Claude Code keeps only the last of each"
+  fi
+  case "$wiring_state" in
+    wired)
+      rule_gate_state="installed and wired (discipline/rule_gate.py, rewritten every run; your kept settings.json runs it as a PreToolUse hook on Write and Edit$repeated_note)"
+      echo "    Your settings.json runs discipline/rule_gate.py as a PreToolUse hook, so the rule gate is wired."
+      ;;
+    unchecked)
+      rule_gate_state="installed; wiring NOT checked (discipline/rule_gate.py is in place, but $wiring_detail, so this run cannot say whether your kept settings.json runs it)"
+      echo "    The rule gate is installed, but its wiring was not checked: $wiring_detail."
+      ;;
+    invalid)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place, but your kept settings.json is not valid JSON: $wiring_detail)"
+      echo "    The rule gate is installed, but your settings.json is not valid JSON ($wiring_detail),"
+      echo "    so Claude Code cannot be running it. Fix the file, then add the entry below."
+      ;;
+    named)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place; your kept settings.json names rule_gate.py, but not in a PreToolUse hook on Write and Edit that runs $DEST/discipline/rule_gate.py$repeated_note)"
+      ;;
+    *)
+      rule_gate_state="installed but NOT wired (discipline/rule_gate.py is in place, but your kept settings.json does not name it, so the gate does not run until the PreToolUse entry install.sh prints is added$repeated_note)"
+      ;;
+  esac
+  if [ "$wiring_state" = named ] || [ "$wiring_state" = absent ] || [ "$wiring_state" = invalid ]; then
+    echo "    The rule gate is installed but NOT wired. To turn it on, add this rule-gate PreToolUse entry"
+    echo "    to $DEST/settings.json:"
+    echo ""
+    echo "$RULE_GATE_ENTRY"
+    echo ""
+    print_entry_placement
+    if [ -n "$repeated_note" ]; then
+      echo "    Your file already repeats the key(s) $wiring_detail; merge each pair into one first."
+    fi
+    # No merged copy from a file that repeats a key: reading it keeps the last value, so the
+    # copy would silently drop what the earlier one held.
+    if [ "$wiring_state" != invalid ] && [ -z "$repeated_note" ] && command -v python3 >/dev/null 2>&1; then
+      merged="$(unique_path "$DEST/settings.json.with-rule-gate-$stamp")"
+      if python3 -c "$RULE_GATE_MERGE" "$DEST/settings.json" "$merged" "$RULE_GATE_ENTRY" 2>/dev/null; then
+        echo "    A copy of your settings.json with the entry added is at ${merged##*/}. Compare it with"
+        echo "    yours (diff -u settings.json ${merged##*/}) and move it into place if it is right."
+      fi
+    fi
+  fi
 else
   cp "$KIT/claude-user/settings.json" "$DEST/settings.json"
   settings_state="installed (conservative: local git only, no auto-bypass)"
-  echo "  settings.json installed (conservative: local git only, no auto-bypass)"
+  wiring="$(rule_gate_wiring "$DEST/settings.json")"
+  if [ "${wiring%%$'\n'*}" = wired ]; then
+    rule_gate_state="installed and wired (discipline/rule_gate.py, rewritten every run; the settings.json this run wrote carries its PreToolUse hook)"
+  else
+    rule_gate_state="installed but NOT confirmed wired (the settings.json this run wrote runs \$HOME/.claude/discipline/rule_gate.py, and this install put the gate in $DEST/discipline; it runs only if Claude Code reads $DEST/settings.json and the command names that path)"
+  fi
+  echo "  settings.json installed (conservative: local git only, no auto-bypass; wires the rule gate)"
+fi
+if [ "$DEST" != "$HOME/.claude" ]; then
+  echo "    NOTE: the rule gate's hook command names \$HOME/.claude/discipline/rule_gate.py, and this"
+  echo "    install went to $DEST. Edit the command's path to match if Claude Code reads $DEST."
 fi
 
 # --- the version stamp for the user-level pieces ---
@@ -663,7 +1171,10 @@ Per-project step (run inside each repo you want the discipline to govern):
   cp $KIT/claude-project/rules/*.md                     .claude/rules/
   cp $KIT/claude-project/sdlc-discipline/guides/*.md    .claude/sdlc-discipline/guides/
 
-The rules auto-load by path glob (e.g. **/*.py) when you edit matching files.
+A rule loads when Claude reads a file matching its path globs (e.g. **/*.py) with the Read
+tool, or when such a file is @-mentioned. Write, Edit and Bash do not load it. Once
+settings.json wires the rule gate, it refuses a Write or Edit until the matching rules are in
+context.
 
 Those two cp lines copy from THIS CHECKOUT'S WORKING TREE, so what lands matches a release tag
 only if the checkout sits exactly on one. The first --refresh-rules in that repo will therefore
@@ -671,7 +1182,10 @@ find files matching no release tag it can see and copy them aside before overwri
 safe direction, not a finding that anyone edited them.
 
 To refresh the rules AND the guides in an already-installed repo after updating the kit, always
-naming the kit's path (a bare "install.sh --refresh-rules" has no path to resolve):
+naming the kit's path (a bare "install.sh --refresh-rules" has no path to resolve). It also
+vendors the rule gate into the repo from the same tag and wires it in the repo's
+.claude/settings.json (created when absent, merged only where git tracks the file with no
+uncommitted changes, otherwise printed for you to add); this user-level copy then defers to it:
 
   $KIT/install.sh --refresh-rules --dir <repo>
 

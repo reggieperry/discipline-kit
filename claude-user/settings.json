@@ -38,6 +38,19 @@
       "Bash(rm -rf*)"
     ]
   },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/discipline/rule_gate.py\" || true"
+          }
+        ]
+      }
+    ]
+  },
   "skipDangerousModePermissionPrompt": false,
   "theme": "dark"
 }

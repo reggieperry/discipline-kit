@@ -964,7 +964,7 @@ Two constraints on any roster, both from §4.9. The **terminal** step — whiche
 
 **Red-proof is language-parameterized and git-only.** The instrument existed and was thrown out with the ledger: `ledger/red-proof --test-cmd '<runs the new tests>'` built the implementation at the merge-base against HEAD's tests and required them to go red. Its substance is git plus a test command, so unlike the postconditions it survives the ledger's deletion. Reinstate it as a standalone script with no `model` import: exit 0 (went red, detection power shown), exit 2 (stayed green, the test cannot fail). The driver runs it as the worker→tester transition predicate. `test_one` and `test` come from the profile; the script names no language. **PROPOSED**, but the mechanism is recoverable verbatim from `archive/kit-chain`.
 
-**Rules injection stays as it is.** `.claude/rules/*.md` with `paths:` globs, auto-injected on matching file opens. The chain does not touch this; it is already per-language and already works.
+**Rule loading stays as it is.** `.claude/rules/*.md` with `paths:` globs, loaded into context when Claude reads a matching file with the Read tool, or when one is @-mentioned; Write, Edit and Bash do not load one. The chain does not touch this. The rules are already per-language. Whether they are in context when a phase writes code is not established: a phase that writes a file it never read writes it without the rules, and the kit's rule gate, which would refuse that write, is a user-scope hook that ADR-0004/D3 keeps out of chain phases.
 
 ---
 

@@ -2,6 +2,97 @@
 
 Notable changes to the discipline kit. Versions follow [semantic versioning](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com). This file supersedes the former `PACK_SOURCE_TAG`, folding its upstream-source provenance into the **Sources** section under each release.
 
+## Unreleased
+
+### Added
+
+- **The rule gate: a write waits until the rules for its file are in context.** Claude Code
+  loads a path-scoped rule only when Claude reads a matching file, or one is
+  @-mentioned; Write, Edit and Bash never load one, and in one measured session 12 of 37 writes
+  ran without their language's rules. `reference/rule_gate.py` is a PreToolUse hook on Write,
+  Edit, MultiEdit and NotebookEdit. It works out which rules apply to the target with a port of
+  the glob matcher Claude Code bundles, reads the calling agent's own transcript back to its last
+  compaction boundary (a subagent's own file, not the parent's), and refuses the write if a rule
+  is missing, with each missing rule's full text in the refusal so the retry has it. A refusal
+  counts as a load only for the model's next response, so a later call of the same response is
+  refused too. It fails open with a line in `~/.claude/discipline/rule-gate.log` when it cannot
+  check, and a rule it has given but still cannot see is allowed and logged `BLIND` rather than
+  refused again. `DISCIPLINE_RULE_GATE=off` turns it off. The user-level install copies it and a fresh
+  `settings.json` wires it; a kept `settings.json` is not edited, so the installer reads it as
+  JSON, prints the PreToolUse entry to add with a merged copy beside the file, and the
+  `KIT-VERSION` stamp says whether a hook there runs the gate. Bash is not
+  gated: of 3,024 code-file write targets in 34,340 real Bash commands, 71 were literal paths in
+  the repository, and a Bash parser replayed on one session refused 6 times, all wrongly. The
+  gate does not run in chain phases, which exclude user-scope settings. Tested by
+  `harness/fixtures/rule_gate_test.py` (82 tests, including 13,755 golden glob vectors generated
+  by the bundled matcher) and two new `install_test.py` cases. A review ran it live in 35
+  sessions; no live run is on the commit path. Decided in ADR-0008, built under STORY-0017.
+- **`--refresh-rules` vendors the rule gate into the repository, from the same tag as the
+  rules.** It reads `reference/rule_gate.py` in the same `git archive` call as
+  `claude-project`, places it at `.claude/hooks/rule_gate.py` with the refresh's rules for a rule
+  file (a copy matching no release is copied aside first, a symlink is replaced, an unreadable
+  copy stops the run), and wires it in `.claude/settings.json` with a PreToolUse entry running
+  `python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py" || true`. An absent settings.json is
+  created; one that git tracks with no uncommitted changes gets the entry appended in place, so
+  `git diff` shows it and `git checkout` takes it back; one that already runs the gate, there or in
+  `settings.local.json`, is not changed; anything else is left alone and the entry printed.
+  "Runs the gate" means a command hook whose matcher selects all four write tools and whose
+  command runs this repository's file, not one that only mentions its path. A merge writes a
+  temporary file and renames it over `settings.json`, so a failed write leaves the file as it
+  was. A linked `.claude` or `.claude/hooks` gets no gate and no wiring. `settings.local.json` is
+  never written. The `.kit-version` stamp gains a `rule_gate:` line. A tag cut before the gate
+  existed is skipped with a message and stamped `not in tag <tag>`, and the repository's hooks
+  are left as they were; an earlier tag's gate still there is named in the stamp, with whether it
+  is wired. The gate itself now defers when it is not the project's own copy, a project rule
+  applies, and the project's settings run the project's copy: it allows with no output and logs
+  one `DEFER` line, so the user-level and repository-level copies can both be wired without
+  refusing each write twice. The project's copy knows itself by the path it was run from, so a
+  linked `.claude/hooks` cannot make it defer to itself. A session that does not load project
+  hooks (`--setting-sources` without `project`, among others) leaves no copy checking; that is a
+  known limit in ADR-0008. The D7 court fails a refresh that reads the gate from the kit's working
+  tree. Tested by thirteen new `install_test.py` cases and fifteen new `rule_gate_test.py` tests,
+  each seen failing against the code before its fix, and a court case seen passing the court
+  before it: 59 cases and 97 tests in all. That Claude Code sets `CLAUDE_PROJECT_DIR` for hook
+  commands was measured in one live session on 2.1.286.
+- **ADR-0008 and STORY-0017**, the record and the story for the rule gate, with the deep-reason
+  pass that changed its design in `docs/adrs/reviews/ADR-0008-deep-reason.md`.
+
+### Fixed
+
+- **The craft design rules missed the paths the kit's own templates write to.** v2.0.0 said "An
+  ADR now fires six rules." That held only for an ADR under a directory named `adr/`. The kit's
+  ADR template writes to `docs/adrs/ADR-NNNN-<slug>.md` and its story template to
+  `stories/<ID>-<slug>.md`, and with the old globs `docs/adrs/ADR-0001-x.md` reached one rule (the
+  writing register) and `stories/STORY-0001-x.md` reached none. `craft-abstraction`,
+  `craft-complexity`, `craft-documentation`, `craft-domain-modeling` and `craft-measurement` gain
+  `**/adrs/*.md` and `**/stories/*.md`; both paths now reach all five.
+- **Five craft rules missed TypeScript and Java source.** `craft-abstraction`,
+  `craft-documentation`, `craft-domain-modeling`, `craft-measurement` and `craft-refactoring` gain
+  `**/*.ts`, `**/*.tsx` and `**/*.java`, and `craft-complexity` gains `**/*.java`. Every craft rule
+  that reaches source in one of the six languages now reaches it in all six.
+- **`craft-xunit` reached ordinary source files named like `latest.py`.** Claude Code matches
+  globs without regard to case, so its `**/*Test.*` matched any name ending in `test.`; with the
+  rule gate enforcing it, such a write was refused until the rule was loaded. It is now spelled out
+  for the languages that name test classes `XxxTest` or `XxxTests`, and `rule_coverage.py` checks
+  that a test-scoped craft rule reaches no ordinary source name.
+- **`scala-modules` and `scala-workflow` missed `project/plugins.sbt`.** They matched `build.sbt`
+  at the repository root only; both gain `**/*.sbt`.
+- **`harness/rule_coverage.py` matched with different rules than Claude Code.** It used
+  `fnmatch`, which differs from Claude Code's node-ignore matcher (for one, `*` crosses `/` in
+  fnmatch). It now reads and matches globs with the rule gate's own code, pinned by its golden
+  vectors, and it gains two checks: every craft rule that reaches source in any declared language
+  reaches it in all of them, and each path the kit's ADR and story templates name for their copies
+  reaches every craft design rule. Both are derived from the shipped rules and templates rather
+  than listed, and a planted rule carrying only the old `**/adr/*.md` design globs fails the
+  second.
+- **The docs said a rule loads when you edit a matching file. It does not.** Claude Code loads a
+  path-scoped rule when Claude reads a matching file with the Read tool, or when one is
+  @-mentioned; Write, Edit and Bash do not load it. The README, the installer's closing note, the
+  pr-review skill, `scripts/check.sh`, `decoupling.md`, `rule_coverage.py` and
+  `docs/sdlc-chain-design.md` now say so. The v2.0.0 entry below, which says a rule was silent
+  "because the author was editing Markdown," has the same error: the rule was silent because its
+  globs did not match.
+
 ## v2.1.0 — 2026-09-11
 
 ### Added

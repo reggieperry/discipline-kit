@@ -12,7 +12,7 @@ The kit's operator is Claude Code; the interface is the prompt. Use the prompts 
 >
 > **When a commit blocks:** "Show me the check that failed and its output verbatim, then walk me through the three honest moves before touching anything."
 >
-> **Upgrade:** "The kit is at `<path-to-kit>`. Do these six in order. (1) `git -C <path-to-kit> pull`, which brings the new release tag with it. (2) Read **Staying current** in `<path-to-kit>/README.md`, which the pull you just did is what puts there. (3) Confirm you now have the NEW installer *without running it*: `grep -c -- '--version' <path-to-kit>/install.sh` must print a count above zero. Do not probe by running the installer: every installer *before* v2.0.0 parses no arguments at all, so handed a flag it ignores it and performs a full user-level install from the stale tree instead (measured on v1.5.1: exit 0, eight files written into the home directory). v2.0.0 itself refuses an unknown flag safely but has no `--version` to ask with, so a zero count means the pull did not bring the new installer. (4) Read the changelog before installing anything. The two stamps say which version this machine holds: `cat ~/.claude/discipline/KIT-VERSION` and `cat .claude/rules/.kit-version`. No released installer writes either one, so on a machine installed from a release tag both are absent today and the no-stamp path below is the only one that runs; a stamp is there only where the install came from a checkout newer than v2.0.0. Then read `<path-to-kit>/CHANGELOG.md` from the top down to the release those stamps name, and report to me every breaking change and every migration note between the two before you touch the installer; with no stamp to read, report them back to and including v2.0.0. Upgrading across v2.0.0 is the case that matters: `baseline` now refuses the gate flow v1.5.1 documented, and the results that flow produced were the branch compared with itself. (5) `<path-to-kit>/install.sh --refresh-rules --dir .` inside this repository, which takes the rules and the guides from the newest release tag; read what it says it copied aside. (6) `<path-to-kit>/install.sh` for the user-level pieces. Then show me `cat .claude/rules/.kit-version` and `cat ~/.claude/discipline/KIT-VERSION` as the receipt, including the `state:` line and the per-piece dispositions."
+> **Upgrade:** "The kit is at `<path-to-kit>`. Do these six in order. (1) `git -C <path-to-kit> pull`, which brings the new release tag with it. (2) Read **Staying current** in `<path-to-kit>/README.md`, which the pull you just did is what puts there. (3) Confirm you now have the NEW installer *without running it*: `grep -c -- '--version' <path-to-kit>/install.sh` must print a count above zero. Do not probe by running the installer: every installer *before* v2.0.0 parses no arguments at all, so handed a flag it ignores it and performs a full user-level install from the stale tree instead (measured on v1.5.1: exit 0, eight files written into the home directory). v2.0.0 itself refuses an unknown flag safely but has no `--version` to ask with, so a zero count means the pull did not bring the new installer. (4) Read the changelog before installing anything. The two stamps say which version this machine holds: `cat ~/.claude/discipline/KIT-VERSION` and `cat .claude/rules/.kit-version`. No released installer writes either one, so on a machine installed from a release tag both are absent today and the no-stamp path below is the only one that runs; a stamp is there only where the install came from a checkout newer than v2.0.0. Then read `<path-to-kit>/CHANGELOG.md` from the top down to the release those stamps name, and report to me every breaking change and every migration note between the two before you touch the installer; with no stamp to read, report them back to and including v2.0.0. Upgrading across v2.0.0 is the case that matters: `baseline` now refuses the gate flow v1.5.1 documented, and the results that flow produced were the branch compared with itself. (5) `<path-to-kit>/install.sh --refresh-rules --dir .` inside this repository, which takes the rules, the guides and the rule gate from the newest release tag; read what it says it copied aside and whether it wired the gate. (6) `<path-to-kit>/install.sh` for the user-level pieces. Then show me `cat .claude/rules/.kit-version` and `cat ~/.claude/discipline/KIT-VERSION` as the receipt, including the `state:` line and the per-piece dispositions."
 >
 >
 > **Enable authoring — ADRs and stories (a Tour choice, default off):** "Turn on the optional authoring layer for this repo. Read the four authoring skills under the kit's `harness/skills/` — `adr-write`, `story-write`, `story-tighten`, `story-intake`. Then vendor them in: copy those four skills into `.claude/skills/`, and the ADR and story template directories (`docs/adrs/`, `stories/`) together with the `ADR-template.md` and `story-template.md` they reference, into this repo — confirm each skill's template reference resolves in-tree. Show me the new files."
@@ -38,8 +38,10 @@ Two stamps say what a machine actually has, and both are plain text a session ca
   and `in-progress` or `partial` means a run died partway, with the dispositions naming the
   pieces it reached.
 - `<repo>/.claude/rules/.kit-version`, written by `--refresh-rules`. It records a **state**, the
-  **release tag** the rules and guides came from, that tag's commit, the kit path it was run
-  from, the time, and the counts. It is a dotfile with no `.md` suffix, so no rule loader picks
+  **release tag** the rules, guides and rule gate came from, that tag's commit, the kit path it
+  was run from, the time, the counts, and a `rule_gate:` line saying whether the tag had the gate,
+  whether the repository's `.claude/settings.json` runs it, and whether a gate an earlier tag
+  vendored was left in place. It is a dotfile with no `.md` suffix, so no rule loader picks
   it up. The state is written *before* the first copy and rewritten after the last: `complete`
   means every copy succeeded, and `in-progress` or `partial` means a run died partway and some
   files here are the new tag while others are not. A stamp may be stale; it may not be wrong.
@@ -75,6 +77,24 @@ numbered rather than allowed to overwrite the first. A kit-named rule the resolv
 ships is reported and left in place for you to retire. A rule that is a *symlink* is replaced by
 a real file rather than written through, so the release's body lands inside the repository you
 pointed at instead of wherever the link went, and each replacement is reported.
+
+It also vendors the [rule gate](#the-rule-gate) from the same tag, to
+`.claude/hooks/rule_gate.py`, with the same protection: a copy matching no release is copied
+aside to `rule_gate.py.local-<timestamp>` first, and a symlink is replaced. When `.claude` or
+`.claude/hooks` is itself a link, the gate is neither placed nor wired, and the run says so. Then
+it wires the gate in the repository's `.claude/settings.json`. With no such file it creates one
+holding only the hook, whether or not the repository is a git work tree. With one that git tracks
+and that has no uncommitted changes, it appends the entry to `hooks.PreToolUse` in place and keeps
+every other key and hook, so `git diff` shows the addition and `git checkout --
+.claude/settings.json` takes it back; the new text replaces the file only once it is fully
+written. If a hook there or in `settings.local.json` already runs this repository's
+`.claude/hooks/rule_gate.py` for every write tool, it changes nothing; one that runs it for fewer
+is named and left for you to widen. Any other file, one that is untracked, modified, not valid
+JSON, outside a git work tree, or laid out in a way a rewrite would change, is left alone, and
+the run prints the entry and where it goes. `settings.local.json` is never written. A tag cut
+before the gate existed has no `reference/rule_gate.py`: the run says so, stamps `not in tag
+<tag>`, and leaves `.claude/hooks` and the settings as they were; if an earlier tag's gate is
+there, the stamp says it was left in place and whether a settings file runs it.
 
 **What "matches no release" does and does not tell you.** The test is content: the file's bytes
 against that path's blob at every `v*` tag **the kit checkout has**, and the run prints how many
@@ -193,6 +213,91 @@ PMD is found as `pmd` on `PATH`, else `$PMD_HOME/bin/pmd`, else under `~/.local/
 
 `--no-static` needs only `python3` and `git`. It runs Checks B, C and D and skips Check A, the compile precondition and Checks E-H; the report lists each skipped E-H check under `not_wired` and sets `no_static` to true. `--coverage`, if given, still runs its tool. Pass the flag to both `baseline` and `diff`; a mismatch exits 2.
 
+### The rule gate
+
+Claude Code loads a path-scoped rule only when Claude reads a matching file or one is @-mentioned, never on a write. The rule gate, `~/.claude/discipline/rule_gate.py`, is a PreToolUse hook on Write, Edit, MultiEdit and NotebookEdit that closes that gap. It works out which of the project's `.claude/rules` apply to the file being written, and checks the calling agent's own transcript (a subagent's own file, not its parent's) for each one having been loaded since the last compaction. If one is missing, it refuses the write and puts the rule's full text in the refusal, so the retry is written with the rule in view. It needs only `python3`. The decision record is [ADR-0008](docs/adrs/ADR-0008-rule-gate.md).
+
+**Two ways to run it.** At user level, one copy in `~/.claude/discipline` checks every
+repository on the machine; this is what `install.sh` sets up. At repository level, `install.sh
+--refresh-rules` vendors a copy into `<repo>/.claude/hooks/rule_gate.py` and wires it in that
+repository's `.claude/settings.json` (see **Staying current** for what it will and will not edit).
+Choose the repository copy when the gate should travel with the repository: everyone who opens it
+gets the check without a user-level install, and the gate is pinned to the same release tag as the
+rules it enforces. A refresh from a tag that predates the gate leaves an earlier tag's gate in
+place, so after such a downgrade the repository holds older rules beside a newer gate; the stamp's
+`rule_gate:` line says so. Choose the user-level copy for repositories you do not want to commit a
+hook into.
+
+Wiring both is safe while Claude Code loads project hooks. A copy that is not the project's own,
+as the user-level one never is, steps aside when the project's `.claude/settings.json` or
+`.claude/settings.local.json` has a PreToolUse command hook whose matcher covers the tool and
+whose command runs that project's `.claude/hooks/rule_gate.py`, and that file exists. The command
+runs it when its script, after an optional `python3`, is
+`$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py`, the relative `.claude/hooks/rule_gate.py`, or
+an absolute path to that file; a command that only mentions the path does not count. The
+user-level copy then allows the write with no output and logs one `DEFER` line, and the project's
+copy does the checking. The project's copy never steps aside, even when `.claude/hooks` is a link.
+If the project's file is deleted, or its hook command finds it through `$CLAUDE_PROJECT_DIR` while
+that variable is unset, the user-level copy checks as before. The exception: when the session
+does not load project hooks while the files on disk still wire the gate, the user-level copy
+steps aside for a copy that never runs, and nothing checks the write. One CLI flag is enough
+(`--setting-sources` without `project`), as are `disableAllHooks` and a managed policy allowing
+only managed hooks; see [ADR-0008](docs/adrs/ADR-0008-rule-gate.md), Consequences. The project
+entry is:
+
+```
+{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py\" || true"
+    }
+  ]
+}
+```
+
+Claude Code sets `CLAUDE_PROJECT_DIR` for hook commands to the directory the session started in
+(measured once on 2.1.286). In that one measurement, a session started in a subdirectory of the
+repository got the subdirectory as `CLAUDE_PROJECT_DIR` and did not run the repository's project
+hooks, so start sessions at the repository root.
+
+**Turning it on at user level.** A fresh install writes a `settings.json` that already carries the hook. If `~/.claude/settings.json` existed, `install.sh` leaves it alone, prints this PreToolUse entry, and writes a copy of your file with the entry added beside it (`settings.json.with-rule-gate-<time>`) for you to compare and move into place:
+
+```
+{
+  "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 \"$HOME/.claude/discipline/rule_gate.py\" || true"
+    }
+  ]
+}
+```
+
+To add it by hand: if your file has a `"hooks"` object with a `"PreToolUse"` array, add the entry to that array; if `"hooks"` has no `"PreToolUse"`, add `"PreToolUse": [ <entry> ]` inside it; with no `"hooks"` at all, add `"hooks": { "PreToolUse": [ <entry> ] }` at the top level. Never add a second `"hooks"` key: Claude Code keeps only the last one, so the other one's hooks stop running without an error.
+
+Keep the `|| true`: `python3` exits 2 when the script is missing, and exit 2 from a PreToolUse hook blocks the call, so without it a deleted gate file would refuse every write on the machine. The `rule_gate:` line in `~/.claude/discipline/KIT-VERSION` says whether the gate is wired: the installer reads `settings.json` as JSON and calls it wired only when a PreToolUse hook on Write and Edit runs the copy it installed. If you installed with `CLAUDE_HOME` pointing elsewhere, the stamp says not confirmed wired; edit the path in the command to match.
+
+**Turning it off.** Set `DISCIPLINE_RULE_GATE=off` in the environment Claude Code runs in, or remove the entry. A repository's copy is turned off the same way, or by removing its entry from `.claude/settings.json`.
+
+**The log.** `~/.claude/discipline/rule-gate.log` (`DISCIPLINE_RULE_GATE_LOG` moves it) gets one tab-separated line for each refusal (`DENY`, or `DENY-SIBLING` for a later call of the same model response, refused without repeating the text), each time the gate could not check and let the write through (`FAIL-OPEN`), and each rule it gave but still could not see as loaded, which it then stops refusing (`BLIND`), and each write a project rule covers that a copy outside the project left to the project's own copy (`DEFER`). A `DEFER` line means this copy did not check the write; it was covered only if the session loaded project hooks. A rule goes `BLIND` when the gate's own text is in the transcript and it cannot count it, when the refused call has had no result for two minutes, or after three refusals whose text never reached the model, as when another hook's refusal of the same call took its place. `FAIL-OPEN` or `BLIND` lines mean it was not able to look, most likely because Claude Code changed its transcript format. No lines does not prove the gate checked anything. It writes nothing when it found nothing missing, and also nothing when it did not run or did not look: the gate file is missing (the `|| true` hides the error), `DISCIPLINE_RULE_GATE=off` is set, or the file written is outside the project.
+
+**The cost.** A Python file pulls in about 14 rules, about 113 KB (about 28k tokens), once per context window: compaction usually drops them, and the next write brings them back. A refused write's content is thrown away and generated again.
+
+**Known limits.**
+
+- Writes made through Bash are not gated. Parsing write targets out of real commands gave only false refusals.
+- In bypass-permissions mode, Claude Code's system prompt steers the model toward Bash for file changes, which goes around the gate.
+- Fork subagents are untested. If the gate cannot see what such a subagent loaded, it falls back to the `BLIND` allow.
+- It does not run in chain phases, which exclude user-scope settings.
+- A session that does not load project hooks while the repository's settings still wire its copy (`--setting-sources` without `project`, `disableAllHooks`, or a managed policy allowing only managed hooks) leaves no copy checking: the user-level one steps aside for a copy that never runs, and logs `DEFER` as if it had.
+- A file outside the project root is not checked, including one in a directory added with `--add-dir`.
+- A refusal counts as a load only once the model has seen it, which the gate works out from the response each call belongs to. A call whose own entry is not yet on disk, in a response whose calls on disk all have results, is taken to start a new response. Had Claude Code written an earlier call's refusal to disk before a later call of the same response, that call would get through; the live runs never showed it, since a response's entries reach disk together when it ends.
+- Loading a rule is not evidence that it is followed. That was measured only for one or two short rules, not for fourteen in one context.
+- Its facts were measured on Claude Code 2.1.286. A later version can change the transcript shapes or the glob matcher, and no test in this repository would notice.
+
 ## Per-project setup
 
 Inside each repo you want the discipline to govern:
@@ -203,11 +308,11 @@ cp /path/to/discipline-kit/claude-project/rules/*.md                  .claude/ru
 cp /path/to/discipline-kit/claude-project/sdlc-discipline/guides/*.md .claude/sdlc-discipline/guides/
 ```
 
-Rules auto-load by path glob (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `tests/**`, `docs/**`, …) when you edit a matching file: the `go-*` rules fire on Go files, `python-*` on Python, `scala-*` on Scala, `java-*` on Java, `craft-*` on all of them, no further wiring. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
+Each rule is scoped by the path globs in its `paths:` frontmatter (`**/*.go`, `**/*.py`, `**/*.scala`, `**/*.java`, `tests/**`, `docs/**`, …). The `go-*` rules cover Go files, `python-*` Python, `scala-*` Scala, `java-*` Java, `ts-*` TypeScript and `shell-*` shell. The `craft-*` rules cover the source files of all six languages, except `craft-xunit`, which covers only test files, and those of five of the languages: shell test files reach `craft-tdd` but not `craft-xunit`; five of them (complexity, abstraction, domain-modeling, documentation, measurement) also cover ADRs, stories, and design and plan documents. Claude Code loads a scoped rule into context when Claude reads a matching file with the Read tool, or when such a file is @-mentioned. Write, Edit and Bash do not load it, so a file Claude writes without reading a matching file first is written without its rules. The kit's [rule gate](#the-rule-gate), which the user-level install wires in (for a settings.json it keeps, it prints the entry to add) and `--refresh-rules` vendors into a repository, refuses a Write or Edit until the matching rules are in context. Nothing else needs wiring per project. To carry the methodology memories into a project, copy `memories/*.md` into that project's memory directory and keep the one-line-per-memory convention in its `MEMORY.md`.
 
 ## Using it
 
-- **Rules** load themselves on edit. Nothing to invoke.
+- **Rules** load when Claude reads a matching file, and the rule gate refuses a write until they have. Nothing to invoke.
 - **`/deep-reason`** spins up a fresh-context Opus subagent for verdict-shaped or hard-to-reverse decisions; the self-trigger criteria are in the installed `CLAUDE.md`.
 - **`/pr-review`** reviews a PR, branch, or diff — it runs the gate first, loads the *reviewed repo's own* rules, then applies the language-neutral core.
 - **`/adversarial-review`** fans out N fresh-context adversaries decorrelated by role against a diff (modes `pre-pr` / `own-pr` / `foreign-pr`) — the tier-two red-team above `pr-review`, reserved for detector-class, sensitive, contested, or hairy-state changes; it hunts what no check encodes yet and never votes.

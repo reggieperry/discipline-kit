@@ -17,7 +17,7 @@ as portable as it was, or improve it. Project-specific content belongs in a
 project overlay (e.g., `.claude/rules/project/`), not in the project-agnostic
 core.
 
-This rule fires when the file being edited is in scope. The chain reads it before proposing changes; the reviewer reads it before accepting them.
+This rule loads when Claude reads a file in scope with the Read tool; writing one does not load it. The chain reads it before proposing changes; the reviewer reads it before accepting them.
 
 ## Recognize coupling
 
