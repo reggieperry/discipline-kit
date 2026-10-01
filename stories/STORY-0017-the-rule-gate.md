@@ -3,7 +3,7 @@ id: STORY-0017
 title: Build the rule gate, a PreToolUse hook that refuses a write until its path-scoped rules are in context
 deps: []
 labels: [rules, install]
-sensitive_files: [install.sh, claude-user/settings.json]
+sensitive_files: [install.sh, claude-user/settings.json, scripts/tag-consumption-check.sh]
 status: draft
 adr: ADR-0008
 decisions: [D1, D2, D3, D4, D5]
@@ -52,6 +52,13 @@ Grounding against HEAD (before this story):
   the file) when no hook there runs the gate, and records a `rule_gate:` disposition in
   `KIT-VERSION`. `harness/fixtures/install_test.py` adds the gate to `USER_PAYLOAD` and a case
   for the wiring.
+- `install.sh --refresh-rules` vendors the gate from the same tag as the rules into
+  `<repo>/.claude/hooks/rule_gate.py` and wires it in `<repo>/.claude/settings.json`: created
+  when absent, merged in place only when git tracks the file with no uncommitted changes, and
+  otherwise printed. It records a `rule_gate:` disposition in `.claude/rules/.kit-version`. A
+  copy that is not the project's own defers when the project's settings run the project's copy,
+  so both levels can be wired at once. `scripts/tag-consumption-check.sh` gains a pattern for the
+  gate's path.
 
 # Scope and non-goals
 
@@ -59,13 +66,16 @@ In scope:
 
 - the gate, its vectors and fixture, the shared matcher in `rule_coverage.py`, and the user-level
   install and stamp
+- the repository-level copy `--refresh-rules` vendors and wires, and the deferral between the two
 
 Out of scope:
 
 - gating Bash (ADR-0008/D4)
 - gating chain phases, which exclude user-scope settings (ADR-0004/D3); a phase gate would be a
   change to the phase's pinned settings and its own decision
-- installing rules into consumer repositories, or re-syncing ones that drifted
+- installing rules into consumer repositories that have none (`--refresh-rules` still refuses a
+  repository without `.claude/rules`)
+- editing the user-level `settings.json`, which has no git to take a change back
 - a live test on the commit path (ADR-0008, Falsification condition)
 - the glob fixes to the rules themselves, which ship in the same change but are not this story's
   criteria
@@ -125,6 +135,34 @@ Story-specific criteria, each dischargeable by a named check:
       case `rule-gate-kept-settings-shapes-0` (D5)
 - [x] `rule_coverage.py` matches with the gate's code, and every shipped rule still fires, verified
       by `rule_coverage_test.py` and `python3 harness/rule_coverage.py` in `scripts/check.sh` (D1)
+- [x] a refresh from a tag without `reference/rule_gate.py` refreshes the rules, stamps
+      `rule_gate: not in tag <tag>`, and leaves `.claude/hooks` and the settings byte for byte,
+      verified by `install_test.py` case `gate-not-in-tag-0` (D5)
+- [x] a refresh from a tag with the gate writes that tag's bytes, not HEAD's, to
+      `.claude/hooks/rule_gate.py`, creates an absent `settings.json` holding only the hooks block,
+      and stamps `vendored+wired`, verified by `gate-from-tag-settings-created-0` (D5)
+- [x] a tracked, clean `settings.json` gains the entry in place with every other key and hook kept
+      at its two-space layout, `git diff` shows only the addition, and `git checkout` restores the
+      original bytes, verified by `gate-merged-into-tracked-settings-0` (D5)
+- [x] a `settings.json` or `settings.local.json` whose PreToolUse hook already runs
+      `.claude/hooks/rule_gate.py` is left byte for byte and stamped `vendored+already-wired`,
+      verified by `gate-already-wired-unchanged-0` (D5)
+- [x] a modified, untracked, invalid, non-git or hand-laid-out `settings.json` is left byte for
+      byte, the exact entry is printed with where it goes, and the stamp says `vendored, NOT
+      wired:` with the reason; `settings.local.json` is never written in any case, verified by
+      `gate-settings-left-untouched-0` and every other `gate-*` case (D5)
+- [x] a second refresh from the same tag changes nothing, verified by `gate-refresh-idempotent-0`;
+      a vendored gate matching no release is copied aside, one symlinked out of the repository is
+      replaced rather than written through, and an unreadable one stops the run with nothing
+      copied, verified by `gate-local-edit-preserved-0`, `gate-symlink-not-written-through-0` and
+      `gate-unreadable-refused-1` (D5)
+- [x] a refresh region reading the gate from `$KIT/reference/` fails the D7 court, verified by
+      `install_test.py` case `court-gate-from-checkout-1` (D5)
+- [x] a copy running from outside the project defers, with no output and one `DEFER` log line,
+      when the project's `settings.json` or `settings.local.json` wires `.claude/hooks/rule_gate.py`
+      for the tool and that file exists; it does not defer when the file is missing, the matcher
+      leaves out the tool, the settings do not parse, or `CLAUDE_PROJECT_DIR` is unset; the
+      project's copy never defers, verified by `rule_gate_test.py` `Deferral` (D5)
 
 Anti-weakening contract: the change does not weaken the suite versus the merge-base. Confirm each
 before hand-off:
@@ -133,10 +171,11 @@ before hand-off:
 - [ ] No new suppressions are introduced versus the merge-base.
 - [x] No new skipped tests versus the merge-base.
 
-The suppression box is open on purpose: `install.sh` gains two `# shellcheck disable=SC2016`
-lines. One is on the printed PreToolUse entry, because `$HOME` there is for the hook's shell to
-expand when Claude Code runs it, not for `install.sh`. The other is on the Python source that
-checks the wiring, where `$HOME` is text the check rewrites. They are new suppressions, and each
+The suppression box is open on purpose: `install.sh` gains three `# shellcheck disable=SC2016`
+lines. Two are on the printed PreToolUse entries, the user-level one and the repository-level
+one, because `$HOME` and `$CLAUDE_PROJECT_DIR` there are for the hook's shell to expand when
+Claude Code runs it, not for `install.sh`. The third is on the Python source that checks the
+user-level wiring, where `$HOME` is text the check rewrites. They are new suppressions, and each
 carries its reason inline. The operator decides whether they stand.
 
 # Risks and rollback
@@ -149,9 +188,17 @@ carries its reason inline. The operator decides whether they stand.
 - Risk: the model ignores the inlined text and loops. Mitigation: the BLIND breaker allows once
   the gate's text is seen and still not counted, after 120 seconds with no result for the refused
   call, or after three refusals whose text never reached the model, and logs it.
+- Risk: the user-level copy defers to a project copy that does not run, because the session does
+  not load project hooks while the settings still wire the gate. One CLI flag does it,
+  `--setting-sources` without `project` (measured twice), as do `disableAllHooks` and a managed
+  policy allowing only managed hooks. Mitigation: none mechanical, since the two hooks run in
+  parallel and neither can see whether the other ran; it is a known limit in ADR-0008's
+  Consequences, and the `DEFER` line says the write was not checked by that copy.
 - Rollback: `DISCIPLINE_RULE_GATE=off` in the environment, or remove the `hooks` block from
-  `~/.claude/settings.json`. Reverting the change removes the gate file from future installs; an
-  installed copy stays until deleted, and the `|| true` keeps a deleted one harmless.
+  `~/.claude/settings.json`. In a repository, `git checkout -- .claude/settings.json` takes back
+  a merged entry, and deleting `.claude/hooks/rule_gate.py` stops the user-level copy deferring.
+  Reverting the change removes the gate file from future installs; an installed copy stays until
+  deleted, and the `|| true` keeps a deleted one harmless.
 
 # Notes
 
@@ -159,3 +206,8 @@ carries its reason inline. The operator decides whether they stand.
   path, and the log is where to look in a real session.
 - Fork subagents are untested (ADR-0008, Consequences); the breaker is their only cover.
 - Python 3.8 is checked by parsing with the 3.8 grammar only; no 3.8 interpreter has run it.
+- That Claude Code 2.1.286 sets `CLAUDE_PROJECT_DIR` for a project hook command was measured in
+  one headless Haiku 4.5 session in a scratch repository: the hook logged it, and its own working
+  directory, as the directory the session started in. A second session, started in a
+  subdirectory with the hook added through `--settings`, logged the subdirectory, and the
+  repository's own project hook did not run there. Neither run is on the commit path.

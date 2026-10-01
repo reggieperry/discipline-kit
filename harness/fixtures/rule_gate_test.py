@@ -27,6 +27,10 @@ paths.
                count, and a later call of that response is a sibling however long it waited
   ANOTHER HOOK  a refusal whose text another hook's refusal replaced is given again, never
                called a sibling or blind, until the breaker's limit
+  DEFERRAL     a copy outside the project steps aside for the project's own wired copy, through
+               settings.json or settings.local.json; it does not when that file is missing, the
+               matcher leaves out the tool, the settings do not parse, or $CLAUDE_PROJECT_DIR is
+               unset; the project's copy never steps aside
   END TO END   the hook as a subprocess: a refusal, then the same write allowed once the
                refusal's own text is in the transcript, and garbage on stdin still exiting 0
 
@@ -916,6 +920,161 @@ class AnotherHooksRefusal(GateCase):
 
 
 # --- end to end ----------------------------------------------------------------------------------
+
+# The PreToolUse entry `install.sh --refresh-rules` writes into a repository's own settings.json.
+PROJECT_ENTRY = {"matcher": "Write|Edit|MultiEdit|NotebookEdit",
+                 "hooks": [{"type": "command",
+                            "command": 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py" '
+                                       "|| true"}]}
+
+
+class Deferral(GateCase):
+    """A copy running from outside the project steps aside for the project's own wired copy.
+
+    Wired at both levels, the two copies would each refuse the same write, so the user-level one
+    (here, the gate loaded from the kit's reference/ directory, which is outside every temporary
+    project) defers when the project's settings wire `.claude/hooks/rule_gate.py` for this tool
+    and that file exists. The project's copy never defers. Each deferral has its negative control:
+    a wiring the project copy could not act on must leave the user copy checking.
+    """
+
+    def vendor(self, settings_name="settings.json", entry=None, copy=True):
+        hooks = self.proj / ".claude" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        if copy:
+            (hooks / "rule_gate.py").write_bytes(GATE_PATH.read_bytes())
+        (self.proj / ".claude" / settings_name).write_text(json.dumps(
+            {"hooks": {"PreToolUse": [entry or PROJECT_ENTRY]}}, indent=2))
+        return hooks / "rule_gate.py"
+
+    def assertDeferred(self, out):
+        """A silent allow, and exactly one DEFER line, the newest, naming the project copy."""
+        self.assertAllowedSilently(out)
+        lines = self.log_lines()
+        self.assertEqual(sum("\tDEFER\t" in ln for ln in lines), 1, lines)
+        self.assertIn("\tDEFER\t", lines[-1])
+        self.assertIn(str(self.proj / ".claude" / "hooks" / "rule_gate.py"), lines[-1])
+
+    def test_the_user_copy_defers_to_a_wired_project_copy(self):
+        self.vendor()
+        self.assertDeferred(self.decide())
+
+    def test_settings_local_json_wiring_counts_too(self):
+        self.vendor("settings.local.json")
+        self.assertDeferred(self.decide())
+
+    def test_wired_but_the_project_file_deleted_does_not_defer(self):
+        self.vendor().unlink()
+        self.assertIn("RULE-SENTINEL-PY", self.assertDenied(self.decide()))
+        self.assertFalse(any("\tDEFER\t" in ln for ln in self.log_lines()))
+
+    def test_no_wiring_does_not_defer(self):
+        self.vendor()
+        (self.proj / ".claude" / "settings.json").write_text('{"permissions": {}}\n')
+        self.assertDenied(self.decide())
+
+    def test_invalid_settings_json_does_not_defer(self):
+        self.vendor()
+        (self.proj / ".claude" / "settings.json").write_text('{"hooks": ')
+        self.assertDenied(self.decide())
+
+    def test_a_matcher_that_leaves_out_this_tool_does_not_defer(self):
+        self.vendor(entry={**PROJECT_ENTRY, "matcher": "Edit"})
+        self.assertDenied(self.decide())
+        self.assertDeferred(self.decide(self.hook_input(tool="Edit")))
+
+    def test_no_claude_project_dir_means_the_wired_command_cannot_resolve(self):
+        self.vendor()
+        env = dict(self.env)
+        del env["CLAUDE_PROJECT_DIR"]
+        self.assertDenied(gate.decide(self.hook_input(), env, self.now))
+
+    def test_the_project_copy_never_defers(self):
+        project_copy = self.vendor()
+        full = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **self.env}
+        got = subprocess.run([sys.executable, str(project_copy)],
+                             input=json.dumps(self.hook_input()), capture_output=True, text=True,
+                             env=full, timeout=60)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertIn("RULE-SENTINEL-PY", self.assertDenied(json.loads(got.stdout)))
+        self.assertFalse(any("\tDEFER\t" in ln for ln in self.log_lines()))
+
+    def run_copy(self, copy) -> dict:
+        full = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **self.env}
+        got = subprocess.run([sys.executable, str(copy)], input=json.dumps(self.hook_input()),
+                             capture_output=True, text=True, env=full, timeout=60)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        return json.loads(got.stdout) if got.stdout.strip() else None
+
+    def test_the_project_copy_through_a_symlinked_hooks_directory_never_defers(self):
+        """With .claude/hooks linked out of the repository, the project copy resolves outside
+        the root. Judged by resolved path, it took itself for a user-level copy and deferred to
+        itself, and the user copy deferred to it: nothing checked the write."""
+        outside = self.root / "outside-hooks"
+        outside.mkdir()
+        self.vendor()
+        hooks = self.proj / ".claude" / "hooks"
+        (outside / "rule_gate.py").write_bytes((hooks / "rule_gate.py").read_bytes())
+        (hooks / "rule_gate.py").unlink()
+        hooks.rmdir()
+        hooks.symlink_to(outside, target_is_directory=True)
+        self.assertIn("RULE-SENTINEL-PY", self.assertDenied(self.run_copy(hooks / "rule_gate.py")))
+        self.assertFalse(any("\tDEFER\t" in ln for ln in self.log_lines()), self.log_lines())
+
+    def test_a_command_that_only_mentions_the_path_does_not_defer(self):
+        """The command must run this project's file, not merely contain its path."""
+        for cmd in ("python3 /opt/old-checkout/.claude/hooks/rule_gate.py || true",
+                    'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py.orig" || true',
+                    "echo .claude/hooks/rule_gate.py",
+                    'python3 "$CLAUDE_PROJECT_DIR/other/.claude/hooks/rule_gate.py"'):
+            with self.subTest(cmd=cmd):
+                self.vendor(entry={**PROJECT_ENTRY, "hooks": [{"type": "command",
+                                                                "command": cmd}]})
+                self.assertDenied(self.decide())
+                self.assertFalse(any("\tDEFER\t" in ln for ln in self.log_lines()))
+
+    def test_each_spelling_that_runs_the_project_copy_defers(self):
+        copy = self.proj / ".claude" / "hooks" / "rule_gate.py"
+        for cmd in ('python3 "${CLAUDE_PROJECT_DIR}/.claude/hooks/rule_gate.py" || true',
+                    "python3 .claude/hooks/rule_gate.py", "./.claude/hooks/rule_gate.py",
+                    f"/usr/bin/python3 {copy}"):
+            with self.subTest(cmd=cmd):
+                if self.log.exists():
+                    self.log.unlink()
+                self.vendor(entry={**PROJECT_ENTRY, "hooks": [{"type": "command",
+                                                                "command": cmd}]})
+                self.assertDeferred(self.decide())
+
+    def test_a_non_object_in_the_hooks_list_does_not_fail_open(self):
+        """A stray string beside the real entry crashed the deferral, and the user copy then
+        allowed every write in the project unchecked."""
+        self.vendor(entry={**PROJECT_ENTRY, "hooks": ["x", *PROJECT_ENTRY["hooks"]]})
+        self.assertDeferred(self.decide())
+        self.assertFalse(any("\tFAIL-OPEN\t" in ln for ln in self.log_lines()))
+
+    def test_a_write_no_rule_covers_logs_no_deferral(self):
+        """The README says the gate writes nothing for a file outside the project; a DEFER line
+        logged before the rules were looked at broke that."""
+        self.vendor()
+        self.assertAllowedSilently(self.decide(self.hook_input(str(self.root / "outside.py"))))
+        self.assertEqual(self.log_lines(), [])
+
+    def test_the_defer_line_says_the_write_was_not_checked_here(self):
+        """Under --setting-sources without project, the project copy never runs while the user
+        copy still defers to it, so DEFER must not read as "covered"."""
+        self.vendor()
+        self.assertDeferred(self.decide())
+        self.assertIn("only if this session loads project hooks", self.log_lines()[-1])
+
+    def test_the_user_copy_as_a_subprocess_prints_nothing(self):
+        self.vendor()
+        full = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **self.env}
+        got = subprocess.run([sys.executable, str(GATE_PATH)],
+                             input=json.dumps(self.hook_input()), capture_output=True, text=True,
+                             env=full, timeout=60)
+        self.assertEqual((got.returncode, got.stdout), (0, ""), got.stderr)
+        self.assertTrue(any("\tDEFER\t" in ln for ln in self.log_lines()))
+
 
 class EndToEnd(GateCase):
     def run_hook(self, stdin: str, **env) -> subprocess.CompletedProcess:

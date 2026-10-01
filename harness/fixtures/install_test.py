@@ -111,6 +111,53 @@ shipped, not a guessed one.
                                  invalid JSON; a fresh install         the file, never over it;
                                  outside ~/.claude                     the fresh one is NOT
                                                                        confirmed wired
+  gate-not-in-tag-0              a tag cut before the gate existed  -> 0, the rules refreshed,
+                                                                       the stamp says "not in
+                                                                       tag", and the repo's
+                                                                       hooks and settings
+                                                                       untouched; an earlier
+                                                                       tag's gate named, with
+                                                                       whether it is wired
+  gate-from-tag-settings-        the gate in the tag, no            -> 0, the TAG's gate body
+    created-0                    settings.json                         (not HEAD's), a
+                                                                       settings.json holding
+                                                                       only the entry, stamped
+                                                                       vendored+wired
+  gate-merged-into-tracked-      a tracked, clean settings.json     -> 0, the entry appended,
+    settings-0                   with its own keys and hooks           every key and hook kept,
+                                                                       git diff the addition
+                                                                       alone, git checkout
+                                                                       reverting it exactly
+  gate-already-wired-            settings.json, or                  -> 0, byte for byte, stamped
+    unchanged-0                  settings.local.json, already runs     already-wired, no entry
+                                 .claude/hooks/rule_gate.py            printed
+  gate-settings-left-            settings.json modified, untracked, -> 0, byte for byte, the
+    untouched-0                  invalid, outside git, or in a         exact entry printed with
+                                 layout a JSON writer would change     where it goes, stamped
+                                                                       NOT wired with the reason
+  gate-refresh-idempotent-0      the same refresh twice             -> 0, nothing changes the
+                                                                       second time
+  gate-local-edit-preserved-0    a vendored gate the repo edited    -> 0, copied aside, listed,
+                                                                       then the tag's lands
+  gate-symlink-not-written-      a vendored gate symlinked out of   -> 0, the outside file
+    through-0                    the repository                        untouched, the link
+                                                                       replaced and said
+  gate-unreadable-refused-1      a vendored gate this run cannot    -> 1, named, nothing copied
+                                 read
+  gate-wiring-must-run-the-      a hook naming another checkout's   -> 0, the first three merged;
+    file-0                       gate, rule_gate.py.orig, or an        the Bash ones stamped NOT
+                                 echo; one running it under a          wired, naming the matcher,
+                                 Bash matcher, in either file          nothing changed; each
+                                                                       answer matching the real
+                                                                       gate's deferral
+  gate-merge-write-failure-0     a merge whose write hits a file-   -> 0, settings.json byte for
+                                 size limit partway                    byte, stamped NOT wired,
+                                                                       no temporary file left
+  gate-hooks-symlink-not-        .claude/hooks, or .claude, a link  -> 0, nothing written through
+    vendored-0                   out of the repository                 it, stamped NOT vendored
+  gate-settings-dangling-        settings.json a link to nothing    -> 0, stamped NOT wired
+    symlink-0                                                          because it is a link
+  Every case touching a settings.json also holds settings.local.json byte for byte.
 
   THE D7 COURT
   court-clean-real-0             the real repository               -> 0, denominators printed
@@ -119,6 +166,8 @@ shipped, not a guessed one.
                                                                       defects named (checkout
                                                                       copy, CHANGELOG scrape,
                                                                       no tag resolution)
+  court-gate-from-checkout-1     the tag-resolving region plus a   -> 1, the gate copy named
+                                 cp of $KIT/reference/rule_gate.py
   court-main-rev-1               `g archive main`                  -> 1, non-tag rev
   court-head-rev-1               `git archive HEAD`                -> 1, non-tag rev
   court-empty-corpus-2           no install.sh at the root         -> 2, VOID, never a pass
@@ -187,6 +236,28 @@ RETIRED_BODY = "a rule v0.9.0 shipped and v0.10.0 no longer does\n"
 # The three rules the abort case needs, in the order the copy loop's glob walks them: two land
 # before the poisoned third.
 THREE_RULES = ("a-rule.md", "kit-rule.md", "zz-rule.md")
+
+# The rule gate a refresh vendors into a repository. Every tag before the gate existed lacks the
+# file, so the kit trees here carry it only from v0.11.0 on, with a body HEAD changes again: a
+# vendored copy holding HEAD's body is one read from the working tree, not the tag.
+GATE_REL = Path("reference/rule_gate.py")
+GATE_V11 = "# rule gate body shipped in v0.11.0\n"
+V11_BODY = "rule body shipped in v0.11.0, beside the first gate\n"
+GATE_HEAD = "# rule gate body only HEAD holds, never tagged\n"
+EDITED_GATE = "# a rule gate the consumer edited in place\n"
+VENDORED = Path(".claude/hooks/rule_gate.py")
+SETTINGS = Path(".claude/settings.json")
+LOCAL_SETTINGS = Path(".claude/settings.local.json")
+LOCAL_SETTINGS_BODY = '{"permissions": {"allow": ["Bash(ls:*)"]}}\n'
+
+# The entry a refresh wires into a repository's own settings.json. Written out here rather than
+# read from install.sh, so the two are compared rather than one trusted.
+PROJECT_ENTRY = {
+    "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+    "hooks": [{"type": "command",
+               "command": 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py" || true'}],
+}
+MINE = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}
 
 # The files the no-argument install mode copies by exact path. Stubs: nothing under test reads
 # their contents, but every one must exist or the mode dies at its first cp.
@@ -1520,6 +1591,459 @@ def rule_gate_kept_settings_shapes(td: Path) -> None:
            f"a fresh install outside ~/.claude names ~/.claude's gate, not its own: {state}")
 
 
+def gate_kit(td: Path) -> Path:
+    """`kit_tree`, then a v0.11.0 that ships the rule gate, and a HEAD whose rule and gate both
+    differ from that tag's again."""
+    kit = kit_tree(td)
+    (kit / GATE_REL).parent.mkdir(parents=True, exist_ok=True)
+    (kit / GATE_REL).write_text(GATE_V11)
+    (kit / RULE_REL).write_text(V11_BODY)
+    git(kit, "add", "-A")
+    git(kit, "commit", "-qm", "v0.11.0 tree")
+    git(kit, "tag", "v0.11.0")
+    (kit / GATE_REL).write_text(GATE_HEAD)
+    (kit / RULE_REL).write_text(HEAD_BODY)
+    git(kit, "add", "-A")
+    git(kit, "commit", "-qm", "untagged head with a newer gate")
+    return kit
+
+
+def git_consumer(td: Path, settings: str | None = None, *, commit: bool = True) -> Path:
+    """`consumer_tree` as a git repository, with `settings` as its .claude/settings.json and a
+    settings.local.json beside it that no refresh may touch. `commit=False` leaves the
+    settings file untracked."""
+    consumer = consumer_tree(td)
+    (consumer / LOCAL_SETTINGS).write_text(LOCAL_SETTINGS_BODY)
+    git(consumer, "init", "-q", "-b", "main", ".")
+    git(consumer, "config", "user.email", "fixture@example.invalid")
+    git(consumer, "config", "user.name", "fixture")
+    git(consumer, "add", "-A")
+    git(consumer, "commit", "-qm", "consumer")
+    if settings is not None:
+        (consumer / SETTINGS).write_text(settings)
+        if commit:
+            git(consumer, "add", "-A")
+            git(consumer, "commit", "-qm", "settings")
+    return consumer
+
+
+def two_space(data: dict) -> str:
+    return json.dumps(data, indent=2) + "\n"
+
+
+def refresh_ok(kit: Path, consumer: Path) -> tuple[str, dict[str, str]]:
+    got = run_installer(kit, consumer)
+    said = got.stdout + got.stderr
+    expect(got.returncode == 0, f"want exit 0, got {got.returncode}: {said.strip()[:600]}")
+    body = stamp_text(consumer / ".claude" / "rules" / ".kit-version", "rules stamp")
+    return said, stamp_fields(body)
+
+
+def printed_entry(said: str) -> dict:
+    """The PreToolUse entry an installer printed for the user to add, parsed as JSON."""
+    start = said.find("rule-gate PreToolUse entry")
+    expect(start >= 0, f"the message must print the entry: {said[:900]}")
+    start = said.index("\n{", start) + 1
+    depth, end = 0, start
+    for end in range(start, len(said)):
+        depth += {"{": 1, "}": -1}.get(said[end], 0)
+        if depth == 0:
+            break
+    return json.loads(said[start:end + 1])
+
+
+def gate_not_in_tag(td: Path) -> None:
+    """A tag cut before the gate existed: skipped by name and stamped, and the hooks untouched.
+
+    Every release tag before this change lacks reference/rule_gate.py, so `git archive` naming
+    it would die on a pathspec matching nothing and take the rules refresh down with it.
+    """
+    kit = kit_tree(td)
+    consumer = git_consumer(td, two_space({"hooks": {"PreToolUse": [MINE]}}))
+    (consumer / VENDORED).parent.mkdir(parents=True)
+    (consumer / VENDORED).write_text(EDITED_GATE)
+    before = (consumer / SETTINGS).read_bytes()
+    said, fields = refresh_ok(kit, consumer)
+    expect((consumer / ".claude" / "rules" / "kit-rule.md").read_text() == V10_BODY,
+           "the rules must still refresh from a tag without the gate")
+    expect(fields.get("rule_gate") == "not in tag v0.10.0; a .claude/hooks/rule_gate.py vendored "
+           "by an earlier tag was left in place (not wired)",
+           f"the stamp must say the tag carries no gate and an earlier one is still here: {fields}")
+    expect("not in tag v0.10.0" in said and "rule gate" in said and "earlier tag" in said,
+           f"the run must say the gate was skipped, why, and what is still here: {said[:600]}")
+    body = stamp_text(consumer / ".claude" / "rules" / ".kit-version", "rules stamp")
+    expect('when rule_gate below begins "vendored"' in body,
+           f"the header must not say the gate came from this tag: {body[:900]}")
+    expect((consumer / SETTINGS).read_bytes() == before, "settings.json changed")
+    expect((consumer / VENDORED).read_text() == EDITED_GATE,
+           "a tag without the gate must leave the repository's hooks alone")
+    expect(not list((consumer / VENDORED).parent.glob("*.local-*")),
+           "nothing in .claude/hooks is the refresh's to copy aside when it places no gate")
+    expect((consumer / LOCAL_SETTINGS).read_text() == LOCAL_SETTINGS_BODY,
+           "settings.local.json is never touched")
+
+    wired = td / "wired"
+    wired.mkdir()
+    consumer = git_consumer(wired, two_space({"hooks": {"PreToolUse": [PROJECT_ENTRY]}}))
+    (consumer / VENDORED).parent.mkdir(parents=True)
+    (consumer / VENDORED).write_text(EDITED_GATE)
+    said, fields = refresh_ok(kit, consumer)
+    expect(fields.get("rule_gate", "").endswith("left in place (wired in .claude/settings.json)"),
+           f"an earlier gate a settings file runs must be stamped as wired: {fields}")
+    expect("wired in .claude/settings.json" in said, f"and said: {said[:600]}")
+
+    clean = td / "clean"
+    clean.mkdir()
+    consumer = git_consumer(clean)
+    _, fields = refresh_ok(kit, consumer)
+    expect(fields.get("rule_gate") == "not in tag v0.10.0",
+           f"with no gate here the stamp says only that the tag has none: {fields}")
+
+
+def gate_from_tag_settings_created(td: Path) -> None:
+    """The gate lands with the TAG's bytes, and a repository with no settings.json gets one."""
+    kit = gate_kit(td)
+    consumer = git_consumer(td)
+    said, fields = refresh_ok(kit, consumer)
+    gate_file = consumer / VENDORED
+    expect(gate_file.is_file(), f"no gate at {gate_file}: {said[:600]}")
+    got = gate_file.read_text()
+    expect(got == GATE_V11, f"want v0.11.0's gate, got {got!r} (HEAD's body means the working "
+           "tree was read, not the tag)")
+    settings = consumer / SETTINGS
+    expect(settings.is_file(), "an absent settings.json must be created")
+    expect(settings.read_text() == two_space({"hooks": {"PreToolUse": [PROJECT_ENTRY]}}),
+           f"the created settings.json holds the hooks block and nothing else, at two spaces: "
+           f"{settings.read_text()!r}")
+    expect(fields.get("rule_gate", "").startswith("vendored+wired"),
+           f"the stamp must say the gate is vendored and wired: {fields}")
+    expect(fields.get("tag") == "v0.11.0"
+           and (consumer / ".claude" / "rules" / "kit-rule.md").read_text() == V11_BODY,
+           f"one tag for rules and gate: {fields}")
+    expect((consumer / LOCAL_SETTINGS).read_text() == LOCAL_SETTINGS_BODY,
+           "settings.local.json is never touched")
+
+
+def gate_merged_into_tracked_settings(td: Path) -> None:
+    """A tracked, clean settings.json gets the entry in place, and git sees only that.
+
+    The file keeps every key and every hook it had, the entry is appended to its PreToolUse
+    array, and the two-space layout is kept, so `git diff` is the addition and `git checkout`
+    takes it back.
+    """
+    kit = gate_kit(td)
+    original = {"permissions": {"allow": ["Bash(ls:*)"]}, "hooks": {"PreToolUse": [MINE],
+                "Stop": [MINE]}, "env": {"KEEP": "1"}}
+    consumer = git_consumer(td, two_space(original))
+    said, fields = refresh_ok(kit, consumer)
+    expect(fields.get("rule_gate", "").startswith("vendored+wired"),
+           f"a tracked clean settings.json is merged and wired: {fields} {said[:600]}")
+    now = json.loads((consumer / SETTINGS).read_text())
+    want = json.loads(json.dumps(original))
+    want["hooks"]["PreToolUse"].append(PROJECT_ENTRY)
+    expect(now == want, f"want the entry appended and everything else kept, got {now}")
+    expect(list(now) == list(original), f"key order must be kept: {list(now)}")
+    expect((consumer / SETTINGS).read_text() == two_space(want),
+           "the merged file must keep the two-space layout")
+    diff = git(consumer, "diff", "--unified=0", "--", str(SETTINGS))
+    minus = [ln[1:] for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+    plus = [ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    expect(plus and all(m + "," in plus for m in minus),
+           f"the only line removed may be the one that gains a comma before the entry: {diff}")
+    expect(len(plus) - len(minus) == len(json.dumps(PROJECT_ENTRY, indent=2).splitlines()),
+           f"git diff must show the entry and nothing else: {diff}")
+    git(consumer, "checkout", "--", str(SETTINGS))
+    expect((consumer / SETTINGS).read_text() == two_space(original),
+           "git checkout must take the change back exactly")
+    expect((consumer / LOCAL_SETTINGS).read_text() == LOCAL_SETTINGS_BODY,
+           "settings.local.json is never touched")
+
+
+def gate_already_wired_unchanged(td: Path) -> None:
+    """A settings file whose PreToolUse hook already runs .claude/hooks/rule_gate.py is left
+    byte for byte, whether the repository spelled the command its own way or wired it in
+    settings.local.json, which a merge into settings.json would wire a second time."""
+    kit = gate_kit(td)
+    own = {"matcher": "Edit|Write|NotebookEdit|MultiEdit",
+           "hooks": [{"type": "command", "command": "python3 .claude/hooks/rule_gate.py"}]}
+    text = '{"hooks":{"PreToolUse":[' + json.dumps(own) + "]}}"  # not the kit's layout either
+    consumer = git_consumer(td, text, commit=False)
+    said, fields = refresh_ok(kit, consumer)
+    expect((consumer / SETTINGS).read_text() == text, "an already-wired settings.json changed")
+    expect(fields.get("rule_gate", "").startswith("vendored+already-wired"),
+           f"the stamp must say it was already wired: {fields}")
+    expect("rule-gate PreToolUse entry" not in said, "no entry is printed when it is wired")
+
+    local = td / "local"
+    local.mkdir()
+    consumer = git_consumer(local, two_space({"permissions": {}}))
+    wired_local = two_space({"hooks": {"PreToolUse": [PROJECT_ENTRY]}})
+    (consumer / LOCAL_SETTINGS).write_text(wired_local)
+    said, fields = refresh_ok(kit, consumer)
+    expect((consumer / SETTINGS).read_text() == two_space({"permissions": {}}),
+           "wired in settings.local.json, settings.json must not gain a second copy")
+    expect((consumer / LOCAL_SETTINGS).read_text() == wired_local,
+           "settings.local.json is never touched")
+    expect(fields.get("rule_gate", "").startswith("vendored+already-wired")
+           and "settings.local.json" in fields.get("rule_gate", ""),
+           f"the stamp must name where it is wired: {fields}")
+
+
+def gate_settings_left_untouched(td: Path) -> None:
+    """A settings.json the refresh cannot change reviewably is left byte for byte, the exact
+    entry is printed with where it goes, and the stamp says NOT wired with the reason."""
+    kit = gate_kit(td)
+    plain = two_space({"permissions": {"allow": []}})
+    shapes = {
+        "modified": lambda c: (c / SETTINGS).write_text(two_space({"permissions": {"deny": []}})),
+        "untracked": None,
+        "invalid": None,
+        "not-a-repo": None,
+        "hand-formatted": None,
+    }
+    for name in shapes:
+        root = td / name
+        root.mkdir()
+        if name == "not-a-repo":
+            consumer = consumer_tree(root)
+            (consumer / SETTINGS).write_text(plain)
+            (consumer / LOCAL_SETTINGS).write_text(LOCAL_SETTINGS_BODY)
+        elif name == "untracked":
+            consumer = git_consumer(root, plain, commit=False)
+        elif name == "invalid":
+            consumer = git_consumer(root, '{"hooks": \n')
+        elif name == "hand-formatted":
+            consumer = git_consumer(root, '{\n  "permissions": {"allow": ["Bash(ls:*)"]}\n}\n')
+        else:
+            consumer = git_consumer(root, plain)
+            shapes[name](consumer)
+        before = (consumer / SETTINGS).read_bytes()
+        said, fields = refresh_ok(kit, consumer)
+        state = fields.get("rule_gate", "")
+        expect((consumer / SETTINGS).read_bytes() == before, f"{name}: settings.json changed")
+        expect((consumer / VENDORED).is_file() and (consumer / VENDORED).read_text() == GATE_V11,
+               f"{name}: the gate must still land")
+        expect(state.startswith("vendored, NOT wired: "), f"{name}: want NOT wired, got {state}")
+        expect(printed_entry(said) == PROJECT_ENTRY,
+               f"{name}: the printed entry must be the one a refresh would write: {said[:900]}")
+        expect(str(consumer / SETTINGS) in said and "add the\n    entry to that array" in said,
+               f"{name}: the message must say which file and where in it: {said[:900]}")
+        expect((consumer / LOCAL_SETTINGS).read_text() == LOCAL_SETTINGS_BODY,
+               f"{name}: settings.local.json is never touched")
+        expect(not list((consumer / ".claude").glob("settings.json?*")),
+               f"{name}: no copy or backup of settings.json is written beside it")
+
+
+def gate_refresh_idempotent(td: Path) -> None:
+    """A second refresh from the same tag changes nothing: no backup, no second entry."""
+    kit = gate_kit(td)
+    consumer = git_consumer(td, two_space({"hooks": {"PreToolUse": [MINE]}}))
+    refresh_ok(kit, consumer)
+
+    def snapshot() -> dict[str, bytes]:
+        return {str(p.relative_to(consumer)): p.read_bytes() for p in consumer.rglob("*")
+                if p.is_file() and ".git" not in p.relative_to(consumer).parts
+                and p.name != ".kit-version"}
+
+    first = snapshot()
+    said, fields = refresh_ok(kit, consumer)
+    second = snapshot()
+    changed = sorted(k for k in set(first) | set(second) if first.get(k) != second.get(k))
+    expect(not changed, f"a second refresh changed {changed}")
+    expect(fields.get("rule_gate", "").startswith("vendored+already-wired"),
+           f"the second run finds the gate wired: {fields}")
+    expect("copied aside" not in said, f"nothing matches no release on a re-run: {said[:600]}")
+
+
+def gate_local_edit_preserved(td: Path) -> None:
+    """A vendored gate the repository changed is copied aside before the tag's lands, as a rule
+    the repository changed is; one matching a release is overwritten with no backup."""
+    kit = gate_kit(td)
+    consumer = git_consumer(td)
+    (consumer / VENDORED).parent.mkdir(parents=True)
+    (consumer / VENDORED).write_text(EDITED_GATE)
+    said, _ = refresh_ok(kit, consumer)
+    saved = sorted((consumer / VENDORED).parent.glob("rule_gate.py.local-*"))
+    expect(len(saved) == 1 and saved[0].read_text() == EDITED_GATE,
+           f"the edited gate must be copied aside, found {[q.name for q in saved]}")
+    expect(not saved[0].name.endswith(".py"), f"a backup must not end in .py: {saved[0].name}")
+    expect(saved[0].name in said, f"what was preserved must be listed: {said[:600]}")
+    expect((consumer / VENDORED).read_text() == GATE_V11, "the tag's gate must land after it")
+    refresh_ok(kit, consumer)
+    expect(len(list((consumer / VENDORED).parent.glob("rule_gate.py.local-*"))) == 1,
+           "a gate matching a release is overwritten with no second backup")
+
+
+def gate_symlink_not_written_through(td: Path) -> None:
+    """A vendored gate symlinked out of the repository is replaced, never written through."""
+    kit = gate_kit(td)
+    consumer = git_consumer(td)
+    outside = td / "outside-gate.py"
+    outside.write_text(SHARED_OUTSIDE)
+    (consumer / VENDORED).parent.mkdir(parents=True)
+    (consumer / VENDORED).symlink_to(outside)
+    said, _ = refresh_ok(kit, consumer)
+    expect(outside.read_text() == SHARED_OUTSIDE, "the refresh wrote through the link")
+    expect(not (consumer / VENDORED).is_symlink() and (consumer / VENDORED).read_text() == GATE_V11,
+           "the link must be replaced by the tag's gate")
+    expect("symlink" in said, f"replacing a link must be said: {said[:600]}")
+
+
+def gate_wiring_must_run_the_file(td: Path) -> None:
+    """A hook counts as wiring the gate only when it runs THIS repository's copy for every write
+    tool, which is the test the gate's own deferral applies. A command that only mentions the
+    path ran nothing, yet was stamped already-wired, and the user-level copy deferred to it; a
+    matcher leaving out the write tools was stamped already-wired while the copy never ran.
+    For each shape, the installer's answer is checked against the real gate's deferral."""
+    gate = load_real_gate()
+    kit = gate_kit(td)
+    runs_nothing = {
+        "foreign-path": "python3 /opt/old-checkout/.claude/hooks/rule_gate.py || true",
+        "orig-suffix": 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py.orig" || true',
+        "echo": "echo .claude/hooks/rule_gate.py",
+    }
+    for name, cmd in runs_nothing.items():
+        root = td / name
+        root.mkdir()
+        hook = {**PROJECT_ENTRY, "hooks": [{"type": "command", "command": cmd}]}
+        consumer = git_consumer(root, two_space({"hooks": {"PreToolUse": [hook]}}))
+        expect(not gate_defers(gate, consumer), f"{name}: the gate itself must not defer")
+        said, fields = refresh_ok(kit, consumer)
+        expect(fields.get("rule_gate", "").startswith("vendored+wired"),
+               f"{name}: a command that runs another file wires nothing, so the entry is merged: "
+               f"{fields} {said[:600]}")
+        now = json.loads((consumer / SETTINGS).read_text())
+        expect(now["hooks"]["PreToolUse"] == [hook, PROJECT_ENTRY],
+               f"{name}: want the entry appended beside the other hook, got {now}")
+        expect(gate_defers(gate, consumer), f"{name}: once merged, the gate defers to it")
+
+    for where in ("settings.json", "settings.local.json"):
+        root = td / ("bash-" + where)
+        root.mkdir()
+        bash_only = two_space({"hooks": {"PreToolUse": [{**PROJECT_ENTRY, "matcher": "Bash"}]}})
+        consumer = git_consumer(root, bash_only if where == "settings.json" else None)
+        if where == "settings.local.json":
+            (consumer / LOCAL_SETTINGS).write_text(bash_only)
+        before = {p: (consumer / p).read_bytes() if (consumer / p).exists() else None
+                  for p in (SETTINGS, LOCAL_SETTINGS)}
+        expect(not gate_defers(gate, consumer), f"{where}: the gate itself must not defer")
+        said, fields = refresh_ok(kit, consumer)
+        state = fields.get("rule_gate", "")
+        expect(state.startswith("vendored, NOT wired: ") and '"Bash"' in state
+               and where in state and "MultiEdit" in state,
+               f"{where}: a Bash-only matcher must be stamped NOT wired, naming it: {state}")
+        expect({p: (consumer / p).read_bytes() if (consumer / p).exists() else None
+                for p in before} == before, f"{where}: no settings file may change")
+        expect(printed_entry(said) == PROJECT_ENTRY, f"{where}: the entry is printed: {said[:900]}")
+
+
+def load_real_gate():
+    """The kit's own reference/rule_gate.py, imported, for its deferral test."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("rule_gate_real", REPO / GATE_REL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def gate_defers(gate, consumer: Path) -> bool:
+    """Whether the real gate, run from outside `consumer`, defers for every write tool."""
+    env = {"CLAUDE_PROJECT_DIR": str(consumer)}
+    return all(gate.project_copy_wired(str(consumer), t, env)
+               for t in ("Write", "Edit", "MultiEdit", "NotebookEdit"))
+
+
+def gate_merge_write_failure(td: Path) -> None:
+    """A merge whose write fails partway leaves settings.json exactly as it was.
+
+    The file was rewritten in place, so a write cut off by a file-size limit left a truncated
+    settings.json that did not parse, while the stamp said "complete" and "left as it was". The
+    limit here is the one the review measured with: 150 KiB, under a 170 KiB file.
+    """
+    import resource
+    kit = gate_kit(td)
+    big = {"permissions": {"allow": [f"Bash(echo {i:06d}:*)" for i in range(8000)]}}
+    consumer = git_consumer(td, two_space(big))
+    before = (consumer / SETTINGS).read_bytes()
+    expect(len(before) > 160 * 1024, f"the file must outgrow the limit: {len(before)} bytes")
+
+    def limit():
+        resource.setrlimit(resource.RLIMIT_FSIZE, (150 * 1024, resource.RLIM_INFINITY))
+
+    got = subprocess.run(
+        ["bash", str(kit / "install.sh"), "--refresh-rules", "--dir", str(consumer)],
+        capture_output=True, text=True, env=clean_env(), preexec_fn=limit,
+    )
+    said = got.stdout + got.stderr
+    expect(got.returncode == 0, f"want exit 0, got {got.returncode}: {said.strip()[:600]}")
+    expect((consumer / SETTINGS).read_bytes() == before,
+           f"settings.json must be left byte for byte, now {(consumer / SETTINGS).stat().st_size}")
+    fields = stamp_fields(stamp_text(consumer / ".claude" / "rules" / ".kit-version", "stamp"))
+    state = fields.get("rule_gate", "")
+    expect(state.startswith("vendored, NOT wired: ") and "writing it failed" in state,
+           f"the stamp must say the write failed and nothing was wired: {state}")
+    expect(not list((consumer / ".claude").glob(".settings.json.*")),
+           "the half-written temporary file must be removed")
+
+
+def gate_hooks_symlink_not_vendored(td: Path) -> None:
+    """A .claude/hooks or .claude linked out of the repository gets no gate and no wiring.
+
+    The gate went through the link to a file outside the repository, and that copy, resolving
+    outside the root, deferred to itself: nothing checked a write while the stamp said wired."""
+    kit = gate_kit(td)
+    for linked in (Path(".claude/hooks"), Path(".claude")):
+        root = td / linked.name.lstrip(".")
+        root.mkdir()
+        consumer = git_consumer(root)
+        outside = root / "outside"
+        if linked == Path(".claude"):
+            shutil.move(str(consumer / ".claude"), str(outside))
+        else:
+            outside.mkdir()
+        (consumer / linked).symlink_to(outside, target_is_directory=True)
+        said, fields = refresh_ok(kit, consumer)
+        state = fields.get("rule_gate", "")
+        expect(state.startswith("in tag v0.11.0, NOT vendored: ") and str(linked) in state,
+               f"{linked}: the stamp must say the gate was not vendored and why: {state}")
+        expect(not list(outside.rglob("rule_gate.py")) and not list(outside.rglob("settings.json")),
+               f"{linked}: nothing may be written through the link: {list(outside.rglob('*'))}")
+        expect("symlink" in said and "NOT vendored" in said, f"{linked}: said: {said[:600]}")
+
+
+def gate_settings_dangling_symlink(td: Path) -> None:
+    """A settings.json that is a link to nothing is reported as a link, not as bad JSON."""
+    kit = gate_kit(td)
+    consumer = git_consumer(td)
+    (consumer / SETTINGS).symlink_to(td / "nowhere.json")
+    said, fields = refresh_ok(kit, consumer)
+    state = fields.get("rule_gate", "")
+    expect(state.startswith("vendored, NOT wired: ") and "symlink" in state
+           and "JSON" not in state, f"the reason must be the link: {state}")
+    expect((consumer / SETTINGS).is_symlink() and not (td / "nowhere.json").exists(),
+           "the link and its missing target must be left as they were")
+
+
+def gate_unreadable_refused(td: Path) -> None:
+    """A vendored gate this run cannot read it cannot copy aside, so nothing is copied."""
+    if os.geteuid() == 0:
+        raise Failure("this case cannot run as root, where every file is readable")
+    kit = gate_kit(td)
+    consumer = git_consumer(td)
+    (consumer / VENDORED).parent.mkdir(parents=True)
+    (consumer / VENDORED).write_text(EDITED_GATE)
+    (consumer / VENDORED).chmod(0)
+    try:
+        got = run_installer(kit, consumer)
+    finally:
+        (consumer / VENDORED).chmod(0o644)
+    said = got.stdout + got.stderr
+    expect(got.returncode == 1, f"want exit 1, got {got.returncode}: {said.strip()[:400]}")
+    expect("rule_gate.py" in said and "fatal:" not in said, f"named, not git's fatal: {said[:400]}")
+    unchanged(consumer)
+    expect((consumer / VENDORED).read_text() == EDITED_GATE, "the unreadable gate was replaced")
+
+
 def user_install_abort_stamp_honest(td: Path) -> None:
     """The user-level stamp must not read as a clean install over a half-copied one.
 
@@ -1696,6 +2220,19 @@ def main() -> int:
         case("user-install-abort-stamp-honest-1", user_install_abort_stamp_honest),
         case("rule-gate-wired-0", rule_gate_wired),
         case("rule-gate-kept-settings-shapes-0", rule_gate_kept_settings_shapes),
+        case("gate-not-in-tag-0", gate_not_in_tag),
+        case("gate-from-tag-settings-created-0", gate_from_tag_settings_created),
+        case("gate-merged-into-tracked-settings-0", gate_merged_into_tracked_settings),
+        case("gate-already-wired-unchanged-0", gate_already_wired_unchanged),
+        case("gate-settings-left-untouched-0", gate_settings_left_untouched),
+        case("gate-refresh-idempotent-0", gate_refresh_idempotent),
+        case("gate-local-edit-preserved-0", gate_local_edit_preserved),
+        case("gate-symlink-not-written-through-0", gate_symlink_not_written_through),
+        case("gate-unreadable-refused-1", gate_unreadable_refused),
+        case("gate-wiring-must-run-the-file-0", gate_wiring_must_run_the_file),
+        case("gate-merge-write-failure-0", gate_merge_write_failure),
+        case("gate-hooks-symlink-not-vendored-0", gate_hooks_symlink_not_vendored),
+        case("gate-settings-dangling-symlink-0", gate_settings_dangling_symlink),
         court_case("court-clean-real-0", 0, (COURT_PASS, "consumer script"), lambda td: REPO),
         court_case(
             "court-clean-plant-0", 0, (COURT_PASS,),
@@ -1705,6 +2242,11 @@ def main() -> int:
             "court-pre-fix-1", 1,
             (COURT_FAIL, "checkout tree", "CHANGELOG", "no tag resolution"),
             lambda td: plant(td, PRE_FIX_INSTALLER),
+        ),
+        court_case(
+            "court-gate-from-checkout-1", 1, (COURT_FAIL, "reads the rule gate from the checkout"),
+            lambda td: plant(td, rev_swapped_installer('"$tag"').replace(
+                "  exit 0\n", '  cp "$KIT/reference/rule_gate.py" .claude/hooks/\n  exit 0\n')),
         ),
         court_case(
             "court-main-rev-1", 1, (COURT_FAIL, "non-tag rev"),

@@ -27,6 +27,33 @@ Notable changes to the discipline kit. Versions follow [semantic versioning](htt
   `harness/fixtures/rule_gate_test.py` (82 tests, including 13,755 golden glob vectors generated
   by the bundled matcher) and two new `install_test.py` cases. A review ran it live in 35
   sessions; no live run is on the commit path. Decided in ADR-0008, built under STORY-0017.
+- **`--refresh-rules` vendors the rule gate into the repository, from the same tag as the
+  rules.** It reads `reference/rule_gate.py` in the same `git archive` call as
+  `claude-project`, places it at `.claude/hooks/rule_gate.py` with the refresh's rules for a rule
+  file (a copy matching no release is copied aside first, a symlink is replaced, an unreadable
+  copy stops the run), and wires it in `.claude/settings.json` with a PreToolUse entry running
+  `python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py" || true`. An absent settings.json is
+  created; one that git tracks with no uncommitted changes gets the entry appended in place, so
+  `git diff` shows it and `git checkout` takes it back; one that already runs the gate, there or in
+  `settings.local.json`, is not changed; anything else is left alone and the entry printed.
+  "Runs the gate" means a command hook whose matcher selects all four write tools and whose
+  command runs this repository's file, not one that only mentions its path. A merge writes a
+  temporary file and renames it over `settings.json`, so a failed write leaves the file as it
+  was. A linked `.claude` or `.claude/hooks` gets no gate and no wiring. `settings.local.json` is
+  never written. The `.kit-version` stamp gains a `rule_gate:` line. A tag cut before the gate
+  existed is skipped with a message and stamped `not in tag <tag>`, and the repository's hooks
+  are left as they were; an earlier tag's gate still there is named in the stamp, with whether it
+  is wired. The gate itself now defers when it is not the project's own copy, a project rule
+  applies, and the project's settings run the project's copy: it allows with no output and logs
+  one `DEFER` line, so the user-level and repository-level copies can both be wired without
+  refusing each write twice. The project's copy knows itself by the path it was run from, so a
+  linked `.claude/hooks` cannot make it defer to itself. A session that does not load project
+  hooks (`--setting-sources` without `project`, among others) leaves no copy checking; that is a
+  known limit in ADR-0008. The D7 court fails a refresh that reads the gate from the kit's working
+  tree. Tested by thirteen new `install_test.py` cases and fifteen new `rule_gate_test.py` tests,
+  each seen failing against the code before its fix, and a court case seen passing the court
+  before it: 59 cases and 97 tests in all. That Claude Code sets `CLAUDE_PROJECT_DIR` for hook
+  commands was measured in one live session on 2.1.286.
 - **ADR-0008 and STORY-0017**, the record and the story for the rule gate, with the deep-reason
   pass that changed its design in `docs/adrs/reviews/ADR-0008-deep-reason.md`.
 

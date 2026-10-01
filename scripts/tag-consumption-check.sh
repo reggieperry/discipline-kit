@@ -96,6 +96,12 @@ region_lines="$(printf '%s\n' "$region" | wc -l)"
 if printf '%s\n' "$region_exec" | grep -qE 'cp[[:space:]].*[$]KIT.*claude-project'; then
   finding "install.sh refresh path copies rules from the checkout tree (\$KIT/claude-project), not from a tag's tree"
 fi
+# The refresh vendors the rule gate from the same tag as the rules, so reading it out of the
+# checkout is the same defect on a second path. Any use counts, not only a `cp`: the refresh
+# places files through a helper, and a working-tree path handed to it greps clean of `cp`.
+if printf '%s\n' "$region_exec" | grep -qE '[$][{]?KIT[}]?"?/reference/'; then
+  finding "install.sh refresh path reads the rule gate from the checkout tree (\$KIT/reference), not from a tag's tree"
+fi
 if printf '%s\n' "$region_exec" | grep -q 'CHANGELOG'; then
   finding "install.sh refresh path scrapes a version from the checkout's CHANGELOG; the version a consumer gets is the tag itself"
 fi
@@ -106,7 +112,7 @@ if ! printf '%s\n' "$region_exec" | grep -qE '\b(git|g)\b.*\barchive\b'; then
   finding "install.sh refresh path never reads a tag's tree (git archive) — whatever it copies is not pinned to the resolved tag"
 fi
 
-echo "tag-consumption-check: scanned ${#corpus[@]} consumer script(s); refresh region $region_lines line(s); 1 corpus-wide + 4 refresh-region patterns"
+echo "tag-consumption-check: scanned ${#corpus[@]} consumer script(s); refresh region $region_lines line(s); 1 corpus-wide + 5 refresh-region patterns"
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi

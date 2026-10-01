@@ -1,6 +1,7 @@
 # ADR-0008: The rule gate refuses a write until the path-scoped rules for its file are in the writing agent's context
 
-**Status:** Proposed (2026-09-30).
+**Status:** Proposed (2026-09-30; D5 amended in place 2026-10-01, before acceptance, to add the
+repository-level copy and the deferral).
 Acceptance gate: deep-reason pass, recorded in [reviews/ADR-0008-deep-reason.md](reviews/ADR-0008-deep-reason.md)
 (SOUND-WITH-CHANGES; the six changes are folded into D1 to D4). Acceptance is the operator's read.
 
@@ -157,12 +158,13 @@ So a file written by Bash is written without this check. This is a known limit, 
 case, and it has a second half: in bypass mode the system prompt suggests Bash for file changes,
 which steers writes away from the gate.
 
-### D5: The gate is a user-level hook the kit's settings.json wires, an existing settings.json is never edited, and it does not run in chain phases
+### D5: The gate runs from the user's settings or from a repository's own, a user-level copy defers to a repository's wired copy, and it does not run in chain phases
 
-`install.sh` copies `reference/rule_gate.py` to `~/.claude/discipline/rule_gate.py` on every run.
-`claude-user/settings.json` carries the hook: a `PreToolUse` entry with matcher
-`Write|Edit|MultiEdit|NotebookEdit` (MultiEdit is absent from 2.1.286's tool list but present in
-its hook code) and command `python3 "$HOME/.claude/discipline/rule_gate.py" || true`. A fresh
+**The user-level copy.** `install.sh` copies `reference/rule_gate.py` to
+`~/.claude/discipline/rule_gate.py` on every run. `claude-user/settings.json` carries the hook: a
+`PreToolUse` entry with matcher `Write|Edit|MultiEdit|NotebookEdit` (MultiEdit is absent from
+2.1.286's tool list but present in its hook code) and command
+`python3 "$HOME/.claude/discipline/rule_gate.py" || true`. A fresh
 install writes that settings.json and so wires the gate. An existing settings.json is backed up
 and left in place, as it always was. The installer reads it as JSON, as Claude Code does (a
 repeated key keeps its last value), and calls the gate wired only when a PreToolUse entry whose
@@ -178,10 +180,69 @@ User level because the rules live in each repository but the check must run in e
 one copy and one log. The gate reads whatever `.claude/rules` it finds above the target, so a
 repository with no kit rules costs one directory walk and nothing else.
 
-Chain phases are outside it. ADR-0004/D3 makes every phase invocation exclude user-scope settings,
-so this hook does not run there. Whether rules are in context when a phase writes code is not
-established; gating it would belong in the phase's pinned settings, and that is a separate
-decision this record does not take.
+**The repository-level copy.** `install.sh --refresh-rules` also vendors the gate into the
+repository it refreshes, so a repository can carry the check itself and pin it to the release its
+rules came from. It reads `reference/rule_gate.py` from the same release tag, in the same
+`git archive` call, as `claude-project`. A tag without that file, which is every tag cut before
+this decision, skips the gate: the run says so, the `.claude/rules/.kit-version` stamp records
+`rule_gate: not in tag <tag>`, and the repository's `.claude/hooks` and settings are left as they
+were; a gate an earlier tag vendored stays, and the stamp says so and whether a settings file
+runs it. A `.claude` or `.claude/hooks` that is a symlink gets no gate and no wiring
+(`in tag <tag>, NOT vendored`), since the file would land outside the repository. Otherwise the
+file lands at `<repo>/.claude/hooks/rule_gate.py` under the refresh's existing
+rules for a rule file: a copy whose bytes match no release tag the checkout holds is copied aside
+first, a symlink is replaced rather than written through, and an unreadable copy stops the run
+before anything is copied. Then the refresh wires it in `<repo>/.claude/settings.json` with the
+PreToolUse entry whose command is `python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py" ||
+true`. Claude Code sets `CLAUDE_PROJECT_DIR` for a hook command to the directory the session
+started in (measured once on 2.1.286, with a project hook logging its environment). The JSON work
+is done by `python3` from the installer, never by text substitution, and it follows these cases
+in order:
+
+- `settings.local.json` or `settings.json` already has a PreToolUse command hook that runs this
+  repository's copy, by the deferral's test below, under a matcher selecting all four write
+  tools: nothing changes (`vendored+already-wired`). A copy in `settings.json` beside one in
+  `settings.local.json` would run the gate twice. One that runs it under a matcher selecting
+  fewer is named and nothing is written (`vendored, NOT wired`), for the same reason.
+- `settings.json` is absent: it is created holding only the hooks block (`vendored+wired`),
+  whether or not the repository is a git work tree.
+- `settings.json` is tracked by git with no uncommitted changes, parses with no repeated key, and
+  is laid out exactly as a JSON writer would lay it out at its own indent: the entry is appended
+  to `hooks.PreToolUse`, every other key and hook kept, so `git diff` shows the addition and
+  `git checkout` takes it back (`vendored+wired`). The new text goes to a temporary file in
+  `.claude/` that replaces `settings.json` only once written whole, so a failed write leaves the
+  file as it was.
+- anything else (untracked, modified, invalid JSON, outside a git work tree, a symlink, or a
+  layout a rewrite would change): the file is left alone, and the run prints the entry and where
+  it goes (`vendored, NOT wired: <reason>`).
+
+`settings.local.json` is only ever read. Rewriting a file git can restore is the line this
+decision draws: the user-level `settings.json` has no such undo, so it is still never edited.
+
+**Two copies, one check.** With both wired, each copy would refuse the same write. So a copy that
+is not the project's own allows the call with no output and logs one `DEFER` line when a project
+rule applies to the target and the project's `.claude/settings.json` or
+`.claude/settings.local.json` has a PreToolUse command hook whose matcher selects the tool and
+whose command runs that project's `.claude/hooks/rule_gate.py`, and that file exists. The
+project root is `CLAUDE_PROJECT_DIR`, else the hook's `cwd`. A command runs the file when its
+script, after an optional python interpreter, is `$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py`,
+the relative `.claude/hooks/rule_gate.py` (hooks run in the project directory), or an absolute
+path to the same file; one that only mentions the path, such as another checkout's copy,
+`rule_gate.py.orig` or an `echo`, runs something else or nothing. A command reaching the file
+through `$CLAUDE_PROJECT_DIR` counts only while that variable is set, since otherwise the
+project's command cannot find it. The project's copy never defers, so the gate that runs is the
+one pinned to the repository's rules. A copy knows it is the project's by the path it was run
+from and by file identity, not by where symlinks resolve: through a `.claude/hooks` linked out of
+the repository the project copy resolves outside the root, and judged by that it deferred to
+itself. A settings file that does not parse wires nothing and leaves the
+user-level copy checking: when the two copies cannot agree, the cost is a second refusal, never a
+write with no check.
+
+Chain phases are outside it. ADR-0004/D3 makes every phase invocation exclude user-scope settings
+and carry the sequencer's pinned settings as its only project source, so neither copy runs there:
+a phase does not read the repository's own `.claude/settings.json` either. Whether rules are in
+context when a phase writes code is not established; gating it would belong in the phase's
+pinned settings, and that is a separate decision this record does not take.
 
 ## Consequences
 
@@ -218,7 +279,14 @@ decision this record does not take.
   a call whose own entry is not on disk, in a response whose calls on disk all have results, is
   taken to open a new response, so if Claude Code ever wrote an earlier call's refusal to disk
   before a later call of the same response, that later call would be let through (not seen in
-  the live runs, where a response's entries reach disk together when it ends).
+  the live runs, where a response's entries reach disk together when it ends); the deferral
+  trusts the project's settings files as written, so a session that does not load project hooks
+  while the files still wire the gate leaves neither copy checking, and nothing here detects it.
+  One CLI flag is enough: `--setting-sources` without `project` (measured twice on 2.1.286 with
+  Haiku 4.5: one `DEFER`, no `DENY`, the write landed without the rule), as are
+  `disableAllHooks` and a managed policy allowing only managed hooks. The user copy cannot see
+  whether the project copy ran for the same call, since the two hooks run in parallel, so the
+  `DEFER` line says only that this copy did not check the write.
 - Loading a rule is not evidence that it is followed. Probes found a loaded rule followed for one
   or two short rules (8 of 8, 6 of 6, Haiku 4.5, headless). Whether 14 rules competing in one
   context are followed is not measured, and this gate does not measure it.
@@ -282,14 +350,35 @@ Each decision names its court. Where the court is a fixture, it runs on every co
   without false refusals. Not mechanical; the standing observation is re-running the transcript
   scan behind D4's numbers. The fixture holds the decision itself: Bash, Read, Agent and Glob
   produce no output and no log line.
-- **D5**: an install leaves the gate unwired without saying so, or the gate runs inside a chain
-  phase. Court: `install_test.py` cases `rule-gate-wired-0`, which checks the stamp says wired or
-  NOT wired for a fresh home, a kept settings.json and one that already runs the gate, and that
-  the printed entry equals the one in `claude-user/settings.json`, and
+- **D5**: an install leaves the gate unwired without saying so, a refresh vendors a gate other
+  than the tag's or edits a settings file it should have left alone, the user-level copy defers
+  to a project copy that will not run (or does not defer to one that will), or the gate runs
+  inside a chain phase. Court: `install_test.py` cases `rule-gate-wired-0`, which checks the
+  stamp says wired or NOT wired for a fresh home, a kept settings.json and one that already runs
+  the gate, and that the printed entry equals the one in `claude-user/settings.json`, and
   `rule-gate-kept-settings-shapes-0`, which holds a kept file with its own hooks, a permissions
   entry naming the gate, a repeated `"hooks"` key, invalid JSON and a fresh install outside
-  `~/.claude` to NOT wired, and the merged copy to both hooks. The phase exclusion is
-  ADR-0004/D3's, and its court is that record's.
+  `~/.claude` to NOT wired, and the merged copy to both hooks. The repository-level copy's
+  courts are the `install_test.py` cases named `gate-*`: a tag without the gate is skipped and
+  stamped; the vendored file holds the tag's bytes, not HEAD's; an absent settings.json is
+  created; a tracked, clean one is merged with `git diff` showing only the addition and
+  `git checkout` reverting it; an already-wired one, in either settings file, is unchanged byte
+  for byte; a modified, untracked, invalid, non-git or hand-laid-out one is untouched and the
+  entry printed; `settings.local.json` is never written; a second refresh changes nothing; the
+  copy-aside, symlink and unreadable-file rules hold for the gate as for a rule; a hook that
+  names another file, or runs this one under a Bash matcher, is not counted as wired, each answer
+  checked against the gate's own deferral; a write cut off partway leaves `settings.json` byte for
+  byte; a linked `.claude` or `.claude/hooks` gets nothing written through it; and a link to
+  nothing is reported as a link. The deferral's court is `rule_gate_test.py` `Deferral`: the
+  user-level copy defers through either settings file, for each spelling that runs the project
+  copy, past a stray non-object in the hooks list, and as a subprocess, and does not defer when
+  the project file is missing, the matcher leaves out the tool, the settings do not parse,
+  `CLAUDE_PROJECT_DIR` is unset, or the command only mentions the path; a write no rule covers
+  logs nothing; the project's copy, run as a subprocess, refuses, including through a
+  `.claude/hooks` linked out of the repository. `scripts/tag-consumption-check.sh` fails a
+  refresh region that reads `$KIT/reference/`, and `install_test.py` case
+  `court-gate-from-checkout-1` plants one.
+  The phase exclusion is ADR-0004/D3's, and its court is that record's.
 
 **No live test is on the commit path.** `scripts/check.sh` runs offline, in minutes, with no
 `claude` binary and no credentials, and must give the same answer twice. A live session needs all
@@ -308,4 +397,5 @@ covers; those runs are not part of any commit check.
   settings, so this gate does not run in a phase) and /D5 (version-scoped facts);
   `reference/rule_gate.py`; `harness/fixtures/rule_gate_test.py`;
   `harness/fixtures/rule_gate_vectors.json`; `harness/rule_coverage.py`; `install.sh`;
+  `scripts/tag-consumption-check.sh` (ADR-0002/D7's court, which now watches the gate's path);
   `claude-user/settings.json`; `stories/STORY-0017-the-rule-gate.md`.

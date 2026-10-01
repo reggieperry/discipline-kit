@@ -3,7 +3,9 @@
 
 A PreToolUse hook for Write, Edit, MultiEdit and NotebookEdit. Wire it in the user's
 settings.json (the kit's claude-user/settings.json carries the block) and install this file to
-~/.claude/discipline/rule_gate.py. It reads the hook's JSON on stdin, prints at most one JSON
+~/.claude/discipline/rule_gate.py, or vendor it into a repository at .claude/hooks/rule_gate.py
+and wire it in that repository's .claude/settings.json (`install.sh --refresh-rules` does both,
+from the same release tag as the rules). It reads the hook's JSON on stdin, prints at most one JSON
 object on stdout, and ALWAYS exits 0, because exit 2 is how a hook blocks a call and a crash that
 happened to exit 2 would block every write on the machine.
 
@@ -60,6 +62,18 @@ pending rule looks for that call's result in the transcript (_refusal_fate):
 An entry given before the current compact_boundary is stale rather than blind: compaction
 dropped the text, so the gate gives it again.
 
+TWO COPIES DEFER TO THE PROJECT'S. With both wired, each would refuse the same write. A copy
+that is not the project's own (the user-level one) allows silently and logs one DEFER line when
+a project rule applies and the project's .claude/settings.json or .claude/settings.local.json has
+a PreToolUse command hook whose matcher selects the tool and whose command runs that project's
+.claude/hooks/rule_gate.py, and that file exists. A command runs it when its script, after an
+optional python interpreter, is $CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py (counted only
+while that variable is set), .claude/hooks/rule_gate.py relative to the project, or an absolute
+path to that same file; a command that merely mentions the path runs nothing. The project's copy
+never defers, so a repository pins the gate it was refreshed to. It knows itself by the path it
+was run from, not by where symlinks resolve: a .claude/hooks linked out of the repository must
+not make it defer to itself.
+
 FAIL OPEN, NEVER SILENTLY. A missing or unreadable transcript, a tool input of an unknown shape,
 or any internal error allows the call, appends a line to the log, and adds a one-line warning to
 the model's context. A format change in Claude Code must not block every edit on the machine,
@@ -87,6 +101,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 import time
@@ -945,6 +960,116 @@ def log_line(env, kind: str, hook_input: dict, detail: str, now: float) -> None:
         pass
 
 
+# --- deferring to the project's own copy ---------------------------------------------------------
+
+# Where `install.sh --refresh-rules` vendors the gate inside a repository, and this file's path
+# as run and as resolved, which is how a copy tells whether it is that one.
+PROJECT_COPY = os.path.join(".claude", "hooks", "rule_gate.py")
+SELF = os.path.realpath(__file__)
+SELF_AS_RUN = os.path.abspath(__file__)
+# The script spellings that reach the project copy from a project hook. The relative ones resolve
+# against the hook's working directory, which Claude Code sets to the project directory.
+_PROJECT_DIR_SPELLINGS = ("$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py",
+                          "${CLAUDE_PROJECT_DIR}/.claude/hooks/rule_gate.py")
+_RELATIVE_SPELLINGS = (".claude/hooks/rule_gate.py", "./.claude/hooks/rule_gate.py")
+WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
+
+def _matcher_covers(matcher, tool: str) -> bool:
+    """Whether a PreToolUse matcher selects `tool`: empty or `*` selects every tool, a plain
+    `A|B` list selects those names exactly, and anything else is a regular expression. The
+    project-level wiring check in install.sh (RULE_GATE_PROJECT_WIRE) reads matchers the same
+    way, and counts an entry as wired only when it selects every tool in WRITE_TOOLS."""
+    if matcher is None or matcher in ("", "*"):
+        return True
+    if not isinstance(matcher, str):
+        return False
+    if re.fullmatch(r"[A-Za-z0-9_|]+", matcher):
+        return tool in matcher.split("|")
+    try:
+        return re.search(matcher, tool) is not None
+    except re.error:
+        return False
+
+
+def runs_project_copy(cmd, root: str, env) -> bool:
+    """Whether a hook command runs `root`'s own .claude/hooks/rule_gate.py.
+
+    Only the script position counts: the first word, or the word after a python interpreter.
+    It must be one of the spellings above or an absolute path to that same file. A command that
+    names the path anywhere else, a sibling such as rule_gate.py.orig, or another checkout's
+    copy runs something else or nothing, and deferring to it would leave no copy checking."""
+    if not isinstance(cmd, str):
+        return False
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    if words and re.fullmatch(r"python[0-9.]*", os.path.basename(words[0])):
+        words = words[1:]
+    if not words:
+        return False
+    script = words[0]
+    if script in _PROJECT_DIR_SPELLINGS:
+        return bool(env.get("CLAUDE_PROJECT_DIR"))
+    if script in _RELATIVE_SPELLINGS:
+        return True
+    if os.path.isabs(script):
+        try:
+            return os.path.samefile(script, os.path.join(root, PROJECT_COPY))
+        except OSError:
+            return False
+    return False
+
+
+def project_copy_wired(root: str, tool: str, env) -> Optional[str]:
+    """The project settings file that runs the project's own copy of this gate for `tool`, or
+    None when no such hook would run.
+
+    Two copies wired at once, one from the user's settings and one from the project's, would
+    each refuse the same write. So a copy that is not the project's own steps aside when the
+    project's `.claude/settings.json` or `.claude/settings.local.json` has a PreToolUse command
+    hook whose matcher selects this tool and whose command runs that project's copy (see
+    runs_project_copy), and that file exists. A settings file that cannot be read or parsed, or
+    an entry of a shape Claude Code would not run, wires nothing, which leaves this copy
+    checking: the safe direction is two refusals, never none.
+    """
+    if not os.path.isfile(os.path.join(root, PROJECT_COPY)):
+        return None
+    for name in ("settings.json", "settings.local.json"):
+        path = os.path.join(root, ".claude", name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        hooks = data.get("hooks") if isinstance(data, dict) else None
+        entries = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+        for e in entries if isinstance(entries, list) else []:
+            if not isinstance(e, dict) or not _matcher_covers(e.get("matcher"), tool):
+                continue
+            for h in e.get("hooks") if isinstance(e.get("hooks"), list) else []:
+                if (isinstance(h, dict) and h.get("type") == "command"
+                        and runs_project_copy(h.get("command"), root, env)):
+                    return path
+    return None
+
+
+def is_project_copy(root: str) -> bool:
+    """Whether this file is `root`'s own copy, or lies inside the project at all.
+
+    By the path it was run from and by file identity, never by resolved path alone: with
+    .claude/hooks a symlink to a directory outside the repository, the project copy resolves
+    outside the root, and a copy that took that for "not mine" would defer to itself."""
+    if _within(SELF, os.path.realpath(root)) or _within(SELF_AS_RUN, os.path.abspath(root)):
+        return True
+    mine = os.path.join(root, PROJECT_COPY)
+    try:
+        return os.path.samefile(SELF_AS_RUN, mine)
+    except OSError:
+        return False
+
+
 def _context(text: str) -> dict:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}
 
@@ -1129,6 +1254,16 @@ def decide(hook_input: dict, env=None, now: Optional[float] = None) -> Optional[
     rules = applicable_rules(target, root, _home(env))
     if not rules:
         return None
+
+    # After the rules, so a write no rule covers logs nothing here either, as the README says.
+    if not is_project_copy(root):
+        wired_in = project_copy_wired(root, tool, env)
+        if wired_in:
+            log_line(env, "DEFER", hook_input,
+                     f"{os.path.join(root, PROJECT_COPY)} is wired in {wired_in}; this copy "
+                     f"did not check the write, which is covered only if this session loads "
+                     f"project hooks", now)
+            return None
 
     tpath = transcript_for(hook_input)
     if not tpath or not os.path.isfile(tpath):
